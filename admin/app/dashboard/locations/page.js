@@ -1,116 +1,66 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { locationsApi } from '../../../src/api/index';
 import { useAuthStore } from '../../../src/store/authStore';
 
-// ── Ward Map Picker ──────────────────────────────────────────────────────────
+// ── Ward Map Picker (Google Maps) ────────────────────────────────────────────
 // Defined outside LocationsPage so React never unmounts it during re-renders.
 
-function WardMapPicker({ lat, lon, onSetLat, onSetLon }) {
-  const containerRef = useRef(null);
-  const mapRef = useRef(null);
-  const markerRef = useRef(null);
-  const LRef = useRef(null);
+function DraggableMarker({ position, onDragEnd }) {
+  return (
+    <AdvancedMarker position={position} draggable onDragEnd={onDragEnd} />
+  );
+}
 
-  // Mount: initialise Leaflet once
+function ClickHandler({ onSetLat, onSetLon }) {
+  const map = useMap();
   useEffect(() => {
-    if (typeof window === 'undefined' || !containerRef.current) return;
-    let destroyed = false;
-
-    // Inject Leaflet CSS the same way the admin map page does
-    if (!document.getElementById('leaflet-css')) {
-      const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
-
-    import('leaflet').then((mod) => {
-      if (destroyed || mapRef.current || !containerRef.current) return;
-      const L = mod.default;
-      LRef.current = L;
-
-      delete L.Icon.Default.prototype._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-      });
-
-      const hasCoords = lat != null && lon != null;
-      const map = L.map(containerRef.current, {
-        center: hasCoords ? [lat, lon] : [22.3072, 70.8022], // Gujarat
-        zoom: hasCoords ? 14 : 8,
-      });
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap',
-        maxZoom: 19,
-      }).addTo(map);
-
-      const addMarker = (mlat, mlon) => {
-        const m = L.marker([mlat, mlon], { draggable: true }).addTo(map);
-        m.on('dragend', () => {
-          const p = m.getLatLng();
-          onSetLat(p.lat);
-          onSetLon(p.lng);
-        });
-        markerRef.current = m;
-      };
-
-      if (hasCoords) addMarker(lat, lon);
-
-      map.on('click', (e) => {
-        const { lat: newLat, lng: newLon } = e.latlng;
-        if (markerRef.current) {
-          markerRef.current.setLatLng([newLat, newLon]);
-        } else {
-          addMarker(newLat, newLon);
-        }
-        onSetLat(newLat);
-        onSetLon(newLon);
-      });
-
-      mapRef.current = map;
+    if (!map) return;
+    const listener = map.addListener('click', (e) => {
+      onSetLat(e.latLng.lat());
+      onSetLon(e.latLng.lng());
     });
+    return () => listener.remove();
+  }, [map, onSetLat, onSetLon]);
+  return null;
+}
 
-    return () => {
-      destroyed = true;
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-        markerRef.current = null;
-        LRef.current = null;
-      }
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Sync marker + pan when coords change from auto-geocode in parent
+function PanToCoords({ lat, lon }) {
+  const map = useMap();
   useEffect(() => {
-    const L = LRef.current;
-    const map = mapRef.current;
-    if (!map || !L || lat == null || lon == null) return;
+    if (!map || lat == null || lon == null) return;
+    map.panTo({ lat, lng: lon });
+    if (map.getZoom() < 12) map.setZoom(14);
+  }, [map, lat, lon]);
+  return null;
+}
 
-    if (markerRef.current) {
-      markerRef.current.setLatLng([lat, lon]);
-    } else {
-      const m = L.marker([lat, lon], { draggable: true }).addTo(map);
-      m.on('dragend', () => {
-        const p = m.getLatLng();
-        onSetLat(p.lat);
-        onSetLon(p.lng);
-      });
-      markerRef.current = m;
-    }
-    map.setView([lat, lon], 14);
-  }, [lat, lon]); // eslint-disable-line react-hooks/exhaustive-deps
+function WardMapPicker({ lat, lon, onSetLat, onSetLon }) {
+  const hasCoords = lat != null && lon != null;
+  const handleDragEnd = useCallback((e) => {
+    onSetLat(e.latLng.lat());
+    onSetLon(e.latLng.lng());
+  }, [onSetLat, onSetLon]);
 
   return (
-    <div
-      ref={containerRef}
-      style={{ height: '220px', width: '100%', borderRadius: '8px', position: 'relative', zIndex: 0 }}
-    />
+    <div style={{ height: '220px', width: '100%', borderRadius: '8px', overflow: 'hidden' }}>
+      <Map
+        defaultCenter={hasCoords ? { lat, lng: lon } : { lat: 22.3072, lng: 70.8022 }}
+        defaultZoom={hasCoords ? 14 : 8}
+        mapId="civic-ward-picker"
+        gestureHandling="greedy"
+        disableDefaultUI
+        zoomControl
+        style={{ width: '100%', height: '100%' }}
+      >
+        {hasCoords && (
+          <DraggableMarker position={{ lat, lng: lon }} onDragEnd={handleDragEnd} />
+        )}
+        <ClickHandler onSetLat={onSetLat} onSetLon={onSetLon} />
+        <PanToCoords lat={lat} lon={lon} />
+      </Map>
+    </div>
   );
 }
 
