@@ -174,7 +174,7 @@ export default function IssueDetailScreen() {
               <View style={styles.timelineContent}>
                 <Text style={styles.timelineEvent}>{event.event?.replace(/_/g, ' ')}</Text>
                 <Text style={styles.timelineDate}>
-                  {formatDateTime(event.created_at, 'en-IN')}
+                  {formatDateTime(event.at, 'en-IN')}
                 </Text>
                 {event.note && <Text style={styles.timelineNote}>{event.note}</Text>}
               </View>
