@@ -9,13 +9,13 @@ import { useNavigation } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
 
 const DAYS = [
-  { key: 'monday', label: 'Mon', full: 'Monday' },
-  { key: 'tuesday', label: 'Tue', full: 'Tuesday' },
-  { key: 'wednesday', label: 'Wed', full: 'Wednesday' },
-  { key: 'thursday', label: 'Thu', full: 'Thursday' },
-  { key: 'friday', label: 'Fri', full: 'Friday' },
-  { key: 'saturday', label: 'Sat', full: 'Saturday' },
-  { key: 'sunday', label: 'Sun', full: 'Sunday' },
+  { key: 'monday', label: 'Mon', full: 'Monday', num: 0 },
+  { key: 'tuesday', label: 'Tue', full: 'Tuesday', num: 1 },
+  { key: 'wednesday', label: 'Wed', full: 'Wednesday', num: 2 },
+  { key: 'thursday', label: 'Thu', full: 'Thursday', num: 3 },
+  { key: 'friday', label: 'Fri', full: 'Friday', num: 4 },
+  { key: 'saturday', label: 'Sat', full: 'Saturday', num: 5 },
+  { key: 'sunday', label: 'Sun', full: 'Sunday', num: 6 },
 ];
 
 function timeToMinutes(t) {
@@ -51,7 +51,7 @@ function ShiftModal({ day, existing, onClose, onSaved }) {
     setSaving(true);
     setError('');
     try {
-      await workersApi.setShift(day.key, startTime, endTime);
+      await workersApi.setShift(day.num, startTime, endTime);
       onSaved();
       onClose();
     } catch {
@@ -153,9 +153,9 @@ export default function ShiftsScreen() {
     setRefreshing(false);
   };
 
-  const getShift = (dayKey) => shifts.find((s) => s.day_of_week === dayKey);
+  const getShift = (dayNum) => shifts.find((s) => s.day_of_week === dayNum);
 
-  const handleDelete = (dayKey) => {
+  const handleDelete = (dayNum, dayKey) => {
     Alert.alert(
       'Remove Shift',
       `Remove shift for ${DAYS.find((d) => d.key === dayKey)?.full}?`,
@@ -166,8 +166,8 @@ export default function ShiftsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await workersApi.deleteShift(dayKey);
-              setShifts((prev) => prev.filter((s) => s.day_of_week !== dayKey));
+              await workersApi.deleteShift(dayNum);
+              setShifts((prev) => prev.filter((s) => s.day_of_week !== dayNum));
             } catch {
               Alert.alert('Error', 'Failed to remove shift.');
             }
@@ -204,7 +204,7 @@ export default function ShiftsScreen() {
         keyExtractor={(item) => item.key}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#059669" />}
         renderItem={({ item: day }) => {
-          const shift = getShift(day.key);
+          const shift = getShift(day.num);
           return (
             <View style={styles.dayRow}>
               <View style={[styles.dayCircle, shift && styles.dayCircleActive]}>
@@ -230,7 +230,7 @@ export default function ShiftsScreen() {
                 {shift && (
                   <TouchableOpacity
                     style={[styles.actionBtn, styles.deleteBtn]}
-                    onPress={() => handleDelete(day.key)}
+                    onPress={() => handleDelete(day.num, day.key)}
                   >
                     <Ionicons name="trash-outline" size={18} color="#ef4444" />
                   </TouchableOpacity>
@@ -246,7 +246,7 @@ export default function ShiftsScreen() {
       {editingDay && (
         <ShiftModal
           day={editingDay}
-          existing={getShift(editingDay.key)}
+          existing={getShift(editingDay.num)}
           onClose={() => setEditingDay(null)}
           onSaved={load}
         />
