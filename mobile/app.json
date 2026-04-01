@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "Civic",
+    "slug": "civic",
+    "version": "1.0.0",
+    "scheme": "civic",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a56db"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.civic.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Civic needs your location to show nearby issues.",
+        "NSCameraUsageDescription": "Civic needs camera access to photograph issues.",
+        "NSPhotoLibraryUsageDescription": "Civic needs photo library access to attach photos."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a56db"
+      },
+      "package": "com.civic.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-camera",
+        { "cameraPermission": "Allow Civic to access your camera to photograph issues." }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Civic to access your photo library to attach photos.",
+          "cameraPermission": "Allow Civic to access your camera to photograph issues."
+        }
+      ],
+      [
+        "expo-location",
+        { "locationAlwaysAndWhenInUsePermission": "Allow Civic to use your location." }
+      ],
+      [
+        "expo-notifications",
+        { "icon": "./assets/icon.png", "color": "#1a56db" }
+      ]
+    ]
+  }
+}
