@@ -39,4 +39,24 @@ export const useNotificationStore = create((set) => ({
       }));
     } catch {}
   },
+
+  deleteOne: async (id) => {
+    try {
+      await notificationsApi.deleteOne(id);
+      set((state) => {
+        const n = state.notifications.find((n) => n.id === id);
+        return {
+          notifications: state.notifications.filter((n) => n.id !== id),
+          unreadCount: n && !n.is_read ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
+        };
+      });
+    } catch {}
+  },
+
+  deleteAll: async () => {
+    try {
+      await notificationsApi.deleteAll();
+      set({ notifications: [], unreadCount: 0 });
+    } catch {}
+  },
 }));

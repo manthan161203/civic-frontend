@@ -152,7 +152,7 @@ export default function MapScreen() {
         <View style={styles.noIssuesBox}>
           <Ionicons name="checkmark-circle-outline" size={32} color="#10b981" />
           <Text style={{ fontSize: 14, fontWeight: '600', color: '#111827', marginTop: 8 }}>
-            All clear! 🎉
+            All clear!
           </Text>
           <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
             No issues reported within 5 km

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, ActivityIndicator,
+  RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -28,7 +28,9 @@ export default function TasksScreen() {
       ]);
       setTasks(activeRes.data.items || activeRes.data);
       setHistory(histRes.data.items || histRes.data);
-    } catch {}
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.detail || 'Failed to load tasks.');
+    }
   };
 
   useEffect(() => {

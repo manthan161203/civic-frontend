@@ -50,6 +50,7 @@ export default function LoginPage() {
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/me`,
         { headers: { Authorization: `Bearer ${data.access_token}` } }
       );
+      if (!meRes.ok) throw new Error('Failed to fetch user profile');
       const user = await meRes.json();
       if (!user.role?.includes('admin') && user.role !== 'admin') {
         setError('Access denied. Admin accounts only.');
@@ -86,7 +87,7 @@ export default function LoginPage() {
               </label>
               <div className="flex border-2 border-gray-200 rounded-xl overflow-hidden focus-within:border-blue-500 transition-colors">
                 <div className="px-3 flex items-center bg-gray-50 border-r-2 border-gray-200">
-                  <span className="text-sm font-semibold text-gray-600">🇮🇳 +91</span>
+                  <span className="text-sm font-semibold text-gray-600">+91</span>
                 </div>
                 <input
                   type="tel"

@@ -19,7 +19,8 @@ const PRIORITY_COLORS = {
 export default function IssueCard({ issue, onPress }) {
   const status = STATUS_COLORS[issue.status] || STATUS_COLORS.open;
   const priorityColor = PRIORITY_COLORS[issue.priority] || PRIORITY_COLORS.medium;
-  const photo = issue.photos?.find((p) => p.photo_type === 'before')?.photo_url;
+  // Backend returns before_photos / after_photos as flat string arrays
+  const photo = issue.before_photos?.[0] ?? null;
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
@@ -40,7 +41,7 @@ export default function IssueCard({ issue, onPress }) {
 
         <View style={styles.meta}>
           <Ionicons name="location-outline" size={13} color="#9ca3af" />
-          <Text style={styles.metaText} numberOfLines={1}>{issue.address || issue.ward_name || 'Unknown location'}</Text>
+          <Text style={styles.metaText} numberOfLines={1}>{issue.address || issue.ward || 'Unknown location'}</Text>
         </View>
 
         <View style={styles.footer}>

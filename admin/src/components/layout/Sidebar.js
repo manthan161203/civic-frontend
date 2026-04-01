@@ -1,7 +1,9 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
+import { adminApi } from '../../api/index';
 
 const NAV = [
   {
@@ -131,6 +133,15 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
   const router = useRouter();
+  const [scope, setScope] = useState(null);
+
+  useEffect(() => {
+    if (user?.role && user.role !== 'admin') {
+      adminApi.getMyScope()
+        .then(({ data }) => setScope(data))
+        .catch(() => {});
+    }
+  }, [user?.role]);
 
   const handleLogout = async () => {
     await logout();
@@ -186,6 +197,15 @@ export default function Sidebar() {
           <div className="flex-1 min-w-0">
             <div className="text-white text-xs font-semibold truncate group-hover:text-blue-300 transition-colors">{user?.name || 'Admin'}</div>
             <div className="text-gray-500 text-xs truncate">{ROLE_LABELS[user?.role] || user?.role}</div>
+            {scope?.district_name && (
+              <div className="text-xs text-blue-400 mt-0.5 truncate flex items-center gap-1">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:10,height:10}} className="flex-shrink-0">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                {[scope.district_name, scope.taluka_name, scope.ward_name].filter(Boolean).join(' / ')}
+              </div>
+            )}
           </div>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:12,height:12}} className="text-gray-600 flex-shrink-0">
             <polyline points="9 18 15 12 9 6" />

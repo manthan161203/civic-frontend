@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator, Image, TextInput,
+  Alert, ActivityIndicator, Image, TextInput, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
@@ -19,6 +19,8 @@ export default function TaskDetailScreen() {
   const [issue, setIssue] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [reasonModal, setReasonModal] = useState(null); // 'reject' | 'block' | null
+  const [reasonText, setReasonText] = useState('');
 
   useEffect(() => {
     issuesApi.get(id)
@@ -42,19 +44,8 @@ export default function TaskDetailScreen() {
   };
 
   const reject = () => {
-    Alert.prompt('Reject Task', 'Reason for rejection:', async (reason) => {
-      if (!reason) return;
-      setActionLoading(true);
-      try {
-        await workersApi.rejectTask(id, reason);
-        Alert.alert('Rejected', 'Task has been rejected and reassigned.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
-      } catch (err) {
-        Alert.alert('Error', err.response?.data?.detail || 'Failed');
-      }
-      setActionLoading(false);
-    });
+    setReasonText('');
+    setReasonModal('reject');
   };
 
   const resolve = async () => {
@@ -86,24 +77,35 @@ export default function TaskDetailScreen() {
   };
 
   const block = () => {
-    Alert.prompt('Block Task', 'Describe why you cannot proceed:', async (reason) => {
-      if (!reason) return;
-      setActionLoading(true);
-      try {
-        await workersApi.blockTask(id, reason);
+    setReasonText('');
+    setReasonModal('block');
+  };
+
+  const submitReason = async () => {
+    if (!reasonText.trim()) return;
+    setReasonModal(null);
+    setActionLoading(true);
+    try {
+      if (reasonModal === 'reject') {
+        await workersApi.rejectTask(id, reasonText.trim());
+        Alert.alert('Rejected', 'Task has been rejected and reassigned.', [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+      } else {
+        await workersApi.blockTask(id, reasonText.trim());
         setIssue((prev) => ({ ...prev, status: 'blocked' }));
         Alert.alert('Reported', 'Admin has been notified.');
-      } catch (err) {
-        Alert.alert('Error', err.response?.data?.detail || 'Failed');
       }
-      setActionLoading(false);
-    });
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.detail || 'Failed');
+    }
+    setActionLoading(false);
   };
 
   if (loading) return <ActivityIndicator style={{ flex: 1 }} color="#059669" size="large" />;
   if (!issue) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Not found</Text></View>;
 
-  const photo = issue.photos?.find((p) => p.photo_type === 'before')?.photo_url;
+  const photo = issue.before_photos?.[0] ?? null;
   const priorityColor = PRIORITY_COLOR[issue.priority] || '#9ca3af';
   const isActive = ['assigned', 'in_progress'].includes(issue.status);
 
@@ -183,6 +185,40 @@ export default function TaskDetailScreen() {
       )}
 
       <View style={{ height: 40 }} />
+
+      {/* Reason Modal for Reject / Block (cross-platform replacement for Alert.prompt) */}
+      <Modal visible={!!reasonModal} transparent animationType="fade" onRequestClose={() => setReasonModal(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={modalStyles.overlay}>
+          <View style={modalStyles.box}>
+            <Text style={modalStyles.title}>
+              {reasonModal === 'reject' ? 'Reject Task' : 'Block Task'}
+            </Text>
+            <Text style={modalStyles.subtitle}>
+              {reasonModal === 'reject' ? 'Reason for rejection:' : 'Describe why you cannot proceed:'}
+            </Text>
+            <TextInput
+              style={modalStyles.input}
+              value={reasonText}
+              onChangeText={setReasonText}
+              placeholder="Enter reason..."
+              multiline
+              autoFocus
+            />
+            <View style={modalStyles.btnRow}>
+              <TouchableOpacity style={modalStyles.cancelBtn} onPress={() => setReasonModal(null)}>
+                <Text style={modalStyles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[modalStyles.submitBtn, !reasonText.trim() && { opacity: 0.4 }]}
+                onPress={submitReason}
+                disabled={!reasonText.trim()}
+              >
+                <Text style={modalStyles.submitText}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
   );
 }
@@ -223,4 +259,21 @@ const styles = StyleSheet.create({
     margin: 16, backgroundColor: '#d1fae5', borderRadius: 12, padding: 16,
   },
   resolvedText: { fontSize: 15, color: '#065f46', fontWeight: '600' },
+});
+
+const modalStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', paddingHorizontal: 24 },
+  box: { backgroundColor: '#fff', borderRadius: 16, padding: 20 },
+  title: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 4 },
+  subtitle: { fontSize: 14, color: '#6b7280', marginBottom: 12 },
+  input: {
+    borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10,
+    padding: 12, fontSize: 14, color: '#111827', minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  btnRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 14 },
+  cancelBtn: { paddingHorizontal: 16, paddingVertical: 10 },
+  cancelText: { color: '#6b7280', fontWeight: '600' },
+  submitBtn: { backgroundColor: '#ef4444', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8 },
+  submitText: { color: '#fff', fontWeight: '700' },
 });

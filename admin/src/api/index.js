@@ -46,6 +46,7 @@ export const adminApi = {
 
   // Sub-admins
   getAdmins: (params) => api.get('/admin/admins', { params }),
+  getMyScope: () => api.get('/admin/me/scope'),
   createAdmin: (data) => api.post('/admin/admins', data),
   updateAdmin: (id, data) => api.put(`/admin/admins/${id}`, data),
   changeUserRole: (user_id, role) => api.patch(`/admin/users/${user_id}/role`, null, { params: { role } }),
@@ -66,6 +67,14 @@ export const adminApi = {
 export const locationsApi = {
   getTree: () => api.get('/locations/tree'),
   getDistricts: () => api.get('/locations/districts'),
+  suggest: (q, type = 'all', district_id = null, taluka_id = null) =>
+    api.get('/locations/suggest', { params: {
+      q,
+      type,
+      ...(district_id && { district_id }),
+      ...(taluka_id && { taluka_id }),
+      limit: 8,
+    } }),
   createDistrict: (name, centroid_lat = null, centroid_lon = null) =>
     api.post('/locations/districts', null, {
       params: { name, ...(centroid_lat != null && { centroid_lat }), ...(centroid_lon != null && { centroid_lon }) },

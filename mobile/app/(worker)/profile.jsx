@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
+import { useRouter } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
 import { rewardsApi } from '../../src/api/rewards';
 
@@ -11,6 +12,7 @@ const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'
 
 export default function WorkerProfile() {
   const { user, logout } = useAuthStore();
+  const router = useRouter();
   const [stats, setStats] = useState(null);
   const [shifts, setShifts] = useState([]);
   const [isAvailable, setIsAvailable] = useState(true);
@@ -100,8 +102,9 @@ export default function WorkerProfile() {
       </View>
 
       <View style={styles.menu}>
-        <MenuItem icon="trophy-outline" label="My Achievements" onPress={() => {}} />
-        <MenuItem icon="time-outline" label="Task History" onPress={() => {}} />
+        <MenuItem icon="trophy-outline" label="Leaderboard" onPress={() => router.push('/(worker)/leaderboard')} />
+        <MenuItem icon="time-outline" label="Task History" onPress={() => router.push('/(worker)/history')} />
+        <MenuItem icon="calendar-outline" label="Manage Shifts" onPress={() => router.push('/(worker)/shifts')} />
         <MenuItem icon="log-out-outline" label="Logout" onPress={handleLogout} danger />
       </View>
 

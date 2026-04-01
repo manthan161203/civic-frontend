@@ -9,6 +9,12 @@ export const locationsApi = {
   getTree: () => api.get('/locations/tree'),
   getNearbyWard: (latitude, longitude) =>
     api.get('/locations/nearby-ward', { params: { latitude, longitude } }),
+  suggest: (q, type = 'all', district_id = null, taluka_id = null) =>
+    api.get('/locations/suggest', { params: {
+      q, type, limit: 6,
+      ...(district_id && { district_id }),
+      ...(taluka_id && { taluka_id }),
+    } }),
   getAnnouncements: (params) => api.get('/announcements', { params }),
   getSubscriptions: () => api.get('/me/subscriptions'),
   subscribe: (ward_id) => api.post('/me/subscriptions', { ward_id }),

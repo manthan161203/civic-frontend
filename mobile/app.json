@@ -17,6 +17,9 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.civic.app",
+      "config": {
+        "googleMapsApiKey": ""
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Civic needs your location to show nearby issues.",
         "NSCameraUsageDescription": "Civic needs camera access to photograph issues.",
@@ -29,6 +32,11 @@
         "backgroundColor": "#1a56db"
       },
       "package": "com.civic.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": ""
+        }
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",

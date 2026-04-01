@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Image, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, FlatList,
+  TextInput, Alert, ActivityIndicator, FlatList, Modal,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,68 @@ const STATUS_COLORS = {
   closed: { bg: '#f3f4f6', text: '#6b7280' },
 };
 
+const FLAG_REASONS = ['spam', 'duplicate', 'inappropriate', 'false_report', 'other'];
+
+function FlagModal({ visible, onClose, onSubmit }) {
+  const [reason, setReason] = useState('spam');
+  const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    await onSubmit(reason, description.trim());
+    setSubmitting(false);
+    setReason('spam');
+    setDescription('');
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Report Issue</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={22} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.modalLabel}>Reason</Text>
+          <View style={styles.reasonGrid}>
+            {FLAG_REASONS.map((r) => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.reasonBtn, reason === r && styles.reasonBtnActive]}
+                onPress={() => setReason(r)}
+              >
+                <Text style={[styles.reasonText, reason === r && styles.reasonTextActive]}>
+                  {r.replace('_', ' ')}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.modalLabel}>Additional Details (optional)</Text>
+          <TextInput
+            style={styles.modalTextArea}
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Describe the issue..."
+            multiline
+            numberOfLines={3}
+          />
+          <TouchableOpacity
+            style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
+            onPress={handleSubmit}
+            disabled={submitting}
+          >
+            <Text style={styles.submitBtnText}>{submitting ? 'Submitting…' : 'Submit Report'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function IssueDetailScreen() {
   const { id } = useLocalSearchParams();
   const navigation = useNavigation();
@@ -28,6 +91,8 @@ export default function IssueDetailScreen() {
   const [upvoted, setUpvoted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
+  const [flagModal, setFlagModal] = useState(false);
+  const [reopening, setReopening] = useState(false);
 
   useEffect(() => {
     load();
@@ -35,15 +100,23 @@ export default function IssueDetailScreen() {
 
   const load = async () => {
     try {
-      const [issueRes, timelineRes, commentsRes] = await Promise.all([
+      const [issueRes, timelineRes] = await Promise.all([
         issuesApi.get(id),
         issuesApi.getTimeline(id),
-        issuesApi.getComments(id),
       ]);
-      setIssue(issueRes.data);
+      const issueData = issueRes.data;
+      setIssue(issueData);
+      setUpvoted(issueData.user_upvoted ?? false);
       setTimeline(timelineRes.data.items || timelineRes.data);
-      setComments(commentsRes.data.items || commentsRes.data);
-      navigation.setOptions({ title: issueRes.data.issue_type?.replace('_', ' ') || 'Issue Details' });
+      navigation.setOptions({ title: issueData.issue_type?.replace('_', ' ') || 'Issue Details' });
+
+      // Comments may be restricted (403) for non-reporters — handle gracefully
+      try {
+        const commentsRes = await issuesApi.getComments(id);
+        setComments(commentsRes.data.items || commentsRes.data);
+      } catch {
+        setComments([]);
+      }
     } catch {}
     setLoading(false);
   };
@@ -74,6 +147,26 @@ export default function IssueDetailScreen() {
     setPosting(false);
   };
 
+  const handleFlag = async (reason, description) => {
+    try {
+      await issuesApi.flag(id, reason, description);
+      Alert.alert('Reported', 'Thank you. Our team will review this issue.');
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.detail || 'Failed to submit report.');
+    }
+  };
+
+  const handleReopen = async () => {
+    setReopening(true);
+    try {
+      await issuesApi.reopen(id);
+      await load();
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.detail || 'Failed to reopen issue.');
+    }
+    setReopening(false);
+  };
+
   if (loading) {
     return <ActivityIndicator style={{ flex: 1 }} color="#1a56db" size="large" />;
   }
@@ -87,10 +180,17 @@ export default function IssueDetailScreen() {
   }
 
   const status = STATUS_COLORS[issue.status] || STATUS_COLORS.open;
-  const beforePhoto = issue.photos?.find((p) => p.photo_type === 'before')?.photo_url;
-  const afterPhoto = issue.photos?.find((p) => p.photo_type === 'after')?.photo_url;
+  const beforePhoto = issue.before_photos?.[0] ?? null;
+  const afterPhoto = issue.after_photos?.[0] ?? null;
+  const isReporter = user?.id === issue.reporter_id;
+  const isInvolved = isReporter || user?.role === 'worker' || user?.role?.includes('admin');
 
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={90}
+    >
     <ScrollView style={styles.container}>
       {/* Photos */}
       {beforePhoto && (
@@ -136,24 +236,28 @@ export default function IssueDetailScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => Alert.alert('Flag Issue', 'Report this as spam or duplicate?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Report', onPress: () => issuesApi.flag(id, 'spam', '') },
-          ])}
+          onPress={() => setFlagModal(true)}
         >
           <Ionicons name="flag-outline" size={18} color="#374151" />
           <Text style={styles.actionText}>Flag</Text>
         </TouchableOpacity>
-        {issue.status === 'resolved' && (
+        {issue.status === 'resolved' && isReporter && (
           <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => issuesApi.reopen(id).then(() => load())}
+            style={[styles.actionBtn, reopening && { opacity: 0.5 }]}
+            onPress={handleReopen}
+            disabled={reopening}
           >
             <Ionicons name="refresh-outline" size={18} color="#374151" />
-            <Text style={styles.actionText}>Reopen</Text>
+            <Text style={styles.actionText}>{reopening ? 'Reopening…' : 'Reopen'}</Text>
           </TouchableOpacity>
         )}
       </View>
+
+      <FlagModal
+        visible={flagModal}
+        onClose={() => setFlagModal(false)}
+        onSubmit={handleFlag}
+      />
 
       {/* After Photo */}
       {afterPhoto && (
@@ -183,17 +287,18 @@ export default function IssueDetailScreen() {
         </View>
       )}
 
-      {/* Comments */}
+      {/* Comments — only visible to involved users (reporter, assigned worker, admin) */}
+      {isInvolved && (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Comments ({comments.length})</Text>
         {comments.map((c) => (
           <View key={c.id} style={styles.comment}>
             <View style={styles.commentAvatar}>
-              <Text style={styles.commentAvatarText}>{c.author_name?.charAt(0) || '?'}</Text>
+              <Text style={styles.commentAvatarText}>{c.author?.name?.charAt(0) || '?'}</Text>
             </View>
             <View style={styles.commentBody}>
-              <Text style={styles.commentAuthor}>{c.author_name || 'User'}</Text>
-              <Text style={styles.commentText}>{c.content}</Text>
+              <Text style={styles.commentAuthor}>{c.author?.name || 'User'}</Text>
+              <Text style={styles.commentText}>{c.body}</Text>
               <Text style={styles.commentTime}>
                 {formatDate(c.created_at, 'en-IN')}
               </Text>
@@ -218,9 +323,11 @@ export default function IssueDetailScreen() {
           </TouchableOpacity>
         </View>
       </View>
+      )}
 
       <View style={{ height: 32 }} />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -266,8 +373,22 @@ const styles = StyleSheet.create({
   commentTime: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
   commentInputRow: { flexDirection: 'row', gap: 10, marginTop: 12, alignItems: 'flex-end' },
   commentInput: {
-    flex: 1, borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 10,
+    flex: 1, minHeight: 44, borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#111827',
   },
-  commentSend: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1a56db', justifyContent: 'center', alignItems: 'center' },
+  commentSend: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1a56db', justifyContent: 'center', alignItems: 'center' },
+  // Flag Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: '#111827' },
+  modalLabel: { fontSize: 12, fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginTop: 12 },
+  reasonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  reasonBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#e5e7eb', backgroundColor: '#f9fafb' },
+  reasonBtnActive: { borderColor: '#1a56db', backgroundColor: '#eff6ff' },
+  reasonText: { fontSize: 13, fontWeight: '600', color: '#6b7280', textTransform: 'capitalize' },
+  reasonTextActive: { color: '#1a56db' },
+  modalTextArea: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#111827', minHeight: 72, textAlignVertical: 'top' },
+  submitBtn: { marginTop: 20, backgroundColor: '#ef4444', borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
+  submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });

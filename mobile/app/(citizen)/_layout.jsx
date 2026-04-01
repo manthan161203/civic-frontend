@@ -30,9 +30,8 @@ export default function CitizenLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    // Redirect workers to worker tabs
+    // Redirect workers to worker tabs; admin roles are blocked at root layout
     if (user?.role === 'worker') router.replace('/(worker)/');
-    if (user?.role?.includes('admin')) router.replace('/(worker)/');
   }, [user]);
 
   useEffect(() => {
@@ -87,6 +86,11 @@ export default function CitizenLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
         }}
       />
+      {/* Hidden screens — accessible via router.push but not shown in tab bar */}
+      <Tabs.Screen name="chat" options={{ href: null, title: 'AI Assistant', headerShown: true, headerStyle: { backgroundColor: '#1a56db' }, headerTintColor: '#fff' }} />
+      <Tabs.Screen name="leaderboard" options={{ href: null }} />
+      <Tabs.Screen name="subscriptions" options={{ href: null }} />
+      <Tabs.Screen name="announcements" options={{ href: null }} />
     </Tabs>
   );
 }

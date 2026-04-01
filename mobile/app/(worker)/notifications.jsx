@@ -8,7 +8,8 @@ import { useRouter } from 'expo-router';
 import { useNotificationStore } from '../../src/store/notificationStore';
 import { formatDateTime } from '../../src/utils/dateUtils';
 
-export default function NotificationsScreen() {
+// Worker-flavoured notifications screen — same data/store as citizen, green accent colour
+export default function WorkerNotificationsScreen() {
   const router = useRouter();
   const {
     notifications, unreadCount, isLoading,
@@ -19,7 +20,8 @@ export default function NotificationsScreen() {
 
   const handlePress = (n) => {
     markOneRead(n.id);
-    if (n.issue_id) router.push(`/issue/${n.issue_id}`);
+    // Task notifications have task_id / issue_id — navigate accordingly
+    if (n.issue_id) router.push(`/task/${n.issue_id}`);
   };
 
   const handleDeleteAll = () => {
@@ -46,11 +48,11 @@ export default function NotificationsScreen() {
       onPress={() => handlePress(n)}
       onLongPress={() => handleDeleteOne(n.id)}
     >
-      <View style={[styles.iconBg, { backgroundColor: n.is_read ? '#f3f4f6' : '#eff6ff' }]}>
+      <View style={[styles.iconBg, { backgroundColor: n.is_read ? '#f3f4f6' : '#f0fdf4' }]}>
         <Ionicons
           name={n.is_read ? 'notifications-outline' : 'notifications'}
           size={20}
-          color={n.is_read ? '#9ca3af' : '#1a56db'}
+          color={n.is_read ? '#9ca3af' : '#059669'}
         />
       </View>
       <View style={styles.textCol}>
@@ -69,7 +71,6 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Top Bar */}
       <View style={styles.topBar}>
         {unreadCount > 0 ? (
           <TouchableOpacity onPress={markAllRead}>
@@ -86,13 +87,13 @@ export default function NotificationsScreen() {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color="#1a56db" />
+        <ActivityIndicator style={{ marginTop: 40 }} color="#059669" />
       ) : (
         <FlatList
           data={notifications}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderItem}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={fetchNotifications} tintColor="#1a56db" />}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={fetchNotifications} tintColor="#059669" />}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="notifications-off-outline" size={48} color="#d1d5db" />
@@ -109,10 +110,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   topBar: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#eff6ff', paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: '#dbeafe',
+    backgroundColor: '#f0fdf4', paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#bbf7d0',
   },
-  markAllText: { color: '#1a56db', fontSize: 13, fontWeight: '600' },
+  markAllText: { color: '#059669', fontSize: 13, fontWeight: '600' },
   allReadText: { color: '#6b7280', fontSize: 13 },
   clearText: { color: '#ef4444', fontSize: 13, fontWeight: '600' },
   item: {
@@ -120,14 +121,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff',
     borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
   },
-  unread: { backgroundColor: '#f8faff' },
+  unread: { backgroundColor: '#f8fff8' },
   iconBg: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
   textCol: { flex: 1 },
   title: { fontSize: 14, color: '#374151', fontWeight: '500', marginBottom: 2 },
   titleUnread: { fontWeight: '700', color: '#111827' },
   body: { fontSize: 13, color: '#6b7280', lineHeight: 18 },
   time: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1a56db', marginTop: 6, flexShrink: 0 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#059669', marginTop: 6, flexShrink: 0 },
   deleteBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginLeft: 4, backgroundColor: '#fef2f2' },
   empty: { alignItems: 'center', marginTop: 80, gap: 12 },
   emptyText: { fontSize: 16, color: '#9ca3af' },

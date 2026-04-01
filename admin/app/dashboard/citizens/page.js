@@ -72,7 +72,7 @@ export default function CitizensPage() {
                 <p className="text-sm text-gray-500">{selected.phone}</p>
               </div>
             </div>
-            <div className="space-y-1 text-sm">
+            <div className="space-y-3 text-sm">
               {[
                 ['Ward', selected.ward || '—'],
                 ['Language', selected.language || '—'],
@@ -83,7 +83,7 @@ export default function CitizensPage() {
                 ['Aadhaar Verified', selected.aadhar_verified ? 'Yes' : 'No'],
                 ['Status', selected.is_active ? 'Active' : 'Inactive'],
               ].map(([label, value]) => (
-                <div key={label} className="flex justify-between py-2 border-b border-gray-50">
+                <div key={label} className="flex justify-between py-3 border-b border-gray-50">
                   <span className="text-gray-500">{label}</span>
                   <span className="font-medium text-gray-900">{String(value)}</span>
                 </div>
@@ -155,7 +155,7 @@ export default function CitizensPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => handleToggle(c.id, c.is_active)}
-                      className={`px-2 py-1 text-xs font-semibold rounded-md border transition-colors ${c.is_active ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${c.is_active ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}
                     >
                       {c.is_active ? 'Deactivate' : 'Reactivate'}
                     </button>

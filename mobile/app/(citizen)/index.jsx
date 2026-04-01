@@ -11,6 +11,54 @@ import IssueCard from '../../src/components/common/IssueCard';
 
 const CATEGORIES = ['All', 'open', 'in_progress', 'resolved'];
 
+function WardHealthBanner({ wardName }) {
+  const [health, setHealth] = useState(null);
+
+  useEffect(() => {
+    if (!wardName) return;
+    issuesApi.wardHealth(wardName)
+      .then(({ data }) => setHealth(data))
+      .catch(() => {});
+  }, [wardName]);
+
+  if (!health) return null;
+
+  const score = health.score ?? 0;
+  const color = score >= 80 ? '#059669' : score >= 50 ? '#f59e0b' : '#ef4444';
+
+  return (
+    <View style={[bannerStyles.container, { borderLeftColor: color }]}>
+      <View style={bannerStyles.left}>
+        <Text style={bannerStyles.label}>Ward Health</Text>
+        <Text style={bannerStyles.wardName} numberOfLines={1}>{health.ward || 'Your Ward'}</Text>
+        <Text style={bannerStyles.sub}>
+          {health.open_issues ?? 0} open · {health.resolved_issues ?? 0} resolved
+        </Text>
+      </View>
+      <View style={[bannerStyles.scoreBubble, { backgroundColor: color + '22' }]}>
+        <Text style={[bannerStyles.score, { color }]}>{score}</Text>
+        <Text style={[bannerStyles.scoreLabel, { color }]}>score</Text>
+      </View>
+    </View>
+  );
+}
+
+const bannerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#fff', marginHorizontal: 16, marginTop: 10, marginBottom: 4,
+    borderRadius: 12, padding: 14, borderLeftWidth: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2,
+  },
+  left: { flex: 1 },
+  label: { fontSize: 10, fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 },
+  wardName: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 },
+  sub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  scoreBubble: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },
+  score: { fontSize: 18, fontWeight: '800' },
+  scoreLabel: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase' },
+});
+
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
@@ -21,6 +69,7 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const fetchIssues = useCallback(async (reset = false) => {
     const p = reset ? 1 : page;
@@ -85,6 +134,9 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* Ward Health Banner */}
+      <WardHealthBanner wardName={user?.ward} />
+
       {/* Filter Tabs */}
       <View style={styles.filters}>
         {CATEGORIES.map((cat) => (
@@ -110,7 +162,12 @@ export default function HomeScreen() {
             <IssueCard issue={item} onPress={() => router.push(`/issue/${item.id}`)} />
           )}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a56db" />}
-          onEndReached={() => hasMore && fetchIssues()}
+          onEndReached={() => {
+            if (hasMore && !loadingMore && !loading) {
+              setLoadingMore(true);
+              fetchIssues().finally(() => setLoadingMore(false));
+            }
+          }}
           onEndReachedThreshold={0.4}
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -118,6 +175,9 @@ export default function HomeScreen() {
               <Text style={styles.emptyText}>No issues found</Text>
             </View>
           }
+          ListFooterComponent={loadingMore ? (
+            <ActivityIndicator style={{ paddingVertical: 16 }} color="#1a56db" />
+          ) : null}
           contentContainerStyle={{ paddingBottom: 20 }}
         />
       )}
@@ -138,7 +198,7 @@ const styles = StyleSheet.create({
   searchRow: { backgroundColor: '#1a56db', paddingHorizontal: 16, paddingBottom: 12, paddingTop: 8 },
   searchBox: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
-    borderRadius: 10, paddingHorizontal: 12, gap: 8, height: 42,
+    borderRadius: 10, paddingHorizontal: 12, gap: 8, height: 44,
   },
   searchInput: { flex: 1, fontSize: 14, color: '#111827' },
   filters: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },

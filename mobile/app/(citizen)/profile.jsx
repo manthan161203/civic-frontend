@@ -1,18 +1,22 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator,
+  Alert, ActivityIndicator, TextInput, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../src/store/authStore';
 import { rewardsApi } from '../../src/api/rewards';
+import { authApi } from '../../src/api/auth';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateUser } = useAuthStore();
   const [rewards, setRewards] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editModal, setEditModal] = useState(false);
+  const [editName, setEditName] = useState(user?.name || '');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     rewardsApi.getMyRewards()
@@ -26,6 +30,19 @@ export default function ProfileScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Logout', style: 'destructive', onPress: logout },
     ]);
+  };
+
+  const handleSaveName = async () => {
+    if (!editName.trim()) return;
+    setSaving(true);
+    try {
+      const { data } = await authApi.updateProfile({ name: editName.trim() });
+      updateUser({ name: data.name });
+      setEditModal(false);
+    } catch {
+      Alert.alert('Error', 'Failed to update name.');
+    }
+    setSaving(false);
   };
 
   return (
@@ -66,17 +83,75 @@ export default function ProfileScreen() {
 
       {/* Menu */}
       <View style={styles.menu}>
-        <MenuItem icon="trophy-outline" label="Leaderboard" onPress={() => router.push('/(citizen)/leaderboard')} />
+        <MenuItem icon="megaphone-outline" label="Announcements" onPress={() => router.push('/(citizen)/announcements')} />
+        <MenuItem icon="trophy-outline" label="Leaderboard & Badges" onPress={() => router.push('/(citizen)/leaderboard')} />
         <MenuItem icon="chatbubble-ellipses-outline" label="AI Assistant" onPress={() => router.push('/(citizen)/chat')} />
-        <MenuItem icon="notifications-outline" label="Subscriptions" onPress={() => {}} />
-        <MenuItem icon="person-outline" label="Edit Profile" onPress={() => {}} />
+        <MenuItem icon="notifications-outline" label="Ward Subscriptions" onPress={() => router.push('/(citizen)/subscriptions')} />
+        <MenuItem icon="person-outline" label="Edit Profile" onPress={() => { setEditName(user?.name || ''); setEditModal(true); }} />
       </View>
 
       <View style={[styles.menu, { marginTop: 12 }]}>
         <MenuItem icon="log-out-outline" label="Logout" onPress={handleLogout} danger />
+        <MenuItem
+          icon="trash-outline"
+          label="Delete Account"
+          onPress={() => {
+            Alert.alert(
+              'Delete Account',
+              'This will permanently delete your account and all data. This cannot be undone.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await authApi.deleteAccount();
+                      await logout();
+                    } catch {
+                      Alert.alert('Error', 'Failed to delete account. Please try again.');
+                    }
+                  },
+                },
+              ]
+            );
+          }}
+          danger
+        />
       </View>
 
       <Text style={styles.version}>Civic v1.0.0</Text>
+
+      {/* Edit Name Modal */}
+      <Modal visible={editModal} transparent animationType="fade" onRequestClose={() => setEditModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Edit Name</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Your full name"
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setEditModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSave, saving && { opacity: 0.6 }]}
+                onPress={handleSaveName}
+                disabled={saving}
+              >
+                <Text style={styles.modalSaveText}>{saving ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -126,4 +201,16 @@ const styles = StyleSheet.create({
   menuLabel: { flex: 1, fontSize: 15, color: '#111827' },
   menuLabelDanger: { color: '#ef4444' },
   version: { textAlign: 'center', color: '#9ca3af', fontSize: 12, marginTop: 24, marginBottom: 32 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 32 },
+  modal: { backgroundColor: '#fff', borderRadius: 16, padding: 20 },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 14 },
+  modalInput: {
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: '#111827',
+  },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 16, justifyContent: 'flex-end' },
+  modalCancel: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#d1d5db' },
+  modalCancelText: { fontSize: 14, color: '#6b7280', fontWeight: '600' },
+  modalSave: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8, backgroundColor: '#1a56db' },
+  modalSaveText: { fontSize: 14, color: '#fff', fontWeight: '700' },
 });

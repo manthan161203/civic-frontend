@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Switch, RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 import { workersApi } from '../../src/api/workers';
 import { useAuthStore } from '../../src/store/authStore';
 
@@ -28,7 +30,7 @@ export default function WorkerDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [toggling, setToggling] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const [statsRes, tasksRes] = await Promise.all([
         workersApi.getStats(),
@@ -37,14 +39,30 @@ export default function WorkerDashboard() {
       setStats(statsRes.data);
       const taskList = tasksRes.data.items || tasksRes.data;
       setTasks(taskList);
-      // Derive online status from user or tasks
       setIsOnline(user?.is_online ?? false);
     } catch {}
-  };
+  }, [user?.is_online]);
 
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, []);
+
+  // Push location updates to server while online
+  useEffect(() => {
+    if (!isOnline) return;
+    let sub;
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, timeInterval: 30000, distanceInterval: 50 },
+        (loc) => {
+          workersApi.updateLocation(loc.coords.latitude, loc.coords.longitude).catch(() => {});
+        }
+      );
+    })();
+    return () => sub?.remove();
+  }, [isOnline]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -72,9 +90,14 @@ export default function WorkerDashboard() {
       <View style={styles.onlineCard}>
         <View>
           <Text style={styles.onlineLabel}>Duty Status</Text>
-          <Text style={styles.onlineDesc}>
-            {isOnline ? '🟢 Online — accepting tasks' : '🔴 Offline'}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <Svg width={10} height={10} viewBox="0 0 10 10">
+              <SvgCircle cx="5" cy="5" r="5" fill={isOnline ? '#059669' : '#9ca3af'} />
+            </Svg>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: isOnline ? '#059669' : '#6b7280' }}>
+              {isOnline ? 'Online — accepting tasks' : 'Offline'}
+            </Text>
+          </View>
         </View>
         <Switch
           value={isOnline}

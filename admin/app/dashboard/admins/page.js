@@ -113,7 +113,7 @@ function EditAdminModal({ admin, onClose, onUpdated }) {
       }
 
       await adminApi.updateAdmin(admin.id, payload);
-      setSuccess('✓ Admin updated successfully');
+      setSuccess('Admin updated successfully');
       setTimeout(() => {
         onUpdated();
         onClose();
@@ -189,7 +189,7 @@ function EditAdminModal({ admin, onClose, onUpdated }) {
           <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Geographic Scope</p>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">District</label>
                 <select
@@ -235,7 +235,7 @@ function EditAdminModal({ admin, onClose, onUpdated }) {
           </div>
 
           {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-100">{error}</p>}
-          {success && <p className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-100">{success}</p>}
+          {success && <p className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-100 flex items-center gap-2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} style={{width:14,height:14}} className="text-green-500 flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>{success}</p>}
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-bold transition-colors">
@@ -474,7 +474,7 @@ function CreateAdmin({ onCreated }) {
     setSaving(true);
     try {
       const { data } = await adminApi.createAdmin(payload);
-      setSuccess(`✓ ${data.name} created as ${ROLE_LABELS[data.role]?.label}`);
+      setSuccess(`${data.name} created as ${ROLE_LABELS[data.role]?.label}`);
       setForm({ name: '', phone: '', role: 'ward_admin', language: 'en' });
       setSelectedDistrict(''); setSelectedTaluka(''); setSelectedWard('');
       onCreated();
@@ -592,7 +592,7 @@ function CreateAdmin({ onCreated }) {
         </div>
 
         {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-        {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{success}</p>}
+        {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg flex items-center gap-2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} style={{width:14,height:14}} className="text-green-500 flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>{success}</p>}
 
         <button
           type="submit"
@@ -653,7 +653,7 @@ function RoleChanger() {
     setSuccess('');
     try {
       const { data } = await adminApi.changeUserRole(selected.id, newRole);
-      setSuccess(`✓ ${data.name}'s role changed to ${ROLE_LABELS[newRole]?.label || newRole}`);
+      setSuccess(`${data.name}'s role changed to ${ROLE_LABELS[newRole]?.label || newRole}`);
       setSelected({ ...selected, role: newRole });
       setNewRole('');
     } catch (err) {
@@ -755,7 +755,7 @@ function RoleChanger() {
           </div>
 
           {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-          {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{success}</p>}
+          {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg flex items-center gap-2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} style={{width:14,height:14}} className="text-green-500 flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>{success}</p>}
 
           <button
             onClick={handleChange}

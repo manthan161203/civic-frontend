@@ -113,7 +113,7 @@ function AssignModal({ issue, onClose, onAssigned }) {
                   <div className="text-sm font-medium text-gray-900">{w.name}</div>
                   <div className="text-xs text-gray-400">{w.ward_id ? wardNames[w.ward_id] || 'Unknown Ward' : 'No ward'}</div>
                 </div>
-                {selected === w.id && <span className="text-blue-600 text-sm">✓</span>}
+                {selected === w.id && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} style={{width:16,height:16}} className="text-blue-600 flex-shrink-0"><polyline points="20 6 9 17 4 12" /></svg>}
               </button>
             ))
           )}
@@ -153,7 +153,9 @@ function IssueDetailModal({ issue, workerMap, onClose }) {
       <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <h2 className="text-base font-bold text-gray-900 pr-4">{issue.description}</h2>
-          <button onClick={onClose} className="text-gray-300 hover:text-gray-500 text-2xl leading-none flex-shrink-0">×</button>
+          <button onClick={onClose} className="text-gray-300 hover:text-gray-500 flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:18,height:18}}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
         </div>
 
         {photo && !photoError ? (
@@ -169,7 +171,7 @@ function IssueDetailModal({ issue, workerMap, onClose }) {
           </div>
         ) : null}
 
-        <div className="space-y-2 text-sm">
+        <div className="space-y-3 text-sm">
           {[
             ['Address', issue.address || '—'],
             ['Ward', issue.ward || '—'],
@@ -180,7 +182,7 @@ function IssueDetailModal({ issue, workerMap, onClose }) {
             ['Upvotes', issue.upvote_count ?? 0],
             ['Created', formatDate(issue.created_at, 'en-IN')],
           ].map(([label, value]) => (
-            <div key={label} className="flex justify-between py-2 border-b border-gray-50">
+            <div key={label} className="flex justify-between py-3 border-b border-gray-50">
               <span className="text-gray-500">{label}</span>
               <span className="font-medium text-gray-900 text-right max-w-xs truncate capitalize">{value}</span>
             </div>
@@ -483,22 +485,22 @@ export default function IssuesPage() {
                       {formatDate(issue.created_at, 'en-IN')}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
+                      <div className="flex flex-col gap-2">
                         <button
                           onClick={() => setAssignIssue(issue)}
-                          className="w-20 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-semibold rounded-md border border-blue-200 transition-colors text-center"
+                          className="w-full py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-semibold rounded-md border border-blue-200 transition-colors text-center"
                         >
                           {issue.assigned_worker_id ? 'Reassign' : 'Assign'}
                         </button>
                         <button
                           onClick={() => handleEscalate(issue.id)}
-                          className="w-20 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-semibold rounded-md border border-purple-200 transition-colors text-center"
+                          className="w-full py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-semibold rounded-md border border-purple-200 transition-colors text-center"
                         >
                           Escalate
                         </button>
                         <button
                           onClick={() => handleDelete(issue.id)}
-                          className="w-20 py-1 bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold rounded-md border border-red-200 transition-colors text-center"
+                          className="w-full py-1.5 bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold rounded-md border border-red-200 transition-colors text-center"
                         >
                           Delete
                         </button>

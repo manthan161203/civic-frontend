@@ -193,7 +193,7 @@ function Leaderboard() {
           </thead>
           <tbody className="divide-y divide-gray-50">
             {data.map((w, i) => (
-              <tr key={w.id || `leaderboard-${i}`} className="hover:bg-gray-50">
+              <tr key={w.worker_id || w.id || `leaderboard-${i}`} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-center font-bold text-gray-500">
                   {i < 3 ? <MedalIcon i={i} /> : <span className="text-xs text-gray-400">#{i + 1}</span>}
                 </td>
@@ -380,8 +380,8 @@ function WorkerList() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Add Worker</h2>
-            <form onSubmit={handleCreate} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Name</label>
                   <input

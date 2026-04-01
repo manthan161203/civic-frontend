@@ -2,6 +2,28 @@ import { create } from 'zustand';
 import * as SecureStore from '../utils/secureStoreShim';
 import { authApi } from '../api/auth';
 
+// Attempt to register Expo push token and save it to the backend (best-effort)
+async function registerPushToken() {
+  try {
+    const Notifications = await import('expo-notifications');
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') return;
+
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    const expoToken = tokenData.data;
+    if (expoToken) {
+      await authApi.updateProfile({ fcm_token: expoToken });
+    }
+  } catch {
+    // Push notifications are best-effort — never block login
+  }
+}
+
 export const useAuthStore = create((set, get) => ({
   user: null,
   isLoading: true,
@@ -31,6 +53,8 @@ export const useAuthStore = create((set, get) => ({
     try {
       const { data } = await authApi.getMe();
       set({ user: data, isAuthenticated: true });
+      // Register push token after successful login (best-effort)
+      registerPushToken();
     } catch {
       set({ isAuthenticated: true });
     }

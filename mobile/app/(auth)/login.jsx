@@ -4,6 +4,7 @@ import {
   StyleSheet, Alert, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Svg, { Rect as SvgRect, Path as SvgPath } from 'react-native-svg';
 import { authApi } from '../../src/api/auth';
 
 export default function LoginScreen() {
@@ -47,7 +48,7 @@ export default function LoginScreen() {
           <Text style={styles.label}>Mobile Number</Text>
           <View style={styles.phoneRow}>
             <View style={styles.countryCode}>
-              <Text style={styles.countryCodeText}>🇮🇳 +91</Text>
+              <Text style={styles.countryCodeText}>+91</Text>
             </View>
             <TextInput
               style={styles.phoneInput}
@@ -67,6 +68,27 @@ export default function LoginScreen() {
             disabled={loading}
           >
             <Text style={styles.btnText}>{loading ? 'Sending…' : 'Get OTP'}</Text>
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Aadhaar Login */}
+          <TouchableOpacity
+            style={styles.altBtn}
+            onPress={() => router.push('/(auth)/aadhar')}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth={2}>
+                <SvgRect x="2" y="4" width="20" height="16" rx="2" />
+                <SvgPath d="M12 12a3 3 0 100-6 3 3 0 000 6zM6 20c0-2.2 2.7-4 6-4s6 1.8 6 4" />
+              </Svg>
+              <Text style={styles.altBtnText}>Login with Aadhaar</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -105,5 +127,13 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.6 },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 4 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#e5e7eb' },
+  dividerText: { fontSize: 13, color: '#9ca3af', fontWeight: '500' },
+  altBtn: {
+    height: 50, borderWidth: 1.5, borderColor: '#d1d5db', borderRadius: 10,
+    justifyContent: 'center', alignItems: 'center', backgroundColor: '#fffbeb',
+  },
+  altBtnText: { fontSize: 15, fontWeight: '600', color: '#92400e' },
   footer: { textAlign: 'center', color: '#9ca3af', fontSize: 12, marginTop: 32 },
 });

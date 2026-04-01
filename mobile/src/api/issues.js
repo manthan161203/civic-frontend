@@ -27,5 +27,5 @@ export const issuesApi = {
   flag: (id, reason, description) =>
     api.post(`/issues/${id}/flag`, { reason, description }),
   // Ward health
-  wardHealth: () => api.get('/issues/ward-health'),
+  wardHealth: (ward) => api.get('/issues/ward-health', { params: { ward } }),
 };
