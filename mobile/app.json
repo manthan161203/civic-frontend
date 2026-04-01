@@ -22,7 +22,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.civic.app",
       "config": {
-        "googleMapsApiKey": "AIzaSyD4qUNmFPnykZ4LemtKNdfeZHCOakysOWw"
+        "googleMapsApiKey": "$GOOGLE_MAPS_API_KEY"
       },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Civic needs your location to show nearby issues.",
@@ -31,12 +31,12 @@
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
-              "com.googleusercontent.apps.1095425044618-83hobvcm1t6pd5sds4pjcjps0k9s0fjo"
+              "com.googleusercontent.apps.$GOOGLE_iOS_CLIENT_ID"
             ]
           },
           {
             "CFBundleURLSchemes": [
-              "com.googleusercontent.apps.1095425044618-83hobvcm1t6pd5sds4pjcjps0k9s0fjo"
+              "com.googleusercontent.apps.$GOOGLE_iOS_CLIENT_ID"
             ]
           }
         ],
@@ -51,7 +51,7 @@
       "package": "com.civic.app",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyD4qUNmFPnykZ4LemtKNdfeZHCOakysOWw"
+          "apiKey": "$GOOGLE_MAPS_API_KEY"
         }
       },
       "permissions": [
