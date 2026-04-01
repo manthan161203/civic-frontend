@@ -25,12 +25,240 @@ function RoleBadge({ role }) {
   );
 }
 
+// ── Edit Admin Modal ───────────────────────────────────────────────────────────
+function EditAdminModal({ admin, onClose, onUpdated }) {
+  const { user: currentUser } = useAuthStore();
+  const [form, setForm] = useState({
+    name: admin?.name || '',
+    phone: admin?.phone ? admin.phone.replace('+91', '') : '',
+    role: admin?.role || 'ward_admin',
+    district_id: admin?.district_id || '',
+    taluka_id: admin?.taluka_id || '',
+    ward_id: admin?.ward_id || '',
+  });
+  const [districts, setDistricts] = useState([]);
+  const [talukas, setTalukas] = useState([]);
+  const [wards, setWards] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Which roles the current user can set
+  const creatableRoles = {
+    admin: ['district_admin', 'taluka_admin', 'ward_admin'],
+    district_admin: ['taluka_admin', 'ward_admin'],
+    taluka_admin: ['ward_admin'],
+  }[currentUser?.role] || [];
+
+  // Load locations (same logic as CreateAdmin)
+  useEffect(() => {
+    locationsApi.getDistricts().then(({ data }) => {
+      let districtList = data.items || data;
+      if (currentUser?.role !== 'admin' && currentUser?.district_id) {
+        districtList = districtList.filter(d => d.id === currentUser.district_id);
+      }
+      setDistricts(districtList);
+    }).catch(() => {});
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!form.district_id) { setTalukas([]); return; }
+    locationsApi.getTalukas(form.district_id).then(({ data }) => {
+      let talukaList = data.items || data;
+      if (currentUser?.role === 'taluka_admin' && currentUser?.taluka_id) {
+        talukaList = talukaList.filter(t => t.id === currentUser.taluka_id);
+      } else if (currentUser?.role === 'ward_admin' && currentUser?.taluka_id) {
+        talukaList = talukaList.filter(t => t.id === currentUser.taluka_id);
+      }
+      setTalukas(talukaList);
+    }).catch(() => {});
+  }, [form.district_id, currentUser]);
+
+  useEffect(() => {
+    if (!form.taluka_id) { setWards([]); return; }
+    locationsApi.getWards(form.taluka_id).then(({ data }) => {
+      let wardList = data.items || data;
+      if (currentUser?.role === 'ward_admin' && currentUser?.ward_id) {
+        wardList = wardList.filter(w => w.id === currentUser.ward_id);
+      }
+      setWards(wardList);
+    }).catch(() => {});
+  }, [form.taluka_id, currentUser]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) { setError('Name cannot be empty'); return; }
+    
+    setError('');
+    setSuccess('');
+    setSaving(true);
+
+    try {
+      const payload = {
+        name: form.name,
+        role: form.role,
+        district_id: form.district_id || null,
+        taluka_id: form.taluka_id || null,
+        ward_id: form.ward_id || null,
+      };
+
+      if (form.phone) {
+        const cleaned = form.phone.replace(/\D/g, '');
+        if (cleaned.length !== 10) {
+          setError('Enter a valid 10-digit phone number');
+          setSaving(false);
+          return;
+        }
+        payload.phone = `+91${cleaned}`;
+      }
+
+      await adminApi.updateAdmin(admin.id, payload);
+      setSuccess('✓ Admin updated successfully');
+      setTimeout(() => {
+        onUpdated();
+        onClose();
+      }, 1000);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update admin.'));
+    }
+    setSaving(false);
+  };
+
+  if (!admin) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-5">
+          <h2 className="text-lg font-bold text-gray-900">Edit Admin</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Name</label>
+              <input
+                required
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Phone</label>
+              <div className="relative">
+                <input
+                  required
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                  placeholder="10 digits"
+                  maxLength="10"
+                  className="w-full border border-gray-200 rounded-lg pl-14 pr-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                />
+                <span className="absolute left-3 top-2 text-sm font-bold text-gray-700">+91</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Role</label>
+            <div className="flex gap-2 flex-wrap">
+              {creatableRoles.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, role: r }))}
+                  className={`px-3 py-2 text-sm font-semibold rounded-lg border transition-colors ${
+                    form.role === r
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {ROLE_LABELS[r]?.label || r}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Location scope */}
+          <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Geographic Scope</p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">District</label>
+                <select
+                  value={form.district_id}
+                  onChange={(e) => setForm(f => ({ ...f, district_id: e.target.value, taluka_id: '', ward_id: '' }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
+                >
+                  <option value="">— Select district —</option>
+                  {districts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+
+              {(form.role === 'taluka_admin' || form.role === 'ward_admin') && (
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Taluka</label>
+                  <select
+                    value={form.taluka_id}
+                    onChange={(e) => setForm(f => ({ ...f, taluka_id: e.target.value, ward_id: '' }))}
+                    disabled={!form.district_id}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white disabled:opacity-50"
+                  >
+                    <option value="">— Select taluka —</option>
+                    {talukas.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {form.role === 'ward_admin' && (
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Ward</label>
+                  <select
+                    value={form.ward_id}
+                    onChange={(e) => setForm(f => ({ ...f, ward_id: e.target.value }))}
+                    disabled={!form.taluka_id}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white disabled:opacity-50"
+                  >
+                    <option value="">— Select ward —</option>
+                    {wards.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-100">{error}</p>}
+          {success && <p className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-100">{success}</p>}
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-bold transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-md shadow-blue-100">
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
 // ── Sub-Admin List ─────────────────────────────────────────────────────────────
 function AdminList({ refresh, triggerRefresh }) {
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [roleFilter, setRoleFilter] = useState('');
   const [locationNames, setLocationNames] = useState({});
+  const [editingAdmin, setEditingAdmin] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,13 +316,14 @@ function AdminList({ refresh, triggerRefresh }) {
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Role</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Scope</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Joined</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {loading ? (
-              <tr><td colSpan={5} className="text-center py-10 text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={6} className="text-center py-10 text-gray-400">Loading…</td></tr>
             ) : admins.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-10 text-gray-400">No sub-admins found</td></tr>
+              <tr><td colSpan={6} className="text-center py-10 text-gray-400">No sub-admins found</td></tr>
             ) : (
               admins.map((a) => (
                 <tr key={a.id} className="hover:bg-gray-50">
@@ -120,12 +349,28 @@ function AdminList({ refresh, triggerRefresh }) {
                   <td className="px-4 py-3 text-xs text-gray-600 font-medium">
                     {formatDate(a.created_at, 'en-IN')}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => setEditingAdmin(a)}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                    >
+                      Edit
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+
+      {editingAdmin && (
+        <EditAdminModal
+          admin={editingAdmin}
+          onClose={() => setEditingAdmin(null)}
+          onUpdated={() => { load(); triggerRefresh(); }}
+        />
+      )}
     </div>
   );
 }
@@ -559,7 +804,7 @@ export default function AdminsPage() {
         ))}
       </div>
 
-      {tab === 'list' && <AdminList refresh={refreshKey} />}
+      {tab === 'list' && <AdminList refresh={refreshKey} triggerRefresh={() => setRefreshKey((k) => k + 1)} />}
       {tab === 'create' && <CreateAdmin onCreated={() => { setRefreshKey((k) => k + 1); setTab('list'); }} />}
       {tab === 'roles' && <RoleChanger />}
     </div>

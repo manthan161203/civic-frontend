@@ -10,56 +10,137 @@ const DEPT_OPTIONS = ['water', 'roads', 'electricity', 'sanitation', 'parks', 'o
 
 // ── Edit Worker Modal ──────────────────────────────────────────────────────────
 function EditWorkerModal({ worker, onClose, onSaved }) {
-  const [name, setName] = useState(worker.name || '');
-  const [ward, setWard] = useState(worker.ward || '');
+  const [form, setForm] = useState({
+    name: worker.name || '',
+    phone: worker.phone ? worker.phone.replace('+91', '') : '',
+    ward_id: worker.ward_id || '',
+    department: worker.department || '',
+  });
+  const [wards, setWards] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Load wards (same logic as CreateWorker)
+  useEffect(() => {
+    const user = useAuthStore.getState().user;
+    locationsApi.getTree().then(({ data }) => {
+      const allWards = [];
+      (data.districts || data).forEach((d) => {
+        if (user?.role === 'district_admin' && user?.district_id && d.id !== user.district_id) return;
+        (d.talukas || []).forEach((t) => {
+          if (user?.role === 'taluka_admin' && user?.taluka_id && t.id !== user.taluka_id) return;
+          (t.wards || []).forEach((w) => {
+            if (user?.role === 'ward_admin' && user?.ward_id && w.id !== user.ward_id) return;
+            allWards.push({ id: w.id, label: `${w.name} (${t.name})` });
+          });
+        });
+      });
+      setWards(allWards);
+    }).catch(() => {});
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) { setError('Name is required.'); return; }
+    if (!form.name.trim()) { setError('Name is required.'); return; }
+    
     setSaving(true);
     setError('');
     try {
-      await adminApi.updateWorker(worker.id, { name: name.trim(), ward: ward.trim() || undefined });
+      const payload = {
+        name: form.name.trim(),
+        ward_id: form.ward_id || null,
+        department: form.department || null,
+      };
+
+      if (form.phone) {
+        const cleaned = form.phone.replace(/\D/g, '');
+        if (cleaned.length !== 10) {
+          setError('Enter a valid 10-digit phone number');
+          setSaving(false);
+          return;
+        }
+        payload.phone = `+91${cleaned}`;
+      }
+
+      await adminApi.updateWorker(worker.id, payload);
       onSaved();
       onClose();
-    } catch {
-      setError('Failed to update worker.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update worker.'));
     }
     setSaving(false);
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-base font-bold text-gray-900 mb-4">Edit Worker</h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Name</label>
-            <input
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
-            />
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-5">
+          <h2 className="text-lg font-bold text-gray-900">Edit Worker</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Name</label>
+              <input
+                required
+                value={form.name}
+                onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Phone</label>
+              <div className="relative">
+                <input
+                  required
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                  placeholder="10 digits"
+                  maxLength="10"
+                  className="w-full border border-gray-200 rounded-lg pl-14 pr-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+                />
+                <span className="absolute left-3 top-2 text-sm font-bold text-gray-700">+91</span>
+              </div>
+            </div>
           </div>
+
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Ward (optional)</label>
-            <input
-              value={ward}
-              onChange={(e) => setWard(e.target.value)}
-              placeholder="Ward name or leave blank"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
-            />
+            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Ward Assignment</label>
+            <select
+              value={form.ward_id}
+              onChange={(e) => setForm(f => ({ ...f, ward_id: e.target.value }))}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
+            >
+              <option value="">— No ward assigned —</option>
+              {wards.map((w) => <option key={w.id} value={w.id}>{w.label}</option>)}
+            </select>
           </div>
-          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-semibold">
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Department</label>
+            <select
+              value={form.department}
+              onChange={(e) => setForm(f => ({ ...f, department: e.target.value }))}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
+            >
+              <option value="">— Select department —</option>
+              {DEPT_OPTIONS.map((d) => <option key={d} value={d} className="capitalize">{d}</option>)}
+            </select>
+          </div>
+
+          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-100">{error}</p>}
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-bold">
               Cancel
             </button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors">
-              {saving ? 'Saving…' : 'Save'}
+            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-md shadow-blue-100">
+              {saving ? 'Saving…' : 'Save Changes'}
             </button>
           </div>
         </form>
@@ -67,6 +148,7 @@ function EditWorkerModal({ worker, onClose, onSaved }) {
     </div>
   );
 }
+
 
 // ── Leaderboard ────────────────────────────────────────────────────────────────
 function Leaderboard() {

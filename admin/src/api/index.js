@@ -47,6 +47,7 @@ export const adminApi = {
   // Sub-admins
   getAdmins: (params) => api.get('/admin/admins', { params }),
   createAdmin: (data) => api.post('/admin/admins', data),
+  updateAdmin: (id, data) => api.put(`/admin/admins/${id}`, data),
   changeUserRole: (user_id, role) => api.patch(`/admin/users/${user_id}/role`, null, { params: { role } }),
   searchCitizens: (search) => api.get('/admin/citizens', { params: { search, size: 10, page: 1 } }),
   searchWorkers: (search) => api.get('/admin/workers', { params: { search, size: 10, page: 1 } }),
