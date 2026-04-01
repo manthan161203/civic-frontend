@@ -14,4 +14,8 @@ export const authApi = {
   sendChangePhoneOtp: (new_phone) => api.post('/auth/phone/change/send-otp', { new_phone }),
   verifyChangePhone: (new_phone, code) => api.post('/auth/phone/change/verify', { new_phone, code }),
   deleteAccount: () => api.delete('/auth/account'),
+  uploadProfilePhoto: (formData) =>
+    api.post('/auth/profile/photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 };
