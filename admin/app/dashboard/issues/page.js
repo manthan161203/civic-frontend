@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { adminApi, locationsApi } from '../../../src/api/index';
 import { formatDate } from '../../../src/lib/dateUtils';
 
@@ -29,15 +30,15 @@ function AssignModal({ issue, onClose, onAssigned }) {
   const [wardNames, setWardNames] = useState({});
 
   useEffect(() => {
-    adminApi.getWorkers({ size: 50, is_active: true })
-      .then(({ data }) => setWorkers(data.items || data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-
-    // Fetch location tree to build ward name mapping
-    locationsApi.getTree()
-      .then(({ data }) => {
+    // Fetch both location tree and workers in parallel, then display together
+    Promise.all([
+      locationsApi.getTree(),
+      adminApi.getWorkers({ size: 50, is_active: true })
+    ])
+      .then(([locationRes, workersRes]) => {
+        // Build ward name mapping from location data
         const names = {};
+        const data = locationRes.data;
         if (data && data.length) {
           data.forEach((district) => {
             (district.talukas || []).forEach((taluka) => {
@@ -48,8 +49,10 @@ function AssignModal({ issue, onClose, onAssigned }) {
           });
         }
         setWardNames(names);
+        setWorkers(workersRes.data.items || workersRes.data);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = workers.filter((w) => {
@@ -150,46 +153,65 @@ function IssueDetailModal({ issue, workerMap, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between mb-4">
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-4 flex-shrink-0">
           <h2 className="text-base font-bold text-gray-900 pr-4">{issue.description}</h2>
           <button onClick={onClose} className="text-gray-300 hover:text-gray-500 flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:18,height:18}}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
         </div>
 
-        {photo && !photoError ? (
-          <img 
-            src={photo} 
-            alt="Issue" 
-            className="w-full max-h-80 object-contain rounded-xl mb-4 bg-gray-50" 
-            onError={() => setPhotoError(true)}
-          />
-        ) : photo && photoError ? (
-          <div className="w-full h-40 bg-gray-100 rounded-xl mb-4 flex items-center justify-center text-gray-400 text-sm">
-            Image failed to load
-          </div>
-        ) : null}
-
-        <div className="space-y-3 text-sm">
-          {[
-            ['Address', issue.address || '—'],
-            ['Ward', issue.ward || '—'],
-            ['Type', issue.issue_type?.replace(/_/g, ' ') || '—'],
-            ['Priority', issue.priority || '—'],
-            ['Status', issue.status?.replace(/_/g, ' ') || '—'],
-            ['Assigned Worker', issue.assigned_worker_id ? (workerMap[issue.assigned_worker_id] || 'Assigned') : 'Unassigned'],
-            ['Upvotes', issue.upvote_count ?? 0],
-            ['Created', formatDate(issue.created_at, 'en-IN')],
-          ].map(([label, value]) => (
-            <div key={label} className="flex justify-between py-3 border-b border-gray-50">
-              <span className="text-gray-500">{label}</span>
-              <span className="font-medium text-gray-900 text-right max-w-xs truncate capitalize">{value}</span>
+        <div className="overflow-y-auto flex-1">
+          {photo && !photoError ? (
+            <img 
+              src={photo} 
+              alt="Issue" 
+              className="w-full max-h-80 object-contain rounded-xl mb-4 bg-gray-50" 
+              onError={() => setPhotoError(true)}
+            />
+          ) : photo && photoError ? (
+            <div className="w-full h-40 bg-gray-100 rounded-xl mb-4 flex items-center justify-center text-gray-400 text-sm">
+              Image failed to load
             </div>
-          ))}
+          ) : null}
+
+          {/* Location map */}
+          {issue.latitude && issue.longitude && (
+            <div className="mb-4 rounded-xl overflow-hidden border border-gray-100" style={{ height: 180 }}>
+              <Map
+                defaultCenter={{ lat: issue.latitude, lng: issue.longitude }}
+                defaultZoom={15}
+                mapId="civic-issue-detail"
+                gestureHandling="cooperative"
+                disableDefaultUI
+                zoomControl
+                style={{ width: '100%', height: '100%' }}
+              >
+                <AdvancedMarker position={{ lat: issue.latitude, lng: issue.longitude }} />
+              </Map>
+            </div>
+          )}
+
+          <div className="space-y-3 text-sm">
+            {[
+              ['Address', issue.address || '—'],
+              ['Ward', issue.ward || '—'],
+              ['Type', issue.issue_type?.replace(/_/g, ' ') || '—'],
+              ['Priority', issue.priority || '—'],
+              ['Status', issue.status?.replace(/_/g, ' ') || '—'],
+              ['Assigned Worker', issue.assigned_worker_id ? (workerMap[issue.assigned_worker_id] || 'Assigned') : 'Unassigned'],
+              ['Upvotes', issue.upvote_count ?? 0],
+              ['Created', formatDate(issue.created_at, 'en-IN')],
+            ].map(([label, value]) => (
+              <div key={label} className="flex justify-between py-3 border-b border-gray-50">
+                <span className="text-gray-500">{label}</span>
+                <span className="font-medium text-gray-900 text-right max-w-xs truncate capitalize">{value}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <button onClick={onClose} className="mt-4 w-full py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-semibold">
+        <button onClick={onClose} className="mt-4 w-full py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-semibold flex-shrink-0">
           Close
         </button>
       </div>
