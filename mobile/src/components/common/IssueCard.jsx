@@ -20,7 +20,13 @@ export default function IssueCard({ issue, onPress }) {
   const status = STATUS_COLORS[issue.status] || STATUS_COLORS.open;
   const priorityColor = PRIORITY_COLORS[issue.priority] || PRIORITY_COLORS.medium;
   // Backend returns before_photos / after_photos as flat string arrays
-  const photo = issue.before_photos?.[0] ?? null;
+  let photo = issue.before_photos?.[0] ?? null;
+
+  // If photo is a relative path, prepend the base URL
+  if (photo && !photo.startsWith('http')) {
+    const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+    photo = `${baseUrl}${photo.startsWith('/') ? '' : '/'}${photo}`;
+  }
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>

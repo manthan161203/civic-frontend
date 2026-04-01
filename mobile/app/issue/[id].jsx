@@ -180,8 +180,19 @@ export default function IssueDetailScreen() {
   }
 
   const status = STATUS_COLORS[issue.status] || STATUS_COLORS.open;
-  const beforePhoto = issue.before_photos?.[0] ?? null;
-  const afterPhoto = issue.after_photos?.[0] ?? null;
+  let beforePhoto = issue.before_photos?.[0] ?? null;
+  let afterPhoto = issue.after_photos?.[0] ?? null;
+
+  // If photos are relative paths, prepend the base URL
+  if (beforePhoto && !beforePhoto.startsWith('http')) {
+    const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+    beforePhoto = `${baseUrl}${beforePhoto.startsWith('/') ? '' : '/'}${beforePhoto}`;
+  }
+  if (afterPhoto && !afterPhoto.startsWith('http')) {
+    const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+    afterPhoto = `${baseUrl}${afterPhoto.startsWith('/') ? '' : '/'}${afterPhoto}`;
+  }
+
   const isReporter = user?.id === issue.reporter_id;
   const isInvolved = isReporter || user?.role === 'worker' || user?.role?.includes('admin');
 
