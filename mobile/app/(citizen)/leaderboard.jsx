@@ -198,7 +198,7 @@ export default function LeaderboardScreen() {
       {tab === TAB.BADGES && (
         <FlatList
           data={badges}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={(item, index) => item.id ? String(item.id) : `badge-${index}-${item.name || ''}`}
           numColumns={2}
           renderItem={({ item }) => <BadgeCard badge={item} />}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a56db" />}

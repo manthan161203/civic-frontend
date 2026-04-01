@@ -7,7 +7,9 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { issuesApi } from '../../src/api/issues';
 import { useAuthStore } from '../../src/store/authStore';
+import { authApi } from '../../src/api/auth';
 import IssueCard from '../../src/components/common/IssueCard';
+import CitizenProfileModal from '../../src/components/CitizenProfileModal';
 
 const CATEGORIES = ['All', 'open', 'in_progress', 'resolved'];
 
@@ -61,7 +63,7 @@ const bannerStyles = StyleSheet.create({
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,6 +72,19 @@ export default function HomeScreen() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
+  const handleProfileComplete = async () => {
+    setShowProfileModal(false);
+    try {
+      const { data } = await authApi.getMe();
+      if (data) {
+        setUser(data);
+      }
+    } catch (err) {
+      // Even if refresh fails, modal is already closed
+    }
+  };
 
   const fetchIssues = useCallback(async (reset = false) => {
     const p = reset ? 1 : page;
@@ -189,6 +204,14 @@ export default function HomeScreen() {
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
+
+      {/* Profile Completion Modal */}
+      <CitizenProfileModal 
+        visible={showProfileModal}
+        user={user}
+        onComplete={handleProfileComplete}
+        onCancel={() => setShowProfileModal(false)}
+      />
     </View>
   );
 }

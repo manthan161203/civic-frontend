@@ -19,7 +19,7 @@ export const issuesApi = {
   // Comments
   getComments: (id) => api.get(`/issues/${id}/comments`),
   addComment: (id, text) =>
-    api.post(`/issues/${id}/comments`, { content: text }),
+    api.post(`/issues/${id}/comments`, { body: text }),
   // Upvotes
   upvote: (id) => api.post(`/issues/${id}/upvote`),
   removeUpvote: (id) => api.delete(`/issues/${id}/upvote`),
