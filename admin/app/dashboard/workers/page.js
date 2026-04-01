@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
 import { adminApi } from '../../../src/api/index';
 import { getErrorMessage } from '../../../src/lib/apiError';
 import { locationsApi } from '../../../src/api/index';
@@ -25,13 +26,16 @@ function EditWorkerModal({ worker, onClose, onSaved }) {
     const user = useAuthStore.getState().user;
     locationsApi.getTree().then(({ data }) => {
       const allWards = [];
-      (data.districts || data).forEach((d) => {
-        if (user?.role === 'district_admin' && user?.district_id && d.id !== user.district_id) return;
-        (d.talukas || []).forEach((t) => {
-          if (user?.role === 'taluka_admin' && user?.taluka_id && t.id !== user.taluka_id) return;
-          (t.wards || []).forEach((w) => {
-            if (user?.role === 'ward_admin' && user?.ward_id && w.id !== user.ward_id) return;
-            allWards.push({ id: w.id, label: `${w.name} (${t.name})` });
+      (data.districts || data).forEach((district) => {
+        if (user?.role === 'district_admin' && user?.district_id && district.id !== user.district_id) return;
+        (district.talukas || []).forEach((taluka) => {
+          if (user?.role === 'taluka_admin' && user?.taluka_id && taluka.id !== user.taluka_id) return;
+          (taluka.wards || []).forEach((ward) => {
+            if (user?.role === 'ward_admin' && user?.ward_id && ward.id !== user.ward_id) return;
+            allWards.push({
+              id: ward.id,
+              label: `${ward.name} (Ward-${ward.ward_number}) · ${taluka.name}, ${district.name}`,
+            });
           });
         });
       });
@@ -286,25 +290,28 @@ function WorkerList() {
       .then(({ data }) => {
         const allWards = [];
         
-        (data.districts || data).forEach((d) => {
+        (data.districts || data).forEach((district) => {
           // Filter by district if user is district/taluka/ward admin
-          if (user?.role === 'district_admin' && user?.district_id && d.id !== user.district_id) {
+          if (user?.role === 'district_admin' && user?.district_id && district.id !== user.district_id) {
             return;
           }
           
-          (d.talukas || []).forEach((t) => {
+          (district.talukas || []).forEach((taluka) => {
             // Filter by taluka if user is taluka/ward admin
-            if (user?.role === 'taluka_admin' && user?.taluka_id && t.id !== user.taluka_id) {
+            if (user?.role === 'taluka_admin' && user?.taluka_id && taluka.id !== user.taluka_id) {
               return;
             }
             
-            (t.wards || []).forEach((w) => {
+            (taluka.wards || []).forEach((ward) => {
               // Filter by ward if user is ward admin
-              if (user?.role === 'ward_admin' && user?.ward_id && w.id !== user.ward_id) {
+              if (user?.role === 'ward_admin' && user?.ward_id && ward.id !== user.ward_id) {
                 return;
               }
               
-              allWards.push({ id: w.id, label: `${w.name} (${t.name}, ${d.name})` });
+              allWards.push({
+                id: ward.id,
+                label: `${ward.name} (Ward-${ward.ward_number}) · ${taluka.name}, ${district.name}`,
+              });
             });
           });
         });
@@ -553,12 +560,114 @@ function WorkerList() {
   );
 }
 
+// ── Worker Map Tab ─────────────────────────────────────────────────────────────
+function FitBounds({ positions }) {
+  const map = useMap();
+  const prevLen = useRef(0);
+  useEffect(() => {
+    if (!map || !positions.length) return;
+    if (positions.length === prevLen.current) return;
+    prevLen.current = positions.length;
+    const bounds = new google.maps.LatLngBounds();
+    positions.forEach((p) => bounds.extend(p));
+    map.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+  }, [map, positions]);
+  return null;
+}
+
+function WorkerMapTab() {
+  const [workers, setWorkers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [onlineOnly, setOnlineOnly] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await adminApi.getWorkerLocations({ online_only: onlineOnly });
+      setWorkers((data || []).filter((w) => w.latitude && w.longitude));
+    } catch {}
+    setLoading(false);
+  }, [onlineOnly]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const positions = workers.map((w) => ({ lat: w.latitude, lng: w.longitude }));
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex items-center gap-3">
+        <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" checked={onlineOnly} onChange={(e) => setOnlineOnly(e.target.checked)} className="rounded" />
+          Online only
+        </label>
+        <div className="flex-1" />
+        <span className="text-xs text-gray-400">{workers.length} workers</span>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors"
+        >
+          Refresh
+        </button>
+      </div>
+      <div className="rounded-xl overflow-hidden shadow-sm border border-gray-100" style={{ height: 'calc(100vh - 14rem)' }}>
+        <Map
+          defaultCenter={{ lat: 22.3072, lng: 70.8022 }}
+          defaultZoom={7}
+          mapId="civic-workers-map"
+          gestureHandling="greedy"
+          disableDefaultUI={false}
+          style={{ width: '100%', height: '100%' }}
+        >
+          {workers.map((w, i) => (
+            <AdvancedMarker
+              key={`wm-${i}`}
+              position={{ lat: w.latitude, lng: w.longitude }}
+              onClick={() => setSelected(w)}
+            >
+              <div
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  backgroundColor: w.is_online ? '#22c55e' : '#9ca3af',
+                  border: `2px solid ${w.is_online ? '#16a34a' : '#6b7280'}`,
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+                  cursor: 'pointer',
+                }}
+              />
+            </AdvancedMarker>
+          ))}
+          {selected && (
+            <InfoWindow
+              position={{ lat: selected.latitude, lng: selected.longitude }}
+              onCloseClick={() => setSelected(null)}
+            >
+              <div className="text-xs">
+                <strong>{selected.name}</strong><br />
+                {selected.ward || '—'} · {selected.department || '—'}<br />
+                {selected.is_online ? '● Online' : '○ Offline'}
+                {selected.location_updated_at && (
+                  <><br />Updated: {new Date(selected.location_updated_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</>
+                )}
+              </div>
+            </InfoWindow>
+          )}
+          <FitBounds positions={positions} />
+        </Map>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function WorkersPage() {
   const [tab, setTab] = useState('list');
 
   const TABS = [
     { id: 'list', label: 'All Workers' },
+    { id: 'map', label: 'Live Map' },
     { id: 'leaderboard', label: 'Leaderboard' },
   ];
 
@@ -580,6 +689,7 @@ export default function WorkersPage() {
       </div>
 
       {tab === 'list' && <WorkerList />}
+      {tab === 'map' && <WorkerMapTab />}
       {tab === 'leaderboard' && <Leaderboard />}
     </div>
   );
