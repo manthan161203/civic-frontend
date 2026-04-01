@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { Map, useMap, AdvancedMarker, InfoWindow } from '@vis.gl/react-google-maps';
 import { adminApi } from '../../../src/api/index';
 
 const TYPE_COLORS = {
@@ -22,171 +23,168 @@ const TYPE_LABELS = {
   other: 'Other',
 };
 
-export default function MapPage() {
-  const containerRef = useRef(null);
-  const mapRef = useRef(null);
-  const leafletRef = useRef(null);
-  const markersRef = useRef([]);
+// ── Issue markers layer ────────────────────────────────────────────────────────
+function IssueMarkers({ points }) {
+  const [selected, setSelected] = useState(null);
 
+  return (
+    <>
+      {points.map((p, i) => {
+        const color = TYPE_COLORS[p.issue_type] || TYPE_COLORS.other;
+        const scale = p.weight === 3 ? 1.3 : p.weight === 2 ? 1.0 : 0.8;
+        return (
+          <AdvancedMarker
+            key={`issue-${i}`}
+            position={{ lat: p.lat, lng: p.lng }}
+            onClick={() => setSelected(p)}
+          >
+            <div
+              style={{
+                width: 16 * scale,
+                height: 16 * scale,
+                borderRadius: '50%',
+                backgroundColor: color,
+                border: '2px solid #fff',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+                cursor: 'pointer',
+              }}
+            />
+          </AdvancedMarker>
+        );
+      })}
+      {selected && (
+        <InfoWindow
+          position={{ lat: selected.lat, lng: selected.lng }}
+          onCloseClick={() => setSelected(null)}
+        >
+          <div className="text-xs">
+            <strong>{TYPE_LABELS[selected.issue_type] || selected.issue_type}</strong>
+            <br />
+            Severity: {selected.weight === 3 ? 'High' : selected.weight === 2 ? 'Medium' : 'Low'}
+          </div>
+        </InfoWindow>
+      )}
+    </>
+  );
+}
+
+// ── Worker markers layer ───────────────────────────────────────────────────────
+function WorkerMarkers({ workers }) {
+  const [selected, setSelected] = useState(null);
+
+  return (
+    <>
+      {workers.map((w, i) => (
+        <AdvancedMarker
+          key={`worker-${i}`}
+          position={{ lat: w.latitude, lng: w.longitude }}
+          onClick={() => setSelected(w)}
+        >
+          <div
+            style={{
+              width: 14,
+              height: 14,
+              borderRadius: '50%',
+              backgroundColor: w.is_online ? '#22c55e' : '#9ca3af',
+              border: `2px solid ${w.is_online ? '#16a34a' : '#6b7280'}`,
+              boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+              cursor: 'pointer',
+            }}
+          />
+        </AdvancedMarker>
+      ))}
+      {selected && (
+        <InfoWindow
+          position={{ lat: selected.latitude, lng: selected.longitude }}
+          onCloseClick={() => setSelected(null)}
+        >
+          <div className="text-xs">
+            <strong>{selected.name}</strong>
+            <br />
+            {selected.ward || '—'} · {selected.department || '—'}
+            <br />
+            {selected.is_online ? '● Online' : '○ Offline'}
+            {selected.location_updated_at && (
+              <>
+                <br />
+                Updated:{' '}
+                {new Date(selected.location_updated_at).toLocaleTimeString('en-IN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </>
+            )}
+          </div>
+        </InfoWindow>
+      )}
+    </>
+  );
+}
+
+// ── Auto-fit bounds helper ─────────────────────────────────────────────────────
+function FitBounds({ positions }) {
+  const map = useMap();
+  const prevLen = useRef(0);
+
+  useEffect(() => {
+    if (!map || !positions.length) return;
+    if (positions.length === prevLen.current) return;
+    prevLen.current = positions.length;
+    const bounds = new google.maps.LatLngBounds();
+    positions.forEach((p) => bounds.extend(p));
+    map.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+  }, [map, positions]);
+
+  return null;
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────────────
+export default function MapPage() {
   const [view, setView] = useState('issues');
   const [typeFilter, setTypeFilter] = useState('');
   const [onlineOnly, setOnlineOnly] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [counts, setCounts] = useState({ issues: 0, workers: 0 });
-  const [mapReady, setMapReady] = useState(false);
-
-  const clearMarkers = () => {
-    markersRef.current.forEach((m) => m.remove());
-    markersRef.current = [];
-  };
+  const [issuePoints, setIssuePoints] = useState([]);
+  const [workerPoints, setWorkerPoints] = useState([]);
 
   const fetchIssues = useCallback(async () => {
-    const L = leafletRef.current;
-    const map = mapRef.current;
-    if (!L || !map) return;
     setLoading(true);
-    clearMarkers();
     try {
       const params = typeFilter ? { issue_type: typeFilter } : {};
       const { data } = await adminApi.getHeatmap(params);
-      const points = (data || []).filter((p) => p.lat && p.lng);
-      setCounts((c) => ({ ...c, issues: points.length }));
-
-      const RADIUS = { 3: 14, 2: 10, 1: 7 };
-      points.forEach((p) => {
-        const color = TYPE_COLORS[p.issue_type] || TYPE_COLORS.other;
-        const m = L.circleMarker([p.lat, p.lng], {
-          radius: RADIUS[p.weight] || 8,
-          fillColor: color,
-          color: '#fff',
-          weight: 1.5,
-          opacity: 1,
-          fillOpacity: 0.8,
-        });
-        const typeLabel = TYPE_LABELS[p.issue_type] || p.issue_type || 'Issue';
-        const sev = p.weight === 3 ? 'High' : p.weight === 2 ? 'Medium' : 'Low';
-        m.bindTooltip(`<strong>${typeLabel}</strong><br/>Severity: ${sev}`, { direction: 'top' });
-        m.addTo(map);
-        markersRef.current.push(m);
-      });
-
-      if (points.length > 0) {
-        try {
-          const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
-          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-        } catch {}
-      }
+      setIssuePoints((data || []).filter((p) => p.lat && p.lng));
     } catch {}
     setLoading(false);
   }, [typeFilter]);
 
   const fetchWorkers = useCallback(async () => {
-    const L = leafletRef.current;
-    const map = mapRef.current;
-    if (!L || !map) return;
     setLoading(true);
-    clearMarkers();
     try {
       const { data } = await adminApi.getWorkerLocations({ online_only: onlineOnly });
-      const workers = (data || []).filter((w) => w.latitude && w.longitude);
-      setCounts((c) => ({ ...c, workers: workers.length }));
-
-      workers.forEach((w) => {
-        const color = w.is_online ? '#22c55e' : '#9ca3af';
-        const border = w.is_online ? '#16a34a' : '#6b7280';
-        const m = L.circleMarker([w.latitude, w.longitude], {
-          radius: 10,
-          fillColor: color,
-          color: border,
-          weight: 2,
-          fillOpacity: 0.9,
-        });
-        const updated = w.location_updated_at
-          ? new Date(w.location_updated_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-          : '—';
-        m.bindTooltip(
-          `<strong>${w.name}</strong><br/>${w.ward || '—'} · ${w.department || '—'}<br/>${w.is_online ? '● Online' : '○ Offline'}<br/>Updated: ${updated}`,
-          { direction: 'top' }
-        );
-        m.addTo(map);
-        markersRef.current.push(m);
-      });
-
-      if (workers.length > 0) {
-        try {
-          const bounds = L.latLngBounds(workers.map((w) => [w.latitude, w.longitude]));
-          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-        } catch {}
-      }
+      setWorkerPoints((data || []).filter((w) => w.latitude && w.longitude));
     } catch {}
     setLoading(false);
   }, [onlineOnly]);
 
-  // Initialize Leaflet map once
   useEffect(() => {
-    if (typeof window === 'undefined' || mapRef.current) return;
-
-    // Inject Leaflet CSS
-    if (!document.getElementById('leaflet-css')) {
-      const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
-
-    import('leaflet').then((L) => {
-      if (mapRef.current || !containerRef.current) return;
-
-      delete L.Icon.Default.prototype._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-      });
-
-      const map = L.map(containerRef.current, {
-        center: [20.5937, 78.9629],
-        zoom: 5,
-        zoomControl: true,
-      });
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-      }).addTo(map);
-
-      mapRef.current = map;
-      leafletRef.current = L;
-      setMapReady(true);
-    });
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-        leafletRef.current = null;
-      }
-    };
-  }, []);
-
-  // Reload when map is ready or filters change
-  useEffect(() => {
-    if (!mapReady) return;
     if (view === 'issues') fetchIssues();
     else fetchWorkers();
-  }, [mapReady, view, fetchIssues, fetchWorkers]);
+  }, [view, fetchIssues, fetchWorkers]);
 
   const handleRefresh = () => {
     if (view === 'issues') fetchIssues();
     else fetchWorkers();
   };
 
+  const positions =
+    view === 'issues'
+      ? issuePoints.map((p) => ({ lat: p.lat, lng: p.lng }))
+      : workerPoints.map((w) => ({ lat: w.latitude, lng: w.longitude }));
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 4rem)', gap: '0.75rem' }}>
       {/* Controls */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex flex-wrap gap-3 items-center flex-shrink-0">
-        {/* Toggle */}
         <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
           <button
             onClick={() => setView('issues')}
@@ -202,7 +200,6 @@ export default function MapPage() {
           </button>
         </div>
 
-        {/* Filters */}
         {view === 'issues' && (
           <select
             value={typeFilter}
@@ -231,7 +228,7 @@ export default function MapPage() {
         <div className="flex-1" />
 
         <span className="text-xs text-gray-400">
-          {view === 'issues' ? `${counts.issues} active issues` : `${counts.workers} workers plotted`}
+          {view === 'issues' ? `${issuePoints.length} active issues` : `${workerPoints.length} workers plotted`}
         </span>
 
         <button
@@ -254,11 +251,22 @@ export default function MapPage() {
 
       {/* Map */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }} className="rounded-xl overflow-hidden shadow-sm border border-gray-100">
-        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+        <Map
+          defaultCenter={{ lat: 22.3072, lng: 70.8022 }}
+          defaultZoom={7}
+          mapId="civic-admin-map"
+          gestureHandling="greedy"
+          disableDefaultUI={false}
+          style={{ width: '100%', height: '100%' }}
+        >
+          {view === 'issues' && <IssueMarkers points={issuePoints} />}
+          {view === 'workers' && <WorkerMarkers workers={workerPoints} />}
+          <FitBounds positions={positions} />
+        </Map>
 
         {/* Legend */}
         <div
-          style={{ position: 'absolute', bottom: 16, left: 16, zIndex: 1000 }}
+          style={{ position: 'absolute', bottom: 16, left: 16, zIndex: 10 }}
           className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-3 text-xs"
         >
           {view === 'issues' ? (
@@ -301,7 +309,7 @@ export default function MapPage() {
 
         {/* Loading overlay */}
         {loading && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 999 }} className="bg-white/30 flex items-center justify-center">
+          <div style={{ position: 'absolute', inset: 0, zIndex: 20 }} className="bg-white/30 flex items-center justify-center">
             <div className="bg-white rounded-xl shadow-lg px-4 py-3 text-sm text-gray-700 font-medium flex items-center gap-2">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} style={{ width: 16, height: 16 }} className="animate-spin text-blue-500">
                 <polyline points="23 4 23 10 17 10" />
@@ -314,8 +322,8 @@ export default function MapPage() {
         )}
 
         {/* No data notice */}
-        {!loading && ((view === 'issues' && counts.issues === 0) || (view === 'workers' && counts.workers === 0)) && mapReady && (
-          <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 999 }}>
+        {!loading && positions.length === 0 && (
+          <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
             <div className="bg-white rounded-xl shadow-lg px-4 py-2.5 text-sm text-gray-500 font-medium">
               No {view === 'issues' ? 'active issues' : 'workers'} to display
             </div>
