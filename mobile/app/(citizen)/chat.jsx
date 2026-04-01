@@ -26,6 +26,111 @@ const ISSUE_SUGGESTIONS = (issue) => [
   { id: 'i4', label: 'Who to contact', prompt: `Who should I contact about this ${issue.issue_type?.replace('_', ' ')} issue?` },
 ];
 
+// Parse markdown formatting: **bold**, *, line breaks
+function parseMarkdownResponse(text) {
+  if (!text) return [];
+  
+  // Split by lines first
+  const lines = text.split('\n').filter(line => line.trim());
+  const elements = [];
+  
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    
+    // Check if line is a bullet point
+    if (trimmed.startsWith('*')) {
+      elements.push({
+        id: `bullet-${idx}`,
+        type: 'bullet',
+        text: trimmed.substring(1).trim(),
+      });
+      return;
+    }
+    
+    // Check if line is a numbered point
+    if (/^[\d]+\. /.test(trimmed)) {
+      const match = trimmed.match(/^[\d]+\. (.+)/);
+      elements.push({
+        id: `num-${idx}`,
+        type: 'bullet',
+        text: match ? match[1] : trimmed,
+      });
+      return;
+    }
+    
+    // Parse inline formatting: **bold**
+    const parts = [];
+    let lastIndex = 0;
+    const boldRegex = /\*\*([^*]+)\*\*/g;
+    let match;
+    
+    while ((match = boldRegex.exec(trimmed)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({ type: 'text', value: trimmed.substring(lastIndex, match.index) });
+      }
+      parts.push({ type: 'bold', value: match[1] });
+      lastIndex = match.index + match[0].length;
+    }
+    
+    if (lastIndex < trimmed.length) {
+      parts.push({ type: 'text', value: trimmed.substring(lastIndex) });
+    }
+    
+    if (parts.length > 0) {
+      elements.push({
+        id: `line-${idx}`,
+        type: 'paragraph',
+        parts: parts.length > 0 ? parts : [{ type: 'text', value: trimmed }],
+      });
+    }
+  });
+  
+  return elements;
+}
+
+// Render formatted AI response with markdown support
+function FormattedAIResponse({ text, style }) {
+  const elements = parseMarkdownResponse(text);
+  
+  if (elements.length === 0) {
+    return <Text style={style}>{text}</Text>;
+  }
+  
+  return (
+    <View>
+      {elements.map((el, idx) => {
+        // Bullet point with better styling
+        if (el.type === 'bullet') {
+          return (
+            <View key={el.id} style={{ flexDirection: 'row', marginVertical: 6, alignItems: 'flex-start' }}>
+              <Text style={[style, { marginRight: 10, marginTop: 1, fontSize: 16, color: '#3b82f6' }]}>•</Text>
+              <Text style={[style, { flex: 1, lineHeight: 20 }]}>{el.text}</Text>
+            </View>
+          );
+        }
+        
+        // Paragraph with spacing
+        if (el.type === 'paragraph') {
+          return (
+            <Text key={el.id} style={[style, { marginVertical: 6, lineHeight: 21 }]}>
+              {el.parts.map((part, i) =>
+                part.type === 'bold' ? (
+                  <Text key={i} style={{ fontWeight: '800', color: '#111827', fontSize: 15 }}>{part.value}</Text>
+                ) : (
+                  <Text key={i}>{part.value}</Text>
+                )
+              )}
+            </Text>
+          );
+        }
+        
+        return null;
+      })}
+    </View>
+  );
+}
+
 // Render a single message bubble — handles plain text and embedded issue cards
 function MessageBubble({ item, router }) {
   const isUser = item.role === 'user';
@@ -41,7 +146,7 @@ function MessageBubble({ item, router }) {
   // AI response: check if it contains embedded issue list
   return (
     <View style={[styles.bubble, styles.aiBubble]}>
-      <Text style={[styles.bubbleText, styles.aiText]}>{item.text}</Text>
+      <FormattedAIResponse text={item.text} style={[styles.bubbleText, styles.aiText]} />
       {item.issues && item.issues.length > 0 && (
         <View style={styles.issueCardList}>
           {item.issues.slice(0, 4).map((issue) => (
@@ -263,16 +368,16 @@ const styles = StyleSheet.create({
   contextBannerText: { fontSize: 13, color: '#1e40af', flex: 1 },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: 16, gap: 10, paddingBottom: 4 },
-  bubble: { maxWidth: '82%', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 },
-  userBubble: { alignSelf: 'flex-end', backgroundColor: '#1a56db', borderBottomRightRadius: 4 },
+  bubble: { maxWidth: '82%', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12 },
+  userBubble: { alignSelf: 'flex-end', backgroundColor: '#3b82f6', borderBottomRightRadius: 4 },
   aiBubble: {
-    alignSelf: 'flex-start', backgroundColor: '#fff', borderBottomLeftRadius: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 3, elevation: 1,
+    alignSelf: 'flex-start', backgroundColor: '#f0f9ff', borderBottomLeftRadius: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
   },
-  bubbleText: { fontSize: 14, lineHeight: 21 },
+  bubbleText: { fontSize: 14, lineHeight: 22 },
   userText: { color: '#fff' },
-  aiText: { color: '#111827' },
+  aiText: { color: '#1e293b' },
 
   // Inline issue cards inside AI reply
   issueCardList: { marginTop: 10, gap: 8 },
