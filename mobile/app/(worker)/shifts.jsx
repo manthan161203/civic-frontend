@@ -52,7 +52,7 @@ function ShiftModal({ day, existing, onClose, onSaved }) {
     setError('');
     try {
       await workersApi.setShift(day.num, startTime, endTime);
-      onSaved();
+      onSaved({ day_of_week: day.num, start_time: startTime, end_time: endTime });
       onClose();
     } catch {
       setError('Failed to save shift. Please try again.');
@@ -153,6 +153,18 @@ export default function ShiftsScreen() {
     setRefreshing(false);
   };
 
+  const handleShiftSaved = useCallback((updatedShift) => {
+    setShifts((prev) => {
+      const exists = prev.findIndex((s) => s.day_of_week === updatedShift.day_of_week);
+      if (exists >= 0) {
+        const next = [...prev];
+        next[exists] = { ...next[exists], ...updatedShift };
+        return next;
+      }
+      return [...prev, updatedShift];
+    });
+  }, []);
+
   const getShift = (dayNum) => shifts.find((s) => s.day_of_week === dayNum);
 
   const handleDelete = (dayNum, dayKey) => {
@@ -248,7 +260,7 @@ export default function ShiftsScreen() {
           day={editingDay}
           existing={getShift(editingDay.num)}
           onClose={() => setEditingDay(null)}
-          onSaved={load}
+          onSaved={handleShiftSaved}
         />
       )}
     </View>

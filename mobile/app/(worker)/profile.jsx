@@ -6,7 +6,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
 import { rewardsApi } from '../../src/api/rewards';
 import { authApi } from '../../src/api/auth';
@@ -44,19 +44,23 @@ export default function WorkerProfile() {
   const [editEmail, setEditEmail] = useState(user?.email || '');
   const [saving, setSaving] = useState(false);
 
-  const loadData = useCallback(() => {
-    Promise.all([
-      workersApi.getStats(),
-      workersApi.getShifts(),
-      rewardsApi.getMyRewards(),
-    ]).then(([s, sh, r]) => {
-      setStats(s.data);
-      setShifts(sh.data.items || sh.data);
-      setRewards(r.data);
-    }).catch(() => {});
+  const loadStats = useCallback(() => {
+    workersApi.getStats().then(({ data }) => setStats(data)).catch(() => {});
+    rewardsApi.getMyRewards().then(({ data }) => setRewards(data)).catch(() => {});
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  const loadShifts = useCallback(() => {
+    workersApi.getShifts().then(({ data }) => setShifts(data.items || data)).catch(() => {});
+  }, []);
+
+  useEffect(() => { loadStats(); }, []);
+
+  // Reload shifts every time the screen comes into focus (e.g. after editing shifts)
+  useFocusEffect(
+    useCallback(() => {
+      loadShifts();
+    }, [loadShifts])
+  );
 
   useEffect(() => {
     if (user?.profile_photo_url) setProfilePhoto(user.profile_photo_url);
