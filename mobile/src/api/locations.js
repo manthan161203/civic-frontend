@@ -7,8 +7,8 @@ export const locationsApi = {
   getWards: (taluka_id) =>
     api.get(`/locations/talukas/${taluka_id}/wards`),
   getTree: () => api.get('/locations/tree'),
-  getNearbyWard: (latitude, longitude) =>
-    api.get('/locations/nearby-ward', { params: { latitude, longitude } }),
+  getNearbyWard: (latitude, longitude, radiusKm = 10) =>
+    api.get('/locations/nearby-ward', { params: { latitude, longitude, radius_km: radiusKm } }),
   suggest: (q, type = 'all', district_id = null, taluka_id = null) =>
     api.get('/locations/suggest', { params: {
       q, type, limit: 6,

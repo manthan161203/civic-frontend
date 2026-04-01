@@ -9,6 +9,7 @@ import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { issuesApi } from '../../src/api/issues';
 import { locationsApi } from '../../src/api/locations';
+import { reverseGeocode } from '../../src/utils/geocode';
 import MapView, { Marker } from '../../src/components/PlatformMap';
 
 const ISSUE_TYPES = [
@@ -34,6 +35,7 @@ export default function ReportScreen() {
   const [duplicates, setDuplicates] = useState([]);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [showMapPin, setShowMapPin] = useState(false);
+  const [fetchingWard, setFetchingWard] = useState(false);
   // Structured address fields
   const [addrLine1, setAddrLine1] = useState('');
   const [addrLine2, setAddrLine2] = useState('');
@@ -77,6 +79,26 @@ export default function ReportScreen() {
     }
   }, [currentWardId, wards]);
 
+  const confirmLocation = async () => {
+    if (!location) return;
+    setFetchingWard(true);
+    try {
+      const { data: wardData } = await locationsApi.getNearbyWard(location.latitude, location.longitude, 10);
+      if (wardData?.id) {
+        setCurrentWardId(wardData.id);
+        setSelectedWard(wardData.id);
+        const distanceMsg = wardData.distance_km ? ` (${wardData.distance_km} km away)` : '';
+        Alert.alert('Success', `Ward updated to: ${wardData.name}${distanceMsg}`);
+      } else {
+        Alert.alert('Not Found', 'No ward found within 10 km of this location');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch nearby ward');
+    } finally {
+      setFetchingWard(false);
+    }
+  };
+
   const getLocation = async () => {
     setLocating(true);
     try {
@@ -85,16 +107,12 @@ export default function ReportScreen() {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setLocation(loc.coords);
       
-      const geo = await Location.reverseGeocodeAsync(loc.coords);
-      if (geo[0]) {
-        const g = geo[0];
-        const line1 = [g.name, g.street].filter(Boolean).join(', ');
-        const area = g.district || g.subregion || '';
-        const city = g.city || '';
-        setAddrLine1(line1);
-        setLocality(area);
-        setAddrCity(city);
-        setAddress([line1, area, city].filter(Boolean).join(', '));
+      const geo = await reverseGeocode(loc.coords.latitude, loc.coords.longitude);
+      if (geo) {
+        setAddrLine1(geo.street);
+        setLocality(geo.locality);
+        setAddrCity(geo.city);
+        setAddress(geo.address);
       }
 
       // Find the current ward based on location
@@ -442,45 +460,54 @@ export default function ReportScreen() {
               )}
             </View>
             {showMapPin && (
-              <MapView
-                style={styles.mapView}
-                initialRegion={{
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                  latitudeDelta: 0.005,
-                  longitudeDelta: 0.005,
-                }}
-              >
-                <Marker
-                  coordinate={{ latitude: location.latitude, longitude: location.longitude }}
-                  draggable
-                  onDragEnd={async (e) => {
-                    const { latitude, longitude } = e.nativeEvent.coordinate;
-                    setLocation({ latitude, longitude });
-                    try {
-                      const geo = await Location.reverseGeocodeAsync({ latitude, longitude });
-                      if (geo[0]) {
-                        const g = geo[0];
-                        const line1 = [g.name, g.street].filter(Boolean).join(', ');
-                        const area = g.district || g.subregion || '';
-                        const city = g.city || '';
-                        setAddrLine1(line1);
-                        setLocality(area);
-                        setAddrCity(city);
-                        setAddress([line1, area, city].filter(Boolean).join(', '));
-                      }
-                    } catch (_) {}
-                    // Dynamically update ward suggestion based on new pin position
-                    try {
-                      const { data: wardData } = await locationsApi.getNearbyWard(latitude, longitude);
-                      if (wardData?.id) {
-                        setCurrentWardId(wardData.id);
-                        setSelectedWard(wardData.id);
-                      }
-                    } catch (_) {}
+              <>
+                <MapView
+                  style={styles.mapView}
+                  initialRegion={{
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
                   }}
-                />
-              </MapView>
+                >
+                  <Marker
+                    coordinate={{ latitude: location.latitude, longitude: location.longitude }}
+                    draggable
+                    onDragEnd={async (e) => {
+                      const { latitude, longitude } = e.nativeEvent.coordinate;
+                      setLocation({ latitude, longitude });
+                      try {
+                        const geo = await reverseGeocode(latitude, longitude);
+                        if (geo) {
+                          setAddrLine1(geo.street);
+                          setLocality(geo.locality);
+                          setAddrCity(geo.city);
+                          setAddress(geo.address);
+                        }
+                      } catch (_) {}
+                      // Dynamically update ward suggestion based on new pin position
+                      try {
+                        const { data: wardData } = await locationsApi.getNearbyWard(latitude, longitude);
+                        if (wardData?.id) {
+                          setCurrentWardId(wardData.id);
+                          setSelectedWard(wardData.id);
+                        }
+                      } catch (_) {}
+                    }}
+                  />
+                </MapView>
+                <TouchableOpacity
+                  style={[styles.confirmBtn, fetchingWard && styles.confirmBtnDisabled]}
+                  onPress={confirmLocation}
+                  disabled={fetchingWard}
+                >
+                  {fetchingWard ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.confirmBtnText}>Confirm Location</Text>
+                  )}
+                </TouchableOpacity>
+              </>
             )}
           </>
         )}
@@ -613,6 +640,12 @@ const styles = StyleSheet.create({
   mapToggleText: { fontSize: 13, color: '#1a56db', fontWeight: '600' },
   mapHintText: { fontSize: 11, color: '#9ca3af', fontStyle: 'italic' },
   mapView: { height: 200, borderRadius: 10, marginTop: 8, overflow: 'hidden' },
+  confirmBtn: { 
+    backgroundColor: '#1a56db', marginHorizontal: 16, marginTop: 12, paddingVertical: 12, paddingHorizontal: 16, 
+    borderRadius: 8, justifyContent: 'center', alignItems: 'center',
+  },
+  confirmBtnDisabled: { opacity: 0.6 },
+  confirmBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoThumb: { position: 'relative', width: 80, height: 80 },
   thumbImg: { width: 80, height: 80, borderRadius: 8 },
