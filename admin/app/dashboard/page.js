@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { adminApi } from '../../src/api/index';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -7,6 +8,11 @@ import {
 } from 'recharts';
 
 const PIE_COLORS = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
+
+const TYPE_COLORS = {
+  roads: '#ef4444', water: '#3b82f6', electricity: '#f59e0b',
+  sanitation: '#10b981', parks: '#8b5cf6', garbage: '#f97316', other: '#6b7280',
+};
 
 const STAT_ICONS = {
   open: (
@@ -69,16 +75,65 @@ function StatCard({ label, value, sub, colorClass, icon }) {
   );
 }
 
+function DashboardMap({ points }) {
+  if (!points || points.length === 0) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h2 className="text-sm font-bold text-gray-700 mb-3">Issue Heatmap</h2>
+        <div className="h-[280px] flex items-center justify-center text-gray-300 text-sm">No issue locations to display</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+      <h2 className="text-sm font-bold text-gray-700 mb-3">Issue Heatmap</h2>
+      <div className="rounded-xl overflow-hidden border border-gray-100" style={{ height: 320 }}>
+        <Map
+          defaultCenter={{ lat: 22.3072, lng: 70.8022 }}
+          defaultZoom={7}
+          mapId="civic-dashboard-mini"
+          gestureHandling="cooperative"
+          disableDefaultUI
+          zoomControl
+          style={{ width: '100%', height: '100%' }}
+        >
+          {points.map((p, i) => {
+            const color = TYPE_COLORS[p.issue_type] || TYPE_COLORS.other;
+            const scale = p.weight === 3 ? 1.3 : p.weight === 2 ? 1.0 : 0.8;
+            return (
+              <AdvancedMarker key={`hp-${i}`} position={{ lat: p.lat, lng: p.lng }}>
+                <div
+                  style={{
+                    width: 12 * scale, height: 12 * scale, borderRadius: '50%',
+                    backgroundColor: color, border: '1.5px solid #fff',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                  }}
+                />
+              </AdvancedMarker>
+            );
+          })}
+        </Map>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [heatmapPoints, setHeatmapPoints] = useState([]);
 
   useEffect(() => {
     Promise.all([adminApi.getDashboard(), adminApi.getAnalytics({ days: 7 })])
       .then(([s, a]) => { setStats(s.data); setAnalytics(a.data); })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    adminApi.getHeatmap()
+      .then(({ data }) => setHeatmapPoints((data || []).filter((p) => p.lat && p.lng)))
+      .catch(() => {});
   }, []);
 
   if (loading) {
@@ -216,6 +271,9 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Issue Heatmap */}
+      <DashboardMap points={heatmapPoints} />
     </div>
   );
 }
