@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useNotificationStore } from '../../src/store/notificationStore';
+import { formatDateTime } from '../../src/utils/dateUtils';
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -34,9 +35,7 @@ export default function NotificationsScreen() {
         <Text style={[styles.title, !n.is_read && styles.titleUnread]}>{n.title}</Text>
         <Text style={styles.body} numberOfLines={2}>{n.message}</Text>
         <Text style={styles.time}>
-          {new Date(n.created_at).toLocaleDateString('en-IN', {
-            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-          })}
+          {formatDateTime(n.created_at, 'en-IN')}
         </Text>
       </View>
       {!n.is_read && <View style={styles.dot} />}

@@ -7,6 +7,7 @@ import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { issuesApi } from '../../src/api/issues';
 import { useAuthStore } from '../../src/store/authStore';
+import { formatDate, formatDateTime } from '../../src/utils/dateUtils';
 
 const STATUS_COLORS = {
   open: { bg: '#fef3c7', text: '#92400e' },
@@ -121,7 +122,7 @@ export default function IssueDetailScreen() {
           </View>
         )}
         <Text style={styles.date}>
-          Reported {new Date(issue.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+          Reported {formatDate(issue.created_at, 'en-IN')}
         </Text>
       </View>
 
@@ -173,7 +174,7 @@ export default function IssueDetailScreen() {
               <View style={styles.timelineContent}>
                 <Text style={styles.timelineEvent}>{event.event?.replace(/_/g, ' ')}</Text>
                 <Text style={styles.timelineDate}>
-                  {new Date(event.created_at).toLocaleString('en-IN')}
+                  {formatDateTime(event.created_at, 'en-IN')}
                 </Text>
                 {event.note && <Text style={styles.timelineNote}>{event.note}</Text>}
               </View>
@@ -194,7 +195,7 @@ export default function IssueDetailScreen() {
               <Text style={styles.commentAuthor}>{c.author_name || 'User'}</Text>
               <Text style={styles.commentText}>{c.content}</Text>
               <Text style={styles.commentTime}>
-                {new Date(c.created_at).toLocaleDateString('en-IN')}
+                {formatDate(c.created_at, 'en-IN')}
               </Text>
             </View>
           </View>

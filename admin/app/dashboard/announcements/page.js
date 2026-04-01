@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { adminApi, locationsApi } from '../../../src/api/index';
 import { getErrorMessage } from '../../../src/lib/apiError';
+import { formatDate } from '../../../src/lib/dateUtils';
 
 const SCOPE_COLORS = {
   ward: 'bg-blue-100 text-blue-700',
@@ -302,7 +303,7 @@ export default function AnnouncementsPage() {
                   </div>
                   <p className="text-sm text-gray-600 leading-relaxed">{a.body}</p>
                   <p className="text-xs text-gray-400 mt-2">
-                    {new Date(a.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
+                    {formatDate(a.created_at, 'en-IN')}
                   </p>
                 </div>
                 <button

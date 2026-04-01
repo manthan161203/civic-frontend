@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../../src/store/authStore';
 import { authApi, locationsApi } from '../../../src/api/index';
 import { getErrorMessage } from '../../../src/lib/apiError';
+import { formatDate } from '../../../src/lib/dateUtils';
 
 const ROLE_LABELS = {
   admin: 'Super Admin',
@@ -112,7 +113,7 @@ function ProfileInfo() {
         {[
           ['Phone', user?.phone || '—'],
           ['Scope', scope],
-          ['Joined', user?.created_at ? new Date(user.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'],
+          ['Joined', user?.created_at ? formatDate(user.created_at, 'en-IN') : '—'],
         ].map(([label, value]) => (
           <div key={label} className="flex items-center gap-4 py-2 border-b border-gray-50">
             <span className="text-sm text-gray-500 w-24 flex-shrink-0">{label}</span>

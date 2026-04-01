@@ -8,6 +8,7 @@ import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { workersApi } from '../../src/api/workers';
 import { issuesApi } from '../../src/api/issues';
+import { formatDateTime } from '../../src/utils/dateUtils';
 
 const PRIORITY_COLOR = { critical: '#7c3aed', high: '#ef4444', medium: '#f59e0b', low: '#10b981' };
 
@@ -125,7 +126,7 @@ export default function TaskDetailScreen() {
         </View>
         <View style={styles.row}>
           <Ionicons name="calendar-outline" size={14} color="#9ca3af" />
-          <Text style={styles.meta}>{new Date(issue.created_at).toLocaleString('en-IN')}</Text>
+          <Text style={styles.meta}>{formatDateTime(issue.created_at, 'en-IN')}</Text>
         </View>
         {issue.reporter_name && (
           <View style={styles.row}>

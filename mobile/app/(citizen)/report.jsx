@@ -11,11 +11,10 @@ import { issuesApi } from '../../src/api/issues';
 import { locationsApi } from '../../src/api/locations';
 
 const ISSUE_TYPES = [
-  'pothole', 'streetlight', 'garbage', 'water_leak',
-  'sewage', 'road_damage', 'encroachment', 'other',
+  'pothole', 'streetlight', 'garbage', 'drain', 'other',
 ];
 
-const PRIORITIES = ['low', 'medium', 'high', 'critical'];
+const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
 export default function ReportScreen() {
   const router = useRouter();

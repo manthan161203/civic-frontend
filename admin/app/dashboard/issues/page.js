@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { adminApi, locationsApi } from '../../../src/api/index';
+import { formatDate } from '../../../src/lib/dateUtils';
 
 const STATUS_COLORS = {
   open: 'bg-red-100 text-red-700',
@@ -177,7 +178,7 @@ function IssueDetailModal({ issue, workerMap, onClose }) {
             ['Status', issue.status?.replace(/_/g, ' ') || '—'],
             ['Assigned Worker', issue.assigned_worker_id ? (workerMap[issue.assigned_worker_id] || 'Assigned') : 'Unassigned'],
             ['Upvotes', issue.upvote_count ?? 0],
-            ['Created', issue.created_at ? new Date(issue.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'],
+            ['Created', formatDate(issue.created_at, 'en-IN')],
           ].map(([label, value]) => (
             <div key={label} className="flex justify-between py-2 border-b border-gray-50">
               <span className="text-gray-500">{label}</span>
@@ -479,7 +480,7 @@ export default function IssuesPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400">
-                      {new Date(issue.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                      {formatDate(issue.created_at, 'en-IN')}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">

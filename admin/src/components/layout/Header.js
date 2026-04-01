@@ -1,6 +1,7 @@
 'use client';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '../../store/authStore';
+import { formatDate } from '../../lib/dateUtils';
 
 const TITLES = {
   '/dashboard': { title: 'Dashboard', sub: 'Overview and live statistics' },
@@ -35,7 +36,7 @@ export default function Header() {
 
       <div className="flex items-center gap-3 flex-shrink-0">
         <span className="text-xs text-gray-400 hidden md:block">
-          {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+          {formatDate(new Date().toISOString(), 'en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
         </span>
         {user && (
           <div className="flex items-center gap-2">

@@ -6,6 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
+import { formatDate } from '../../src/utils/dateUtils';
 
 const PRIORITY_COLOR = { critical: '#7c3aed', high: '#ef4444', medium: '#f59e0b', low: '#10b981' };
 
@@ -60,7 +61,7 @@ export default function TasksScreen() {
           <Text style={styles.metaText} numberOfLines={1}>{item.address || 'No address'}</Text>
         </View>
         <Text style={styles.date}>
-          {new Date(item.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+          {formatDate(item.created_at, 'en-IN')}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color="#d1d5db" />

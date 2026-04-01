@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { adminApi } from '../../../src/api/index';
+import { formatDate } from '../../../src/lib/dateUtils';
 
 const REASON_COLORS = {
   spam: 'bg-yellow-100 text-yellow-700',
@@ -65,7 +66,7 @@ export default function FlagsPage() {
                   <p className="text-sm text-gray-700 mb-1">{flag.details}</p>
                 )}
                 <div className="text-xs text-gray-400">
-                  {new Date(flag.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {formatDate(flag.created_at, 'en-IN')}
                 </div>
               </div>
               {filter === 'pending' && (
