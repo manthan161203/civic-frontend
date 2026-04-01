@@ -6,9 +6,11 @@ import {
 import { useRouter } from 'expo-router';
 import Svg, { Rect as SvgRect, Path as SvgPath } from 'react-native-svg';
 import { authApi } from '../../src/api/auth';
+import { useAuthStore } from '../../src/store/authStore';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { setSession } = useAuthStore();
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 

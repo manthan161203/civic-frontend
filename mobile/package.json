@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@react-native-google-signin/google-signin": "^16.1.2",
     "axios": "^1.14.0",
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.33",
