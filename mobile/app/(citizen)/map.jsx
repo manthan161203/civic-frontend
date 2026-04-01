@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, TouchableOpacity, Text, Alert } from 'react-native';
-import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import { View, StyleSheet, ActivityIndicator, TouchableOpacity, Text, Alert, Platform } from 'react-native';
+import MapView, { Marker, Callout, PROVIDER_GOOGLE } from '../../src/components/PlatformMap';
+const WebMap = lazy(() => import('../../src/components/WebMap'));
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -84,6 +85,26 @@ export default function MapScreen() {
         >
           <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>Try Again</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // If running on web, render a web-specific map (lazy-loaded) that uses react-leaflet
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.container}>
+        <Suspense fallback={<View style={styles.center}><ActivityIndicator color="#1a56db" size="large" /><Text style={{ marginTop: 12, color: '#6b7280' }}>Loading web map…</Text></View>}>
+          <WebMap issues={issues} initialRegion={
+            userLocation
+              ? {
+                  latitude: userLocation.latitude,
+                  longitude: userLocation.longitude,
+                  latitudeDelta: 0.05,
+                  longitudeDelta: 0.05,
+                }
+              : { latitude: 20.5937, longitude: 78.9629, latitudeDelta: 5, longitudeDelta: 5 }
+          } />
+        </Suspense>
       </View>
     );
   }

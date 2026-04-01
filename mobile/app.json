@@ -2,6 +2,7 @@
   "expo": {
     "name": "Civic",
     "slug": "civic",
+    "platforms": ["android", "ios", "web"],
     "version": "1.0.0",
     "scheme": "civic",
     "orientation": "portrait",
