@@ -117,8 +117,8 @@ function AdminList({ refresh, triggerRefresh }) {
                       ? locationNames[`ward_${a.ward_id}`] || 'Unknown Ward'
                       : 'State-wide'}
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-400">
-                    {formatDate(a.created_at)}
+                  <td className="px-4 py-3 text-xs text-gray-600 font-medium">
+                    {formatDate(a.created_at, 'en-IN')}
                   </td>
                 </tr>
               ))
