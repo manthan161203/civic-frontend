@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRouter } from 'expo-router';
@@ -10,17 +10,19 @@ import { formatDate } from '../../src/utils/dateUtils';
 
 const STATUS_COLORS = {
   resolved: '#059669',
-  rejected: '#ef4444',
-  blocked: '#f59e0b',
+  closed: '#6b7280',
+  assigned: '#f59e0b',
   in_progress: '#1a56db',
+  rejected: '#ef4444',
   accepted: '#6366f1',
 };
 
 const STATUS_ICONS = {
   resolved: 'checkmark-circle',
-  rejected: 'close-circle',
-  blocked: 'alert-circle',
+  closed: 'lock-closed',
+  assigned: 'time-outline',
   in_progress: 'sync',
+  rejected: 'close-circle',
   accepted: 'play-circle',
 };
 
@@ -73,7 +75,15 @@ function HistoryCard({ task, onPress }) {
   );
 }
 
-const FILTERS = ['all', 'resolved', 'rejected', 'blocked'];
+const FILTER_LABELS = {
+  all: 'All',
+  assigned: 'Assigned',
+  in_progress: 'In Progress',
+  resolved: 'Resolved',
+  closed: 'Closed',
+};
+
+const FILTERS = ['all', 'assigned', 'in_progress', 'resolved', 'closed'];
 
 export default function TaskHistoryScreen() {
   const navigation = useNavigation();
@@ -83,6 +93,7 @@ export default function TaskHistoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
+  const pageRef = useRef(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -97,22 +108,24 @@ export default function TaskHistoryScreen() {
   }, []);
 
   const fetchHistory = useCallback(async (reset = false) => {
-    const p = reset ? 1 : page;
+    const p = reset ? 1 : pageRef.current;
     try {
       const params = { page: p, size: 20 };
       if (filter !== 'all') params.status = filter;
       const { data } = await workersApi.getTaskHistory(params);
-      const items = data.items || data;
+      const items = Array.isArray(data) ? data : (data.items || []);
       if (reset) {
         setTasks(items);
+        pageRef.current = 2;
         setPage(2);
       } else {
         setTasks((prev) => [...prev, ...items]);
+        pageRef.current = p + 1;
         setPage(p + 1);
       }
       setHasMore(items.length === 20);
     } catch {}
-  }, [filter, page]);
+  }, [filter]);
 
   useEffect(() => {
     setLoading(true);
@@ -135,7 +148,7 @@ export default function TaskHistoryScreen() {
   return (
     <View style={styles.container}>
       {/* Filter Tabs */}
-      <View style={styles.filters}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll} contentContainerStyle={styles.filters}>
         {FILTERS.map((f) => (
           <TouchableOpacity
             key={f}
@@ -143,11 +156,11 @@ export default function TaskHistoryScreen() {
             onPress={() => setFilter(f)}
           >
             <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-              {f.charAt(0).toUpperCase() + f.slice(1)}
+              {FILTER_LABELS[f]}
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color="#059669" size="large" />
@@ -182,9 +195,10 @@ export default function TaskHistoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
+  filtersScroll: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6', flexGrow: 0 },
   filters: {
-    flexDirection: 'row', backgroundColor: '#fff', paddingHorizontal: 16,
-    paddingVertical: 10, gap: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+    flexDirection: 'row', paddingHorizontal: 16,
+    paddingVertical: 10, gap: 8,
   },
   filterBtn: {
     paddingHorizontal: 14, paddingVertical: 6,
