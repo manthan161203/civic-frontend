@@ -164,14 +164,20 @@ export default function WorkerProfile() {
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>Worker</Text>
         </View>
+        {user?.ward ? (
+          <View style={styles.wardBadge}>
+            <Ionicons name="location-outline" size={12} color="#059669" />
+            <Text style={styles.wardText}>{user.ward}</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Stats */}
       {stats && (
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={styles.statVal}>{stats.completed_today || 0}</Text>
-            <Text style={styles.statLabel}>Today</Text>
+            <Text style={styles.statVal}>{stats.tasks_completed_today || 0}</Text>
+            <Text style={styles.statLabel}>Completed</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
@@ -349,6 +355,8 @@ const styles = StyleSheet.create({
   email: { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
   roleBadge: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 3, borderRadius: 12, marginTop: 4 },
   roleText: { fontSize: 12, color: '#fff', fontWeight: '600' },
+  wardBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, marginTop: 4 },
+  wardText: { fontSize: 12, color: '#d1fae5', fontWeight: '500' },
   statsRow: { flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, marginTop: 16, borderRadius: 12, paddingVertical: 16 },
   statItem: { flex: 1, alignItems: 'center' },
   statVal: { fontSize: 22, fontWeight: '800', color: '#059669' },
