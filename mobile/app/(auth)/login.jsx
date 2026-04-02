@@ -22,8 +22,11 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      await authApi.sendOtp(`+91${cleaned}`);
-      router.push({ pathname: '/(auth)/otp', params: { phone: `+91${cleaned}` } });
+      const { data } = await authApi.sendOtp(`+91${cleaned}`);
+      router.push({
+        pathname: '/(auth)/otp',
+        params: { phone: `+91${cleaned}`, devOtp: data?.dev_otp ?? '' },
+      });
     } catch (err) {
       const msg = err.response?.data?.detail || 'Failed to send OTP. Try again.';
       Alert.alert('Error', msg);

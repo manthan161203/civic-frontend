@@ -9,7 +9,7 @@ import { useAuthStore } from '../../src/store/authStore';
 
 export default function OtpScreen() {
   const router = useRouter();
-  const { phone } = useLocalSearchParams();
+  const { phone, devOtp } = useLocalSearchParams();
   const { setSession, user } = useAuthStore();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
@@ -21,6 +21,12 @@ export default function OtpScreen() {
     const timer = setInterval(() => setCountdown((c) => c - 1), 1000);
     return () => clearInterval(timer);
   }, [countdown]);
+
+  useEffect(() => {
+    if (devOtp) {
+      Alert.alert('Dev OTP', `Your OTP is: ${devOtp}`, [{ text: 'OK' }]);
+    }
+  }, []);
 
   const handleChange = (text, index) => {
     const updated = [...otp];
@@ -81,6 +87,10 @@ export default function OtpScreen() {
           <Text style={styles.phone}>{phone}</Text>
         </Text>
 
+        {!!devOtp && (
+          <Text style={styles.devOtpBanner}>🛠 Dev OTP: {devOtp}</Text>
+        )}
+
         <View style={styles.otpRow}>
           {otp.map((digit, i) => (
             <TextInput
@@ -122,8 +132,13 @@ const styles = StyleSheet.create({
   back: { marginBottom: 32 },
   backText: { fontSize: 16, color: '#1a56db', fontWeight: '600' },
   title: { fontSize: 26, fontWeight: '800', color: '#111827', marginBottom: 8 },
-  subtitle: { fontSize: 15, color: '#6b7280', lineHeight: 22, marginBottom: 36 },
+  subtitle: { fontSize: 15, color: '#6b7280', lineHeight: 22, marginBottom: 12 },
   phone: { fontWeight: '700', color: '#111827' },
+  devOtpBanner: {
+    fontSize: 13, color: '#92400e', backgroundColor: '#fef3c7',
+    borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12,
+    marginBottom: 24, textAlign: 'center', fontWeight: '600',
+  },
   otpRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 24 },
   otpBox: {
     width: 46, height: 56, borderWidth: 1.5, borderColor: '#d1d5db',
