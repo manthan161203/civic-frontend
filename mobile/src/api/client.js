@@ -33,12 +33,13 @@ api.interceptors.response.use(
         await SecureStore.setItemAsync('refresh_token', data.refresh_token);
         original.headers.Authorization = `Bearer ${data.access_token}`;
         return api(original);
-      } catch {
+      } catch (refreshError) {
         await SecureStore.deleteItemAsync('access_token');
         await SecureStore.deleteItemAsync('refresh_token');
-        // Signal to auth store to clear session
+        // Signal to auth store to clear session and redirect to login
         const { useAuthStore } = await import('../store/authStore');
         useAuthStore.getState().clearSession();
+        return Promise.reject(refreshError);
       }
     }
     return Promise.reject(error);

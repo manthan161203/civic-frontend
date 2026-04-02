@@ -342,12 +342,12 @@ export default function IssuesPage() {
           type="text"
           placeholder="Search issues…"
           value={filters.search}
-          onChange={(e) => { setFilters((f) => ({ ...f, search: e.target.value })); setPage(1); }}
+          onChange={(e) => { setFilters((f) => ({ ...f, search: e.target.value })); setPage(1); setSelected([]); setDetailIssue(null); }}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-52 outline-none focus:border-blue-400"
         />
         <select
           value={filters.status}
-          onChange={(e) => { setFilters((f) => ({ ...f, status: e.target.value })); setPage(1); }}
+          onChange={(e) => { setFilters((f) => ({ ...f, status: e.target.value })); setPage(1); setSelected([]); setDetailIssue(null); }}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
         >
           <option value="">All Statuses</option>
@@ -357,7 +357,7 @@ export default function IssuesPage() {
         </select>
         <select
           value={filters.priority}
-          onChange={(e) => { setFilters((f) => ({ ...f, priority: e.target.value })); setPage(1); }}
+          onChange={(e) => { setFilters((f) => ({ ...f, priority: e.target.value })); setPage(1); setSelected([]); setDetailIssue(null); }}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
         >
           <option value="">All Priorities</option>

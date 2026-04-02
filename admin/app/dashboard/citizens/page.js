@@ -52,7 +52,7 @@ export default function CitizensPage() {
           type="text"
           placeholder="Search citizens…"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); setSelected(null); }}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-56 outline-none focus:border-blue-400"
         />
         <div className="flex-1" />

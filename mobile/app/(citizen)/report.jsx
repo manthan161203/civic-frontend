@@ -36,6 +36,7 @@ export default function ReportScreen() {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [showMapPin, setShowMapPin] = useState(false);
   const [fetchingWard, setFetchingWard] = useState(false);
+  const [locationDenied, setLocationDenied] = useState(false);
   // Structured address fields
   const [addrLine1, setAddrLine1] = useState('');
   const [addrLine2, setAddrLine2] = useState('');
@@ -101,9 +102,10 @@ export default function ReportScreen() {
 
   const getLocation = async () => {
     setLocating(true);
+    setLocationDenied(false);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { setLocating(false); return; }
+      if (status !== 'granted') { setLocating(false); setLocationDenied(true); return; }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setLocation(loc.coords);
       
@@ -237,6 +239,11 @@ export default function ReportScreen() {
         { text: 'View Issue', onPress: () => router.push(`/issue/${data.id}`) },
         { text: 'Report Another', onPress: () => {
           setDescription(''); setPhotos([]); setIssueType('pothole'); setPriority('medium');
+          setAddress(''); setAddrLine1(''); setAddrLine2(''); setLandmark('');
+          setLocality(''); setAddrCity(''); setLocation(null);
+          setSelectedWard(null); setCurrentWardId(null);
+          setFilteredWards(wards); setShowMapPin(false);
+          getLocation();
         }},
       ]);
     } catch (err) {
@@ -364,6 +371,10 @@ export default function ReportScreen() {
                 {address || `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`}
               </Text>
             </>
+          ) : locationDenied ? (
+            <Text style={styles.locationDenied}>
+              Location access denied. Enable it in Settings and tap refresh.
+            </Text>
           ) : (
             <Text style={styles.locationMissing}>Location not available</Text>
           )}
@@ -629,6 +640,7 @@ const styles = StyleSheet.create({
   locationBox: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: '#eff6ff', borderRadius: 10, borderWidth: 1, borderColor: '#dbeafe' },
   locationText: { flex: 1, fontSize: 13, color: '#374151' },
   locationMissing: { flex: 1, fontSize: 13, color: '#9ca3af' },
+  locationDenied: { flex: 1, fontSize: 13, color: '#dc2626', fontStyle: 'italic' },
   refreshBtn: { padding: 4 },
   addrFields: { marginTop: 12, gap: 8, borderWidth: 1, borderColor: '#f3f4f6', borderRadius: 10, padding: 12, backgroundColor: '#fafbfc' },
   addrRow: { flexDirection: 'row', gap: 8 },
