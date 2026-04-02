@@ -7,6 +7,7 @@ import {
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { issuesApi } from '../../src/api/issues';
+import { BASE_URL } from '../../src/api/client';
 import { useAuthStore } from '../../src/store/authStore';
 import { formatDate, formatDateTime } from '../../src/utils/dateUtils';
 
@@ -185,12 +186,10 @@ export default function IssueDetailScreen() {
 
   // If photos are relative paths, prepend the base URL
   if (beforePhoto && !beforePhoto.startsWith('http')) {
-    const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
-    beforePhoto = `${baseUrl}${beforePhoto.startsWith('/') ? '' : '/'}${beforePhoto}`;
+    beforePhoto = `${BASE_URL}${beforePhoto.startsWith('/') ? '' : '/'}${beforePhoto}`;
   }
   if (afterPhoto && !afterPhoto.startsWith('http')) {
-    const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
-    afterPhoto = `${baseUrl}${afterPhoto.startsWith('/') ? '' : '/'}${afterPhoto}`;
+    afterPhoto = `${BASE_URL}${afterPhoto.startsWith('/') ? '' : '/'}${afterPhoto}`;
   }
 
   const isReporter = user?.id === issue.reporter_id;

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import * as SecureStore from '../utils/secureStoreShim';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: BASE_URL,

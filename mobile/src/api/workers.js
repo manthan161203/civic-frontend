@@ -13,7 +13,7 @@ export const workersApi = {
   getStats: () => api.get('/workers/stats'),
   acceptTask: (issue_id) => api.post(`/workers/tasks/${issue_id}/accept`),
   rejectTask: (issue_id, reason) =>
-    api.post(`/workers/tasks/${issue_id}/reject`, { reason }),
+    api.post(`/workers/tasks/${issue_id}/reject`, { action: 'reject', reason }),
   resolveTask: (issue_id, formData) =>
     api.post(`/workers/tasks/${issue_id}/resolve`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
