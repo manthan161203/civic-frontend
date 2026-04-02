@@ -178,55 +178,98 @@ function Leaderboard() {
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100">
         <h2 className="text-sm font-bold text-gray-900">Worker Leaderboard</h2>
-        <p className="text-xs text-gray-400 mt-0.5">Ranked by completed tasks and ratings</p>
+        <p className="text-xs text-gray-400 mt-0.5">Ranked by performance score (tasks resolved × avg rating)</p>
       </div>
       {loading ? (
         <div className="text-center py-12 text-gray-400 text-sm">Loading…</div>
       ) : data.length === 0 ? (
         <div className="text-center py-12 text-gray-300 text-sm">No leaderboard data yet</div>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-12">Rank</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Worker</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ward</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Completed</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Rating</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {data.map((w, i) => (
-              <tr key={w.worker_id || w.id || `leaderboard-${i}`} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-center font-bold text-gray-500">
-                  {i < 3 ? <MedalIcon i={i} /> : <span className="text-xs text-gray-400">#{i + 1}</span>}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-xs">
-                      {w.name?.charAt(0)?.toUpperCase() || '?'}
-                    </div>
-                    <span className="font-medium text-gray-900">{w.name}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-xs text-gray-500">{w.ward || '—'}</td>
-                <td className="px-4 py-3 font-semibold text-gray-900">{w.tasks_resolved ?? 0}</td>
-                <td className="px-4 py-3">
-                  {w.avg_rating != null ? (
-                    <span className="flex items-center gap-1 text-yellow-500 font-semibold text-xs">
-                      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{width:13,height:13}}>
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                      </svg>
-                      {w.avg_rating.toFixed(1)}
-                    </span>
-                  ) : (
-                    <span className="text-gray-300 text-xs">—</span>
-                  )}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-12">Rank</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Worker</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Dept / Ward</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Resolved</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Total</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">In Progress</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Closed</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Resolution%</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Rating</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Score</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {data.map((w, i) => (
+                <tr key={w.worker_id || w.id || `leaderboard-${i}`} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-center font-bold text-gray-500">
+                    {i < 3 ? <MedalIcon i={i} /> : <span className="text-xs text-gray-400">#{i + 1}</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-xs shrink-0">
+                        {w.name?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900">{w.name}</div>
+                        <div className="text-xs text-gray-400">{w.phone || ''}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="text-xs text-gray-700 font-medium">{w.department || '—'}</div>
+                    <div className="text-xs text-gray-400">{w.ward || '—'}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full w-fit ${w.is_online ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${w.is_online ? 'bg-green-500' : 'bg-gray-400'}`} />
+                        {w.is_online ? 'Online' : 'Offline'}
+                      </span>
+                      {w.is_online && (
+                        <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-full w-fit ${w.is_available ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                          {w.is_available ? 'Available' : 'Busy'}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-green-700">{w.tasks_resolved ?? 0}</td>
+                  <td className="px-4 py-3 text-gray-600">{w.tasks_total ?? 0}</td>
+                  <td className="px-4 py-3 text-blue-600">{w.tasks_in_progress ?? 0}</td>
+                  <td className="px-4 py-3 text-gray-500">{w.tasks_closed ?? 0}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 bg-gray-100 rounded-full h-1.5">
+                        <div className="bg-green-500 h-1.5 rounded-full" style={{width: `${w.resolution_rate ?? 0}%`}} />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-700">{w.resolution_rate ?? 0}%</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {w.avg_rating != null ? (
+                      <span className="flex items-center gap-1 text-yellow-500 font-semibold text-xs">
+                        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{width:13,height:13}}>
+                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                        </svg>
+                        {w.avg_rating.toFixed(1)}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="inline-block bg-indigo-50 text-indigo-700 font-bold text-xs px-2 py-1 rounded-lg">
+                      {w.score ?? 0}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
