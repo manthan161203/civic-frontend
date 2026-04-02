@@ -1,9 +1,11 @@
 import { Tabs, useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text } from 'react-native';
+import { View, Text, AppState } from 'react-native';
+import * as Location from 'expo-location';
 import { useAuthStore } from '../../src/store/authStore';
 import { useNotificationStore } from '../../src/store/notificationStore';
+import { workersApi } from '../../src/api/workers';
 
 function BadgeIcon({ name, color, size, count }) {
   return (
@@ -28,6 +30,7 @@ export default function WorkerLayout() {
   const { user } = useAuthStore();
   const { unreadCount, fetchNotifications } = useNotificationStore();
   const router = useRouter();
+  const locationIntervalRef = useRef(null);
 
   useEffect(() => {
     if (user && user.role === 'citizen') router.replace('/(citizen)/');
@@ -35,6 +38,37 @@ export default function WorkerLayout() {
 
   useEffect(() => {
     fetchNotifications();
+  }, []);
+
+  // Location tracking — send every 2 minutes while app is active
+  useEffect(() => {
+    let cancelled = false;
+
+    const sendLocation = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (!cancelled) {
+          workersApi.updateLocation(pos.coords.latitude, pos.coords.longitude).catch(() => {});
+        }
+      } catch {}
+    };
+
+    sendLocation();
+    locationIntervalRef.current = setInterval(sendLocation, 30 * 1000); // every 30 sec
+
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') sendLocation();
+    });
+
+    return () => {
+      cancelled = true;
+      clearInterval(locationIntervalRef.current);
+      appStateSub.remove();
+    };
   }, []);
 
   return (
