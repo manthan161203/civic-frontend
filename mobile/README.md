@@ -8,6 +8,10 @@ Prerequisites
 - For native Android: Android Studio (or a physical Android device + USB debugging)
 - For native iOS: macOS with Xcode (or a physical iOS device)
 - Expo CLI (optional): `npm install -g expo-cli` or use `npx expo` commands
+- For tunnel mode (remote testing): Install ngrok globally
+  ```bash
+  sudo npm install -g @expo/ngrok@^4.1.0
+  ```
 
 Environment
 - Copy environment variables into a `.env` file at the `mobile/` folder root (example keys used by the app):
