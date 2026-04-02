@@ -27,6 +27,7 @@ export const adminApi = {
   bulkAction: (issue_ids, action, payload) =>
     api.post('/admin/issues/bulk', { issue_ids, action, ...payload }),
   exportIssues: () => api.get('/admin/issues/export', { responseType: 'blob' }),
+  autoAssignOpen: (limit = 50) => api.post('/admin/issues/auto-assign-open', null, { params: { limit } }),
 
   // Workers
   getWorkers: (params) => api.get('/admin/workers', { params }),
@@ -37,6 +38,7 @@ export const adminApi = {
   reactivateWorker: (id) => api.post(`/admin/workers/${id}/reactivate`),
   getWorkerLocations: (params) => api.get('/admin/workers/locations', { params }),
   getWorkerLeaderboard: () => api.get('/admin/workers/leaderboard'),
+  getWorkerReport: (id, days = 30) => api.get(`/admin/workers/${id}/report`, { params: { days } }),
 
   // Citizens
   getCitizens: (params) => api.get('/admin/citizens', { params }),

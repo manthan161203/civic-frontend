@@ -231,6 +231,7 @@ export default function IssuesPage() {
   const [assignIssue, setAssignIssue] = useState(null);
   const [detailIssue, setDetailIssue] = useState(null);
   const [workerMap, setWorkerMap] = useState({});
+  const [autoAssigning, setAutoAssigning] = useState(false);
   const fetchedWorkerIds = useRef(new Set());
 
   const PAGE_SIZE = 20;
@@ -309,6 +310,19 @@ export default function IssuesPage() {
       const a = document.createElement('a'); a.href = url; a.download = 'issues.csv'; a.click();
       URL.revokeObjectURL(url);
     } catch {}
+  };
+
+  const handleAutoAssign = async () => {
+    if (!confirm('Auto-assign all open unassigned issues to nearest available workers?')) return;
+    setAutoAssigning(true);
+    try {
+      const { data } = await adminApi.autoAssignOpen(100);
+      alert(`Auto-assigned ${data.assigned} issues (${data.skipped} skipped, ${data.total_open} total open).`);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Auto-assign failed.');
+    }
+    setAutoAssigning(false);
   };
 
   const toggleSelect = (id) =>
@@ -393,6 +407,13 @@ export default function IssuesPage() {
             </button>
           </>
         )}
+        <button
+          onClick={handleAutoAssign}
+          disabled={autoAssigning}
+          className="px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {autoAssigning ? 'Assigning…' : '⚡ Auto-Assign Open'}
+        </button>
         <button
           onClick={handleExport}
           className="px-3 py-2 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700"

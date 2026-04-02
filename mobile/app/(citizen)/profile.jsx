@@ -257,6 +257,26 @@ export default function ProfileScreen() {
         <MenuItem icon="trophy-outline" label="Leaderboard & Badges" onPress={() => router.push('/(citizen)/leaderboard')} />
         <MenuItem icon="chatbubble-ellipses-outline" label="AI Assistant" onPress={() => router.push('/(citizen)/chat')} />
         <MenuItem icon="notifications-outline" label="Ward Subscriptions" onPress={() => router.push('/(citizen)/subscriptions')} />
+        <MenuItem icon="download-outline" label="Download My Data" onPress={() => {
+          Alert.alert(
+            'Download My Data',
+            'Export all your personal data (profile, issues, notifications, rewards) as JSON.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Export',
+                onPress: async () => {
+                  try {
+                    const { data } = await authApi.exportMyData();
+                    Alert.alert('Data Exported', `Export contains:\n• ${data.issues_reported?.length || 0} issues\n• ${data.notifications?.length || 0} notifications\n• ${data.reward_transactions?.length || 0} transactions\n• ${data.badges_earned?.length || 0} badges\n\nExported at: ${data.exported_at}`);
+                  } catch (err) {
+                    Alert.alert('Error', err.response?.data?.detail || 'Failed to export data. Try again later.');
+                  }
+                },
+              },
+            ]
+          );
+        }} />
         <MenuItem icon="person-outline" label="Edit Profile" onPress={async () => { 
           setEditName(user?.name || ''); 
           setEditPhone(user?.phone || '');

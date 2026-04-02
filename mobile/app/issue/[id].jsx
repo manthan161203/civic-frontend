@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Image, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, FlatList, Modal,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Share,
 } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -94,6 +94,7 @@ export default function IssueDetailScreen() {
   const [posting, setPosting] = useState(false);
   const [flagModal, setFlagModal] = useState(false);
   const [reopening, setReopening] = useState(false);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
 
   useEffect(() => {
     load();
@@ -166,6 +167,43 @@ export default function IssueDetailScreen() {
       Alert.alert('Error', err.response?.data?.detail || 'Failed to reopen issue.');
     }
     setReopening(false);
+  };
+
+  const handleDeleteComment = (commentId) => {
+    Alert.alert('Delete Comment', 'Remove this comment?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            await issuesApi.deleteComment(id, commentId);
+            setComments((prev) => prev.filter((c) => c.id !== commentId));
+          } catch (err) {
+            Alert.alert('Error', err.response?.data?.detail || 'Failed to delete comment.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleRate = async (rating) => {
+    setRatingSubmitting(true);
+    try {
+      const { data } = await issuesApi.update(id, { citizen_rating: rating });
+      setIssue((prev) => ({ ...prev, citizen_rating: data.citizen_rating ?? rating }));
+      Alert.alert('Thank you!', 'Your rating has been submitted.');
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.detail || 'Failed to submit rating.');
+    }
+    setRatingSubmitting(false);
+  };
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `Civic Issue: ${issue.description}\nStatus: ${issue.status}\nLocation: ${issue.address || issue.ward || 'N/A'}`,
+        title: `Civic Issue - ${issue.issue_type?.replace('_', ' ')}`,
+      });
+    } catch {}
   };
 
   if (loading) {
@@ -251,6 +289,10 @@ export default function IssueDetailScreen() {
           <Ionicons name="flag-outline" size={18} color="#374151" />
           <Text style={styles.actionText}>Flag</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
+          <Ionicons name="share-social-outline" size={18} color="#374151" />
+          <Text style={styles.actionText}>Share</Text>
+        </TouchableOpacity>
         {issue.status === 'resolved' && isReporter && (
           <TouchableOpacity
             style={[styles.actionBtn, reopening && { opacity: 0.5 }]}
@@ -274,6 +316,33 @@ export default function IssueDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Resolution Photo</Text>
           <Image source={{ uri: afterPhoto }} style={styles.afterPhoto} resizeMode="cover" />
+        </View>
+      )}
+
+      {/* Citizen Rating — shown for reporter on resolved/closed issues */}
+      {isReporter && (issue.status === 'resolved' || issue.status === 'closed') && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            {issue.citizen_rating ? 'Your Rating' : 'Rate Resolution'}
+          </Text>
+          <View style={styles.ratingRow}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <TouchableOpacity
+                key={star}
+                onPress={() => !issue.citizen_rating && !ratingSubmitting && handleRate(star)}
+                disabled={!!issue.citizen_rating || ratingSubmitting}
+              >
+                <Ionicons
+                  name={(issue.citizen_rating || 0) >= star ? 'star' : 'star-outline'}
+                  size={32}
+                  color={(issue.citizen_rating || 0) >= star ? '#f59e0b' : '#d1d5db'}
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+          {!issue.citizen_rating && (
+            <Text style={styles.ratingHint}>Tap a star to rate the resolution</Text>
+          )}
         </View>
       )}
 
@@ -313,6 +382,14 @@ export default function IssueDetailScreen() {
                 {formatDate(c.created_at, 'en-IN')}
               </Text>
             </View>
+            {(c.author?.id === user?.id || user?.role?.includes('admin')) && (
+              <TouchableOpacity
+                style={styles.commentDeleteBtn}
+                onPress={() => handleDeleteComment(c.id)}
+              >
+                <Ionicons name="trash-outline" size={14} color="#ef4444" />
+              </TouchableOpacity>
+            )}
           </View>
         ))}
         <View style={styles.commentInputRow}>
@@ -381,6 +458,7 @@ const styles = StyleSheet.create({
   commentAuthor: { fontSize: 13, fontWeight: '700', color: '#111827' },
   commentText: { fontSize: 13, color: '#374151', lineHeight: 18 },
   commentTime: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
+  commentDeleteBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#fef2f2', justifyContent: 'center', alignItems: 'center', marginLeft: 4, alignSelf: 'center' },
   commentInputRow: { flexDirection: 'row', gap: 10, marginTop: 12, alignItems: 'flex-end' },
   commentInput: {
     flex: 1, minHeight: 44, borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 10,
@@ -401,4 +479,6 @@ const styles = StyleSheet.create({
   modalTextArea: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#111827', minHeight: 72, textAlignVertical: 'top' },
   submitBtn: { marginTop: 20, backgroundColor: '#ef4444', borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
   submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  ratingRow: { flexDirection: 'row', gap: 8, justifyContent: 'center', paddingVertical: 8 },
+  ratingHint: { fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 4 },
 });

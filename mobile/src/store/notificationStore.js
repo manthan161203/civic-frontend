@@ -9,10 +9,12 @@ export const useNotificationStore = create((set) => ({
   fetchNotifications: async () => {
     set({ isLoading: true });
     try {
-      const { data } = await notificationsApi.list({ page: 1, size: 50 });
-      const items = data.items || data;
-      const unread = items.filter((n) => !n.is_read).length;
-      set({ notifications: items, unreadCount: unread, isLoading: false });
+      const [listRes, countRes] = await Promise.all([
+        notificationsApi.list({ page: 1, size: 50 }),
+        notificationsApi.count(),
+      ]);
+      const items = listRes.data.items || listRes.data;
+      set({ notifications: items, unreadCount: countRes.data.unread ?? 0, isLoading: false });
     } catch {
       set({ isLoading: false });
     }

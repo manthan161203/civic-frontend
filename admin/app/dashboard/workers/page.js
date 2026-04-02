@@ -154,6 +154,140 @@ function EditWorkerModal({ worker, onClose, onSaved }) {
 }
 
 
+// ── Worker Report Modal ────────────────────────────────────────────────────────
+function WorkerReportModal({ worker, onClose }) {
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [days, setDays] = useState(30);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await adminApi.getWorkerReport(worker.id, days);
+      setReport(data);
+    } catch {
+      setReport(null);
+    }
+    setLoading(false);
+  }, [worker.id, days]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4 flex-shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">{worker.name} — Report</h2>
+            <p className="text-xs text-gray-400">Performance overview</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <div className="flex gap-2 mb-4 flex-shrink-0">
+          {[7, 14, 30, 90].map((d) => (
+            <button
+              key={d}
+              onClick={() => setDays(d)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${days === d ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
+
+        <div className="overflow-y-auto flex-1">
+          {loading ? (
+            <div className="text-center py-12 text-gray-400 text-sm">Loading report…</div>
+          ) : !report ? (
+            <div className="text-center py-12 text-gray-400 text-sm">Failed to load report</div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  ['Assigned', report.total_assigned, 'bg-blue-50 text-blue-700'],
+                  ['Resolved', report.resolved, 'bg-green-50 text-green-700'],
+                  ['In Progress', report.in_progress, 'bg-yellow-50 text-yellow-700'],
+                  ['Rejected', report.rejected_count, 'bg-red-50 text-red-700'],
+                ].map(([label, val, cls]) => (
+                  <div key={label} className={`rounded-xl p-3 ${cls}`}>
+                    <div className="text-2xl font-bold">{val ?? 0}</div>
+                    <div className="text-xs font-semibold opacity-75">{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gray-50 rounded-xl p-3 text-center">
+                  <div className="text-lg font-bold text-gray-900">{report.resolution_rate ?? 0}%</div>
+                  <div className="text-xs text-gray-500">Resolution Rate</div>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3 text-center">
+                  <div className="text-lg font-bold text-gray-900">
+                    {report.avg_resolution_hours != null ? `${report.avg_resolution_hours.toFixed(1)}h` : '—'}
+                  </div>
+                  <div className="text-xs text-gray-500">Avg Resolution</div>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3 text-center">
+                  <div className="text-lg font-bold text-yellow-600 flex items-center justify-center gap-1">
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{width:14,height:14}}>
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
+                    {report.avg_citizen_rating != null ? report.avg_citizen_rating.toFixed(1) : '—'}
+                  </div>
+                  <div className="text-xs text-gray-500">Avg Rating ({report.five_star_count ?? 0}★5)</div>
+                </div>
+              </div>
+
+              {report.by_issue_type && Object.keys(report.by_issue_type).length > 0 && (
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">By Issue Type</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(report.by_issue_type).map(([type, count]) => (
+                      <span key={type} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-lg capitalize">
+                        {type.replace(/_/g, ' ')}: {count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {report.daily_resolved && report.daily_resolved.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Daily Resolved (last {days}d)</h3>
+                  <div className="flex items-end gap-0.5 h-20">
+                    {report.daily_resolved.map((d, i) => {
+                      const max = Math.max(...report.daily_resolved.map((x) => x.count), 1);
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center justify-end" title={`${d.date}: ${d.count}`}>
+                          <div
+                            className="w-full bg-green-400 rounded-t"
+                            style={{ height: `${(d.count / max) * 100}%`, minHeight: d.count > 0 ? 4 : 1 }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                    <span>{report.daily_resolved[0]?.date}</span>
+                    <span>{report.daily_resolved[report.daily_resolved.length - 1]?.date}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <button onClick={onClose} className="mt-4 w-full py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-semibold flex-shrink-0">
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Leaderboard ────────────────────────────────────────────────────────────────
 function Leaderboard() {
   const [data, setData] = useState([]);
@@ -285,6 +419,7 @@ function WorkerList() {
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editWorker, setEditWorker] = useState(null);
+  const [reportWorker, setReportWorker] = useState(null);
   const [form, setForm] = useState({ name: '', phone: '', ward_id: '', department: '' });
   const [wards, setWards] = useState([]);
   const [wardNames, setWardNames] = useState({});
@@ -508,6 +643,14 @@ function WorkerList() {
         />
       )}
 
+      {/* Report Modal */}
+      {reportWorker && (
+        <WorkerReportModal
+          worker={reportWorker}
+          onClose={() => setReportWorker(null)}
+        />
+      )}
+
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <table className="w-full text-sm">
@@ -575,6 +718,12 @@ function WorkerList() {
                         className="px-2 py-1 text-xs font-semibold rounded-md border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors"
                       >
                         Edit
+                      </button>
+                      <button
+                        onClick={() => setReportWorker(w)}
+                        className="px-2 py-1 text-xs font-semibold rounded-md border bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 transition-colors"
+                      >
+                        Report
                       </button>
                       <button
                         onClick={() => handleDeactivate(w.id, w.is_active)}
