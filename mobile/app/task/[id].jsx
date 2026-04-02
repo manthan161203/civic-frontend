@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator, Image, TextInput, Modal, KeyboardAvoidingView, Platform,
+  Alert, ActivityIndicator, Image, TextInput, Modal, KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { workersApi } from '../../src/api/workers';
 import { issuesApi } from '../../src/api/issues';
+import { BASE_URL } from '../../src/api/client';
 import { formatDateTime } from '../../src/utils/dateUtils';
 
 const PRIORITY_COLOR = { critical: '#7c3aed', high: '#ef4444', medium: '#f59e0b', low: '#10b981' };
@@ -106,12 +107,15 @@ export default function TaskDetailScreen() {
   if (!issue) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Not found</Text></View>;
 
   const photo = issue.before_photos?.[0] ?? null;
+  const photoUri = photo
+    ? (photo.startsWith('http') ? photo : `${BASE_URL}${photo.startsWith('/') ? '' : '/'}${photo}`)
+    : null;
   const priorityColor = PRIORITY_COLOR[issue.priority] || '#9ca3af';
   const isActive = ['assigned', 'in_progress'].includes(issue.status);
 
   return (
     <ScrollView style={styles.container}>
-      {photo && <Image source={{ uri: photo }} style={styles.photo} resizeMode="cover" />}
+      {photoUri && <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />}
 
       <View style={styles.section}>
         <View style={styles.badgeRow}>
@@ -142,7 +146,23 @@ export default function TaskDetailScreen() {
       {issue.latitude && issue.longitude && (
         <TouchableOpacity
           style={styles.navBtn}
-          onPress={() => router.push('/(worker)/map')}
+          onPress={() => {
+            const lat = issue.latitude;
+            const lon = issue.longitude;
+            const label = encodeURIComponent(issue.address || issue.issue_type || 'Issue Location');
+            const url = Platform.select({
+              ios: `maps:0,0?q=${label}@${lat},${lon}`,
+              android: `geo:${lat},${lon}?q=${lat},${lon}(${label})`,
+            });
+            Linking.canOpenURL(url).then((supported) => {
+              if (supported) {
+                Linking.openURL(url);
+              } else {
+                // Fallback to Google Maps web
+                Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`);
+              }
+            });
+          }}
         >
           <Ionicons name="navigate" size={18} color="#fff" />
           <Text style={styles.navBtnText}>Navigate to Location</Text>
