@@ -13,16 +13,17 @@ function DraggableMarker({ position, onDragEnd }) {
   );
 }
 
-function ClickHandler({ onSetLat, onSetLon }) {
+function ClickHandler({ onSetLat, onSetLon, onManualSet }) {
   const map = useMap();
   useEffect(() => {
     if (!map) return;
     const listener = map.addListener('click', (e) => {
       onSetLat(e.latLng.lat());
       onSetLon(e.latLng.lng());
+      onManualSet?.();
     });
     return () => listener.remove();
-  }, [map, onSetLat, onSetLon]);
+  }, [map, onSetLat, onSetLon, onManualSet]);
   return null;
 }
 
@@ -36,18 +37,21 @@ function PanToCoords({ lat, lon }) {
   return null;
 }
 
-function WardMapPicker({ lat, lon, onSetLat, onSetLon }) {
+function WardMapPicker({ lat, lon, onSetLat, onSetLon, onManualSet, fallbackCenter }) {
   const hasCoords = lat != null && lon != null;
+  const defaultC = hasCoords ? { lat, lng: lon } : (fallbackCenter || { lat: 22.3072, lng: 70.8022 });
+  const defaultZ = hasCoords ? 14 : fallbackCenter ? 11 : 8;
   const handleDragEnd = useCallback((e) => {
     onSetLat(e.latLng.lat());
     onSetLon(e.latLng.lng());
-  }, [onSetLat, onSetLon]);
+    onManualSet?.();
+  }, [onSetLat, onSetLon, onManualSet]);
 
   return (
     <div style={{ height: '220px', width: '100%', borderRadius: '8px', overflow: 'hidden' }}>
       <Map
-        defaultCenter={hasCoords ? { lat, lng: lon } : { lat: 22.3072, lng: 70.8022 }}
-        defaultZoom={hasCoords ? 14 : 8}
+        defaultCenter={defaultC}
+        defaultZoom={defaultZ}
         mapId="civic-ward-picker"
         gestureHandling="greedy"
         disableDefaultUI
@@ -57,7 +61,7 @@ function WardMapPicker({ lat, lon, onSetLat, onSetLon }) {
         {hasCoords && (
           <DraggableMarker position={{ lat, lng: lon }} onDragEnd={handleDragEnd} />
         )}
-        <ClickHandler onSetLat={onSetLat} onSetLon={onSetLon} />
+        <ClickHandler onSetLat={onSetLat} onSetLon={onSetLon} onManualSet={onManualSet} />
         <PanToCoords lat={lat} lon={lon} />
       </Map>
     </div>
@@ -81,6 +85,7 @@ export default function LocationsPage() {
   const [geoStatus, setGeoStatus] = useState(null); // null | 'fetching' | 'success' | 'failed'
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const geocodingRef = useRef(false);
 
   useEffect(() => {
     locationsApi.getTree()
@@ -90,20 +95,26 @@ export default function LocationsPage() {
   }, []);
 
   const reloadTree = async () => {
-    const { data } = await locationsApi.getTree();
-    setTree(data.districts || data);
+    try {
+      const { data } = await locationsApi.getTree();
+      setTree(data.districts || data);
+    } catch (err) {
+      console.error('Failed to reload location tree:', err);
+      alert('Failed to reload locations. Please refresh the page.');
+    }
   };
 
   const toggle = (key) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const resetWardCoords = () => {
+    geocodingRef.current = false;
     setWardLat(null);
     setWardLon(null);
     setGeoStatus(null);
   };
 
-  const openAdd = (type, parentId, parentName, grandparentName = null) => {
-    setAdding({ type, parentId, parentName, grandparentName });
+  const openAdd = (type, parentId, parentName, grandparentName = null, parentLat = null, parentLon = null) => {
+    setAdding({ type, parentId, parentName, grandparentName, parentLat, parentLon });
     setNewName('');
     setNewWardNumber('');
     setSuggestions([]);
@@ -127,36 +138,43 @@ export default function LocationsPage() {
     setGeoStatus(centroid_lat != null ? 'success' : null);
   };
 
+  // Photon (Komoot) fetch helper — Elasticsearch-backed, designed for prefix autocomplete
+  const photonFetch = async (q, biasLat, biasLon, limit = 10) => {
+    const params = new URLSearchParams({ q, lat: biasLat, lon: biasLon, limit, lang: 'en' });
+    const res = await fetch(`https://photon.komoot.io/api/?${params}`);
+    const geoJson = await res.json();
+    return (geoJson.features || []).filter(
+      (f) => f.properties?.country === 'India'
+    );
+  };
+
   const geocodeLocation = async () => {
+    if (geocodingRef.current) return;
     const type = adding?.type || editing?.type;
     const name = newName.trim();
     if (!name || !type) return;
+    geocodingRef.current = true;
     setGeoStatus('fetching');
     try {
-      let query;
-      if (type === 'district') {
-        query = `${name}, Gujarat, India`;
-      } else if (type === 'taluka') {
-        const districtName = adding?.parentName || editing?.districtName || '';
-        query = `${name}, ${districtName}, Gujarat, India`;
-      } else {
-        const talukaName = adding?.parentName || editing?.talukaName || '';
-        const districtName = adding?.grandparentName || editing?.districtName || '';
-        query = `${name}, ${talukaName}, ${districtName}, Gujarat, India`;
-      }
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`
-      );
-      const data = await res.json();
-      if (data.length > 0) {
-        setWardLat(parseFloat(data[0].lat));
-        setWardLon(parseFloat(data[0].lon));
+      // Bias toward parent location if available, else Gujarat center
+      const biasLat = adding?.parentLat ?? editing?.centroid_lat ?? 22.3072;
+      const biasLon = adding?.parentLon ?? editing?.centroid_lon ?? 72.1;
+      const features = await photonFetch(name, biasLat, biasLon, 5);
+      const match = features.find(
+        (f) => (f.properties.name || '').toLowerCase().startsWith(name.toLowerCase())
+      ) || features[0];
+      if (match) {
+        const [lon, lat] = match.geometry.coordinates;
+        setWardLat(lat);
+        setWardLon(lon);
         setGeoStatus('success');
       } else {
         setGeoStatus('failed');
       }
     } catch {
       setGeoStatus('failed');
+    } finally {
+      geocodingRef.current = false;
     }
   };
 
@@ -169,19 +187,53 @@ export default function LocationsPage() {
     return () => clearTimeout(t);
   }, [newName]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounced suggestions from DB
+  // Debounced suggestions (DB first + Photon prefix autocomplete with location bias)
   useEffect(() => {
     const ctx = adding || editing;
     if (!ctx || newName.trim().length < 2) { setSuggestions([]); setShowSuggestions(false); return; }
     const type = ctx.type;
     const districtId = adding ? (type === 'taluka' ? adding.parentId : null) : null;
     const talukaId = adding ? (type === 'ward' ? adding.parentId : null) : null;
-    const t = setTimeout(() => {
-      locationsApi.suggest(newName.trim(), type, districtId, talukaId)
-        .then(({ data }) => { setSuggestions(data || []); setShowSuggestions((data || []).length > 0); })
-        .catch(() => {});
-    }, 300);
-    return () => clearTimeout(t);
+    // Bias to parent location so nearby results are ranked first
+    const biasLat = adding?.parentLat ?? 22.3072;
+    const biasLon = adding?.parentLon ?? 72.1;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      // Fire DB and Photon in parallel
+      const [dbRes, photonFeatures] = await Promise.all([
+        locationsApi.suggest(newName.trim(), type, districtId, talukaId)
+          .then(({ data }) => data || []).catch(() => []),
+        photonFetch(newName.trim(), biasLat, biasLon, 12).catch(() => []),
+      ]);
+      if (cancelled) return;
+      const seen = new Set(dbRes.map((r) => r.name.toLowerCase()));
+      const photonResults = [];
+      for (const f of photonFeatures) {
+        const p = f.properties;
+        const rname = (p.name || '').trim();
+        if (!rname) continue;
+        // Photon sometimes returns partial matches — enforce prefix
+        if (!rname.toLowerCase().startsWith(newName.trim().toLowerCase())) continue;
+        // For districts/talukas, restrict to Gujarat
+        if (type !== 'ward' && p.state && p.state !== 'Gujarat') continue;
+        const key = rname.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const [lon, lat] = f.geometry.coordinates;
+        const pathParts = [p.city, p.county, p.state].filter((x) => x && x !== rname);
+        photonResults.push({
+          id: `ph-${p.osm_id}`,
+          name: rname,
+          path: pathParts.slice(0, 3).join(', '),
+          centroid_lat: lat,
+          centroid_lon: lon,
+        });
+      }
+      const merged = [...dbRes, ...photonResults];
+      setSuggestions(merged);
+      setShowSuggestions(merged.length > 0);
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [newName, adding, editing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAdd = async (e) => {
@@ -197,11 +249,14 @@ export default function LocationsPage() {
       } else if (adding.type === 'ward') {
         await locationsApi.createWard(adding.parentId, newName.trim(), parseInt(newWardNumber), wardLat, wardLon);
       }
+      // Reload tree BEFORE closing modal to ensure state sync
+      await reloadTree();
       setAdding(null);
       resetWardCoords();
-      await reloadTree();
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to create');
+      setSaving(false);
+      return;
     }
     setSaving(false);
   };
@@ -219,11 +274,14 @@ export default function LocationsPage() {
       } else if (editing.type === 'ward') {
         await locationsApi.updateWard(editing.id, newName.trim(), parseInt(newWardNumber), wardLat, wardLon);
       }
+      // Reload tree BEFORE closing modal to ensure state sync
+      await reloadTree();
       setEditing(null);
       resetWardCoords();
-      await reloadTree();
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to update');
+      setSaving(false);
+      return;
     }
     setSaving(false);
   };
@@ -240,8 +298,9 @@ export default function LocationsPage() {
     }
   };
 
-  // ── Geocode status banner ──────────────────────────────────────────────────
+  // ── Geocode status banner (called as function, not as JSX component) ────────
   const GeoStatusBanner = () => {
+    const locType = adding?.type || editing?.type || 'location';
     if (geoStatus === 'fetching') return (
       <div className="text-xs text-blue-600 flex items-center gap-1.5">
         <span className="inline-block w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
@@ -250,34 +309,35 @@ export default function LocationsPage() {
     );
     if (geoStatus === 'success') return (
       <div className="flex items-center justify-between">
-        <span className="text-xs text-green-600 font-medium">Location auto-fetched — adjust on map if needed</span>
+        <span className="text-xs text-green-600 font-medium">Location fetched — adjust on map if needed</span>
         <button
           type="button"
-          onClick={() => { setGeoStatus('failed'); setWardLat(null); setWardLon(null); }}
+          onClick={() => { setWardLat(null); setWardLon(null); geocodeLocation(); }}
           className="text-xs text-gray-400 underline hover:text-gray-600"
         >
           Re-fetch
         </button>
       </div>
     );
-    if (geoStatus === 'failed') {
-      return (
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-amber-600">Location not found — click the map to place the pin</span>
-          <button
-            type="button"
-            onClick={geocodeLocation}
-            className="text-xs text-blue-500 underline hover:text-blue-700"
-          >
-            Try again
-          </button>
-        </div>
-      );
-    }
-    return <div className="text-xs text-gray-400">Enter ward name above to auto-fetch location</div>;
+    if (geoStatus === 'failed') return (
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-amber-600">Location not found — click the map to place the pin</span>
+        <button
+          type="button"
+          onClick={geocodeLocation}
+          className="text-xs text-blue-500 underline hover:text-blue-700"
+        >
+          Try again
+        </button>
+      </div>
+    );
+    return <div className="text-xs text-gray-400">Enter {locType} name above to auto-fetch location</div>;
   };
 
   // ── Ward location section (inlined in both modals) ─────────────────────────
+  const parentMapCenter = adding?.parentLat != null
+    ? { lat: adding.parentLat, lng: adding.parentLon }
+    : null;
   const wardLocationSection = (
     <div className="space-y-2 pt-1">
       <div className="flex items-center justify-between">
@@ -288,8 +348,8 @@ export default function LocationsPage() {
           </span>
         )}
       </div>
-      <GeoStatusBanner />
-      <WardMapPicker lat={wardLat} lon={wardLon} onSetLat={setWardLat} onSetLon={setWardLon} />
+      {GeoStatusBanner()}
+      <WardMapPicker lat={wardLat} lon={wardLon} onSetLat={setWardLat} onSetLon={setWardLon} onManualSet={() => setGeoStatus('success')} fallbackCenter={parentMapCenter} />
       <p className="text-xs text-gray-400">Click map to place pin · Drag pin to adjust</p>
     </div>
   );
@@ -492,7 +552,7 @@ export default function LocationsPage() {
                   </span>
                 )}
                 {(user?.role === 'admin' || user?.role === 'district_admin') && (
-                  <button onClick={() => openAdd('taluka', district.id, district.name)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors">+ Taluka</button>
+                  <button onClick={() => openAdd('taluka', district.id, district.name, null, district.centroid_lat, district.centroid_lon)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors">+ Taluka</button>
                 )}
                 {user?.role === 'admin' && (
                   <>
@@ -523,7 +583,7 @@ export default function LocationsPage() {
                       </span>
                     )}
                     {(user?.role === 'admin' || user?.role === 'district_admin' || user?.role === 'taluka_admin') && (
-                      <button onClick={() => openAdd('ward', taluka.id, taluka.name, district.name)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors">+ Ward</button>
+                      <button onClick={() => openAdd('ward', taluka.id, taluka.name, district.name, taluka.centroid_lat, taluka.centroid_lon)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors">+ Ward</button>
                     )}
                     {(user?.role === 'admin' || user?.role === 'district_admin') && (
                       <>
