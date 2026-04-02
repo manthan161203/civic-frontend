@@ -81,7 +81,7 @@ export default function WorkerLeaderboardScreen() {
         keyExtractor={(item) => String(item.id)}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#059669" />}
         renderItem={({ item, index }) => {
-          const isMe = item.id === user?.id;
+          const isMe = item.user_id === user?.id;
           return (
             <View style={[styles.row, isMe && styles.rowMe]}>
               <View style={styles.rankCell}>
@@ -97,9 +97,8 @@ export default function WorkerLeaderboardScreen() {
                   {item.name || 'Worker'} {isMe ? '(You)' : ''}
                 </Text>
                 <Text style={styles.rowSub}>
-                  {item.tasks_completed ?? 0} tasks
-                  {item.avg_rating ? ` · ${item.avg_rating.toFixed(1)}★` : ''}
-                  {item.department ? ` · ${item.department}` : ''}
+                  {item.tasks_completed ?? 0} tasks · {item.level_name || `Level ${item.level}`}
+                  {item.badge_count ? ` · ${item.badge_count} 🏅` : ''}
                 </Text>
               </View>
               <View style={styles.pointsCell}>
