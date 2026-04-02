@@ -44,6 +44,15 @@ export default function MapScreen() {
         radius_km: 5,
       });
       setIssues(data.items || data);
+      // After loading, snap map to user location
+      setTimeout(() => {
+        mapRef.current?.animateToRegion({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        }, 600);
+      }, 300);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load nearby issues. Please try again.');
     }

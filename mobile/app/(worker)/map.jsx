@@ -26,6 +26,15 @@ export default function WorkerMapScreen() {
         const loc = await Location.getCurrentPositionAsync({});
         setUserLocation(loc.coords);
         await workersApi.updateLocation(loc.coords.latitude, loc.coords.longitude);
+        // Snap map to user location once loaded
+        setTimeout(() => {
+          mapRef.current?.animateToRegion({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          }, 600);
+        }, 300);
       }
       const { data } = await workersApi.getTasks();
       setTasks(data.items || data);
