@@ -1,6 +1,16 @@
 'use client';
+/**
+ * Analytics Dashboard Component
+ * Displays comprehensive analytics and metrics for civic issues.
+ * Features:
+ * - Multi-day (7/14/30/90) analytics filtering
+ * - Charts: Daily trends, issue type, status, priority distribution
+ * - Top wards ranking
+ * - PDF export functionality
+ */
 import { useState, useEffect } from 'react';
 import { adminApi } from '../../../src/api/index';
+import { logger } from '../../../src/lib/logger';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
@@ -9,36 +19,72 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+const COMPONENT_NAME = 'AnalyticsPage';
 
 export default function AnalyticsPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(30);
   const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState(null);
 
+  /**
+   * Fetch analytics data on mount and when days filter changes
+   */
   useEffect(() => {
-    setLoading(true);
-    adminApi.getAnalytics({ days })
-      .then(({ data: d }) => setData(d))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    fetchAnalyticsData();
   }, [days]);
 
+  /**
+   * Fetch analytics data with proper error handling
+   */
+  const fetchAnalyticsData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      logger.debug(COMPONENT_NAME, `Fetching analytics data for ${days} days`);
+      
+      const { data: analyticsData } = await adminApi.getAnalytics({ days });
+      
+      if (!analyticsData) {
+        throw new Error('No analytics data returned from API');
+      }
+      
+      setData(analyticsData);
+      logger.info(COMPONENT_NAME, `Analytics data loaded successfully for ${days}-day period`);
+    } catch (err) {
+      const errorMsg = err?.message || 'Failed to load analytics data';
+      logger.error(COMPONENT_NAME, 'Error fetching analytics data', err);
+      setError(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Generate and download PDF analytics report
+   * Includes summary stats, issues by type/priority, top wards
+   */
   const handleExportPDF = async () => {
-    if (!data) return;
+    if (!data) {
+      logger.warn(COMPONENT_NAME, 'PDF export attempted with no data available');
+      return;
+    }
     
     setExporting(true);
     try {
+      logger.info(COMPONENT_NAME, `Generating PDF report for ${days}-day period`);
+      
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       let yPosition = 10;
 
       // Title
       doc.setFontSize(20);
-      doc.text(`Civic Issues Analytics Report`, pageWidth / 2, yPosition, { align: 'center' });
+      doc.text('Civic Issues Analytics Report', pageWidth / 2, yPosition, { align: 'center' });
       yPosition += 10;
 
-      // Report metadata
+      // Metadata
       doc.setFontSize(10);
       doc.setTextColor(100);
       const now = new Date();
@@ -73,7 +119,7 @@ export default function AnalyticsPage() {
       });
       yPosition = doc.lastAutoTable?.finalY || yPosition;
 
-      // Issues by type table
+      // Issues by type
       if (data.by_type && Object.keys(data.by_type).length > 0) {
         yPosition += 10;
         doc.setFontSize(12);
@@ -82,7 +128,7 @@ export default function AnalyticsPage() {
 
         const typeData = Object.entries(data.by_type).map(([type, count]) => [
           type.replace(/_/g, ' ').charAt(0).toUpperCase() + type.replace(/_/g, ' ').slice(1),
-          count
+          count,
         ]);
 
         autoTable(doc, {
@@ -102,7 +148,7 @@ export default function AnalyticsPage() {
 
         const priorityData = Object.entries(data.by_priority).map(([priority, count]) => [
           priority.charAt(0).toUpperCase() + priority.slice(1),
-          count
+          count,
         ]);
 
         autoTable(doc, {
@@ -123,7 +169,7 @@ export default function AnalyticsPage() {
         const wardData = data.top_wards.slice(0, 10).map((ward, idx) => [
           idx + 1,
           ward.ward || 'Unknown',
-          ward.count
+          ward.count,
         ]);
 
         autoTable(doc, {
@@ -134,29 +180,35 @@ export default function AnalyticsPage() {
         });
       }
 
-      // Save the PDF
-      doc.save(`civic-analytics-${days}d-${now.toISOString().split('T')[0]}.pdf`);
+      const filename = `civic-analytics-${days}d-${now.toISOString().split('T')[0]}.pdf`;
+      doc.save(filename);
+      logger.info(COMPONENT_NAME, `PDF report exported successfully: ${filename}`);
     } catch (error) {
-      console.error('Error exporting PDF:', error);
-      alert('Failed to export PDF');
+      logger.error(COMPONENT_NAME, 'Failed to export PDF report', error);
+      alert('Failed to export PDF. Please check the browser console for details.');
     } finally {
       setExporting(false);
     }
   };
 
   // Convert data for charts
-  const daily = data?.daily_counts
-    ? Object.entries(data.daily_counts).map(([date, count]) => ({ date, count }))
-    : [];
-  const byType = data?.by_type
-    ? Object.entries(data.by_type).map(([name, value]) => ({ name: name.replace(/_/g, ' '), value }))
-    : [];
-  const byStatus = data?.by_status
-    ? Object.entries(data.by_status).map(([name, value]) => ({ name, value }))
-    : [];
-  const byPriority = data?.by_priority
-    ? Object.entries(data.by_priority).map(([name, value]) => ({ name, value }))
-    : [];
+  const daily = data?.daily_counts ? Object.entries(data.daily_counts).map(([date, count]) => ({ date, count })) : [];
+  const byType = data?.by_type ? Object.entries(data.by_type).map(([name, value]) => ({ name: name.replace(/_/g, ' '), value })) : [];
+  const byStatus = data?.by_status ? Object.entries(data.by_status).map(([name, value]) => ({ name, value })) : [];
+  const byPriority = data?.by_priority ? Object.entries(data.by_priority).map(([name, value]) => ({ name, value })) : [];
+
+  // Error state
+  if (error) {
+    return (
+      <div className="bg-red-50 rounded-xl p-6 border border-red-200">
+        <h2 className="text-lg font-bold text-red-700 mb-2">Error Loading Analytics</h2>
+        <p className="text-red-600 mb-4">{error}</p>
+        <button onClick={fetchAnalyticsData} className="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700">
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -176,22 +228,9 @@ export default function AnalyticsPage() {
         <button
           onClick={handleExportPDF}
           disabled={exporting || !data}
-          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2 ${
-            exporting || !data
-              ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-              : 'bg-green-600 text-white hover:bg-green-700'
-          }`}
+          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2 ${exporting || !data ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}
         >
-          {exporting ? (
-            <>
-              <span className="animate-spin">⟳</span>
-              Exporting...
-            </>
-          ) : (
-            <>
-              📄 Export PDF
-            </>
-          )}
+          {exporting ? <><span className="animate-spin">⟳</span>Exporting...</> : <>📄 Export PDF</>}
         </button>
       </div>
 
@@ -234,7 +273,9 @@ export default function AnalyticsPage() {
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie data={byStatus} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                    {byStatus.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    {byStatus.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
                   </Pie>
                   <Tooltip />
                 </PieChart>
@@ -276,10 +317,7 @@ export default function AnalyticsPage() {
                           <span className="text-gray-400">{w.count}</span>
                         </div>
                         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-blue-500 rounded-full"
-                            style={{ width: `${(w.count / data.top_wards[0].count) * 100}%` }}
-                          />
+                          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${(w.count / data.top_wards[0].count) * 100}%` }} />
                         </div>
                       </div>
                     </div>
