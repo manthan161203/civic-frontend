@@ -138,9 +138,20 @@ export default function LocationsPage() {
     setGeoStatus(centroid_lat != null ? 'success' : null);
   };
 
+  // Gujarat bounding box — hard geographic filter so Photon returns only local results
+  // even for short prefixes like "Kut" (Kutch) that would otherwise return non-India places.
+  const GUJARAT_BBOX = '68.1,20.1,74.5,24.7'; // min_lon,min_lat,max_lon,max_lat
+
   // Photon (Komoot) fetch helper — Elasticsearch-backed, designed for prefix autocomplete
-  const photonFetch = async (q, biasLat, biasLon, limit = 10) => {
-    const params = new URLSearchParams({ q, lat: biasLat, lon: biasLon, limit, lang: 'en' });
+  // Pass bbox to get Gujarat-scoped results; omit to use lat/lon soft bias (geocoding only)
+  const photonFetch = async (q, biasLat, biasLon, limit = 10, bbox = null) => {
+    const params = new URLSearchParams({ q, limit, lang: 'en' });
+    if (bbox) {
+      params.set('bbox', bbox);
+    } else {
+      params.set('lat', biasLat);
+      params.set('lon', biasLon);
+    }
     const res = await fetch(`https://photon.komoot.io/api/?${params}`);
     const geoJson = await res.json();
     return (geoJson.features || []).filter(
@@ -199,11 +210,12 @@ export default function LocationsPage() {
     const biasLon = adding?.parentLon ?? 72.1;
     let cancelled = false;
     const t = setTimeout(async () => {
-      // Fire DB and Photon in parallel
+      // Fire DB and Photon in parallel — use Gujarat bbox so Photon returns local
+      // results even for short prefixes like "Kut" (Kutch)
       const [dbRes, photonFeatures] = await Promise.all([
         locationsApi.suggest(newName.trim(), type, districtId, talukaId)
           .then(({ data }) => data || []).catch(() => []),
-        photonFetch(newName.trim(), biasLat, biasLon, 12).catch(() => []),
+        photonFetch(newName.trim(), biasLat, biasLon, 12, GUJARAT_BBOX).catch(() => []),
       ]);
       if (cancelled) return;
       const seen = new Set(dbRes.map((r) => r.name.toLowerCase()));
@@ -212,10 +224,8 @@ export default function LocationsPage() {
         const p = f.properties;
         const rname = (p.name || '').trim();
         if (!rname) continue;
-        // Photon sometimes returns partial matches — enforce prefix
+        // Enforce prefix match against what the user actually typed
         if (!rname.toLowerCase().startsWith(newName.trim().toLowerCase())) continue;
-        // For districts/talukas, restrict to Gujarat
-        if (type !== 'ward' && p.state && p.state !== 'Gujarat') continue;
         const key = rname.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
