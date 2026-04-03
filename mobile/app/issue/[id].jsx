@@ -10,6 +10,7 @@ import { issuesApi } from '../../src/api/issues';
 import { BASE_URL } from '../../src/api/client';
 import { useAuthStore } from '../../src/store/authStore';
 import { formatDate, formatDateTime } from '../../src/utils/dateUtils';
+import { logger } from '../../src/utils/logger';  // Structured logging for debugging
 
 const STATUS_COLORS = {
   open: { bg: '#fef3c7', text: '#92400e' },
