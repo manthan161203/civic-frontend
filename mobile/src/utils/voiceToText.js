@@ -2,7 +2,7 @@
  * Voice-to-Text Utility
  * =====================
  * Provides speech-to-text capability for worker field notes
- * using expo-speech and the Web Speech API (via React Native Voice).
+ * using react-native-voice with lazy-loading to avoid bundling issues.
  *
  * Usage:
  *   import { useVoiceToText } from '../utils/voiceToText';
@@ -16,8 +16,7 @@ import logger from './logger';
 /**
  * Custom hook for voice-to-text recording/transcription.
  *
- * Uses the device's built-in speech recognition when available,
- * or falls back to audio recording + server-side transcription.
+ * Uses react-native-voice when available.
  *
  * @param {Object} options
  * @param {string} options.language - BCP-47 locale (default 'en-IN')
@@ -29,6 +28,7 @@ export function useVoiceToText({ language = 'en-IN', onResult, onError } = {}) {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const voiceRef = useRef(null);
+  const listenerRef = useRef([]);
 
   // Lazy-load react-native-voice if available
   const getVoice = useCallback(async () => {
@@ -38,7 +38,7 @@ export function useVoiceToText({ language = 'en-IN', onResult, onError } = {}) {
       voiceRef.current = Voice;
       return Voice;
     } catch {
-      logger.warn('VoiceToText', '@react-native-voice/voice not installed — speech recognition unavailable');
+      logger.warn('VoiceToText', '@react-native-voice/voice not installed');
       return null;
     }
   }, []);
@@ -54,33 +54,40 @@ export function useVoiceToText({ language = 'en-IN', onResult, onError } = {}) {
         return;
       }
 
-      Voice.onSpeechResults = (e) => {
+      setTranscript('');
+      setIsListening(true);
+
+      // Setup event listeners
+      const handleResults = (e) => {
         const text = e.value?.[0] || '';
         setTranscript(text);
         if (onResult) onResult(text);
       };
 
-      Voice.onSpeechPartialResults = (e) => {
-        const partial = e.value?.[0] || '';
-        setTranscript(partial);
-      };
-
-      Voice.onSpeechError = (e) => {
-        logger.error('VoiceToText', 'Speech recognition error', e.error);
+      const handleError = (e) => {
+        logger.error('VoiceToText', 'Error:', e.error);
         setIsListening(false);
         if (onError) onError(e.error);
       };
 
-      Voice.onSpeechEnd = () => {
+      const handleEnd = () => {
         setIsListening(false);
       };
 
-      setTranscript('');
+      Voice.onSpeechResults = handleResults;
+      Voice.onSpeechError = handleError;
+      Voice.onSpeechEnd = handleEnd;
+
+      listenerRef.current = [
+        Voice.onSpeechResults,
+        Voice.onSpeechError,
+        Voice.onSpeechEnd,
+      ];
+
       await Voice.start(language);
-      setIsListening(true);
       logger.info('VoiceToText', `Listening started (${language})`);
     } catch (err) {
-      logger.error('VoiceToText', 'Failed to start listening', err);
+      logger.error('VoiceToText', 'Failed to start listening:', err);
       setIsListening(false);
       if (onError) onError(err);
     }
@@ -95,7 +102,7 @@ export function useVoiceToText({ language = 'en-IN', onResult, onError } = {}) {
       setIsListening(false);
       logger.info('VoiceToText', 'Listening stopped');
     } catch (err) {
-      logger.error('VoiceToText', 'Failed to stop listening', err);
+      logger.error('VoiceToText', 'Failed to stop listening:', err);
       setIsListening(false);
     }
   }, [getVoice]);
@@ -108,13 +115,9 @@ export function useVoiceToText({ language = 'en-IN', onResult, onError } = {}) {
   useEffect(() => {
     return () => {
       const cleanup = async () => {
-        try {
-          const Voice = voiceRef.current;
-          if (Voice) {
-            await Voice.destroy();
-            Voice.removeAllListeners();
-          }
-        } catch {}
+        if (isListening) {
+          await stopListening();
+        }
       };
       cleanup();
     };
