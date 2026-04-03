@@ -10,6 +10,7 @@ import { workersApi } from '../../src/api/workers';
 import { issuesApi } from '../../src/api/issues';
 import { BASE_URL } from '../../src/api/client';
 import { formatDateTime } from '../../src/utils/dateUtils';
+import { compressImage } from '../../src/utils/imageUtils';
 
 const PRIORITY_COLOR = { critical: '#7c3aed', high: '#ef4444', medium: '#f59e0b', low: '#10b981' };
 
@@ -62,9 +63,10 @@ export default function TaskDetailScreen() {
       if (result.canceled) return;
 
       setActionLoading(true);
+      const compressedUri = await compressImage(result.assets[0].uri);
       const form = new FormData();
       form.append('after_photo', {
-        uri: result.assets[0].uri,
+        uri: compressedUri,
         name: 'after.jpg',
         type: 'image/jpeg',
       });

@@ -190,7 +190,14 @@ export default function IssueDetailScreen() {
     try {
       const { data } = await issuesApi.update(id, { citizen_rating: rating });
       setIssue((prev) => ({ ...prev, citizen_rating: data.citizen_rating ?? rating }));
-      Alert.alert('Thank you!', 'Your rating has been submitted.');
+      
+      if (rating === 1) {
+        await issuesApi.reopen(id);
+        await load();
+        Alert.alert('Issue Reopened', 'Since you rated this 1 star, the issue has been reopened for further investigation.');
+      } else {
+        Alert.alert('Thank you!', 'Your rating has been submitted.');
+      }
     } catch (err) {
       Alert.alert('Error', err.response?.data?.detail || 'Failed to submit rating.');
     }
@@ -272,6 +279,54 @@ export default function IssueDetailScreen() {
         <Text style={styles.date}>
           Reported {formatDate(issue.created_at, 'en-IN')}
         </Text>
+
+        {/* Visual Pipeline */}
+        <View style={{ flexDirection: 'row', marginTop: 24, marginBottom: 20, paddingHorizontal: 10 }}>
+          {['open', 'assigned', 'in_progress', 'resolved', 'closed'].map((step, index, arr) => {
+            const stepLabels = ['Reported', 'Assigned', 'In Progress', 'Resolved', 'Closed'];
+            const getStepIndex = (st) => {
+              if (st === 'open') return 0;
+              if (st === 'assigned') return 1;
+              if (st === 'in_progress' || st === 'escalated') return 2;
+              if (st === 'resolved') return 3;
+              if (st === 'closed') return 4;
+              return 0;
+            };
+            const currentIndex = getStepIndex(issue.status);
+            const isCompleted = index <= currentIndex;
+            const isActive = index === currentIndex;
+            const isLast = index === arr.length - 1;
+
+            return (
+              <View key={step} style={{ flexDirection: 'row', alignItems: 'center', flex: isLast ? 0 : 1 }}>
+                <View style={{ alignItems: 'center' }}>
+                  <View style={{
+                    width: 28, height: 28, borderRadius: 14,
+                    backgroundColor: isCompleted ? '#1a56db' : '#f3f4f6',
+                    alignItems: 'center', justifyContent: 'center',
+                    borderWidth: isActive ? 4 : 0, borderColor: '#bfdbfe',
+                  }}>
+                    {isCompleted && <Ionicons name="checkmark" size={16} color="#fff" />}
+                  </View>
+                  <Text style={{
+                    position: 'absolute', top: 32, width: 70, textAlign: 'center', left: -21,
+                    fontSize: 10, color: isCompleted ? '#111827' : '#9ca3af',
+                    fontWeight: isActive ? '700' : '500'
+                  }}>
+                    {stepLabels[index]}
+                  </Text>
+                </View>
+                {!isLast && (
+                  <View style={{
+                    flex: 1, height: 3,
+                    backgroundColor: index < currentIndex ? '#1a56db' : '#f3f4f6',
+                    marginHorizontal: 4
+                  }} />
+                )}
+              </View>
+            );
+          })}
+        </View>
       </View>
 
       {/* Actions */}
@@ -444,6 +499,8 @@ const styles = StyleSheet.create({
   section: { backgroundColor: '#fff', marginTop: 12, padding: 16 },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: '#374151', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 },
   afterPhoto: { width: '100%', height: 180, borderRadius: 8 },
+  ratingRow: { flexDirection: 'row', gap: 8, marginVertical: 8 },
+  ratingHint: { fontSize: 13, color: '#6b7280', marginTop: 8 },
   timelineItem: { flexDirection: 'row', gap: 12, paddingBottom: 16 },
   timelineDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#1a56db', marginTop: 4 },
   timelineLine: { position: 'absolute', left: 5, top: 16, width: 2, height: '100%', backgroundColor: '#dbeafe' },

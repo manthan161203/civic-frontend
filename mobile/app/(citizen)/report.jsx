@@ -11,6 +11,7 @@ import { issuesApi } from '../../src/api/issues';
 import { locationsApi } from '../../src/api/locations';
 import { reverseGeocode } from '../../src/utils/geocode';
 import MapView, { Marker } from '../../src/components/PlatformMap';
+import { compressImage } from '../../src/utils/imageUtils';
 
 const ISSUE_TYPES = [
   'pothole', 'streetlight', 'garbage', 'drain', 'other',
@@ -148,7 +149,10 @@ export default function ReportScreen() {
         allowsEditing: true,
         aspect: [4, 3],
       });
-      if (!result.canceled) setPhotos((prev) => [...prev, result.assets[0]]);
+      if (!result.canceled) {
+        const compressedUri = await compressImage(result.assets[0].uri);
+        setPhotos((prev) => [...prev, { ...result.assets[0], uri: compressedUri }]);
+      }
     } catch (err) {
       Alert.alert('Error', 'Could not open photo library. Please check app permissions in Settings.');
     }
@@ -170,7 +174,10 @@ export default function ReportScreen() {
         allowsEditing: true,
         aspect: [4, 3],
       });
-      if (!result.canceled) setPhotos((prev) => [...prev, result.assets[0]]);
+      if (!result.canceled) {
+        const compressedUri = await compressImage(result.assets[0].uri);
+        setPhotos((prev) => [...prev, { ...result.assets[0], uri: compressedUri }]);
+      }
     } catch (err) {
       Alert.alert('Error', 'Could not open camera. Please check app permissions in Settings.');
     }

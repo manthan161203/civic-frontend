@@ -10,6 +10,7 @@ import { useAuthStore } from '../../src/store/authStore';
 import { rewardsApi } from '../../src/api/rewards';
 import { authApi } from '../../src/api/auth';
 import { locationsApi } from '../../src/api/locations';
+import { compressImage } from '../../src/utils/imageUtils';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -97,7 +98,8 @@ export default function ProfileScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setSelectedPhotoUri(result.assets[0].uri);
+        const compressedUri = await compressImage(result.assets[0].uri);
+        setSelectedPhotoUri(compressedUri);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick image');

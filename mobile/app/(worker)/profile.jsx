@@ -10,6 +10,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
 import { rewardsApi } from '../../src/api/rewards';
 import { authApi } from '../../src/api/auth';
+import { compressImage } from '../../src/utils/imageUtils';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -82,7 +83,8 @@ export default function WorkerProfile() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) {
-        setSelectedPhotoUri(result.assets[0].uri);
+        const compressedUri = await compressImage(result.assets[0].uri);
+        setSelectedPhotoUri(compressedUri);
       }
     } catch {
       Alert.alert('Error', 'Failed to pick image');
