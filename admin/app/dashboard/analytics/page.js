@@ -5,6 +5,8 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from 'recharts';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
@@ -12,6 +14,7 @@ export default function AnalyticsPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(30);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -21,7 +24,127 @@ export default function AnalyticsPage() {
       .finally(() => setLoading(false));
   }, [days]);
 
-  // daily_counts is a Dict<date_str, count> — convert to array for Recharts
+  const handleExportPDF = async () => {
+    if (!data) return;
+    
+    setExporting(true);
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      let yPosition = 10;
+
+      // Title
+      doc.setFontSize(20);
+      doc.text(`Civic Issues Analytics Report`, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 10;
+
+      // Report metadata
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      const now = new Date();
+      doc.text(`Generated: ${now.toLocaleString()}`, pageWidth / 2, yPosition, { align: 'center' });
+      doc.text(`Period: Last ${days} days`, pageWidth / 2, yPosition + 5, { align: 'center' });
+      yPosition += 15;
+
+      // Summary statistics
+      doc.setTextColor(0);
+      doc.setFontSize(12);
+      doc.text('Summary Statistics', 10, yPosition);
+      yPosition += 8;
+
+      const summaryData = [
+        ['Metric', 'Value'],
+        ['Total Issues', data.total_issues || 0],
+        ['Open Issues', data.open_issues || 0],
+        ['Resolved Issues', data.resolved_issues || 0],
+        ['Escalated Issues', data.escalated_issues || 0],
+      ];
+
+      if (data.total_issues && data.resolved_issues) {
+        const resolutionRate = ((data.resolved_issues / data.total_issues) * 100).toFixed(1);
+        summaryData.push(['Resolution Rate', `${resolutionRate}%`]);
+      }
+
+      autoTable(doc, {
+        head: [summaryData[0]],
+        body: summaryData.slice(1),
+        startY: yPosition,
+        margin: { left: 10, right: 10 },
+      });
+      yPosition = doc.lastAutoTable?.finalY || yPosition;
+
+      // Issues by type table
+      if (data.by_type && Object.keys(data.by_type).length > 0) {
+        yPosition += 10;
+        doc.setFontSize(12);
+        doc.text('Issues by Type', 10, yPosition);
+        yPosition += 5;
+
+        const typeData = Object.entries(data.by_type).map(([type, count]) => [
+          type.replace(/_/g, ' ').charAt(0).toUpperCase() + type.replace(/_/g, ' ').slice(1),
+          count
+        ]);
+
+        autoTable(doc, {
+          head: [['Type', 'Count']],
+          body: typeData,
+          startY: yPosition,
+          margin: { left: 10, right: 10 },
+        });
+      }
+
+      // Issues by priority
+      if (data.by_priority && Object.keys(data.by_priority).length > 0) {
+        yPosition = doc.lastAutoTable?.finalY + 10 || yPosition + 10;
+        doc.setFontSize(12);
+        doc.text('Issues by Priority', 10, yPosition);
+        yPosition += 5;
+
+        const priorityData = Object.entries(data.by_priority).map(([priority, count]) => [
+          priority.charAt(0).toUpperCase() + priority.slice(1),
+          count
+        ]);
+
+        autoTable(doc, {
+          head: [['Priority', 'Count']],
+          body: priorityData,
+          startY: yPosition,
+          margin: { left: 10, right: 10 },
+        });
+      }
+
+      // Top wards
+      if (data.top_wards && data.top_wards.length > 0) {
+        yPosition = doc.lastAutoTable?.finalY + 10 || yPosition + 10;
+        doc.setFontSize(12);
+        doc.text('Top Wards by Issue Count', 10, yPosition);
+        yPosition += 5;
+
+        const wardData = data.top_wards.slice(0, 10).map((ward, idx) => [
+          idx + 1,
+          ward.ward || 'Unknown',
+          ward.count
+        ]);
+
+        autoTable(doc, {
+          head: [['Rank', 'Ward', 'Count']],
+          body: wardData,
+          startY: yPosition,
+          margin: { left: 10, right: 10 },
+        });
+      }
+
+      // Save the PDF
+      doc.save(`civic-analytics-${days}d-${now.toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('Failed to export PDF');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Convert data for charts
   const daily = data?.daily_counts
     ? Object.entries(data.daily_counts).map(([date, count]) => ({ date, count }))
     : [];
@@ -37,17 +160,39 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Time Range */}
-      <div className="flex gap-2">
-        {[7, 14, 30, 90].map((d) => (
-          <button
-            key={d}
-            onClick={() => setDays(d)}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${days === d ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-          >
-            {d}d
-          </button>
-        ))}
+      {/* Time Range & Export */}
+      <div className="flex gap-2 justify-between items-center">
+        <div className="flex gap-2">
+          {[7, 14, 30, 90].map((d) => (
+            <button
+              key={d}
+              onClick={() => setDays(d)}
+              className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${days === d ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={handleExportPDF}
+          disabled={exporting || !data}
+          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2 ${
+            exporting || !data
+              ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+              : 'bg-green-600 text-white hover:bg-green-700'
+          }`}
+        >
+          {exporting ? (
+            <>
+              <span className="animate-spin">⟳</span>
+              Exporting...
+            </>
+          ) : (
+            <>
+              📄 Export PDF
+            </>
+          )}
+        </button>
       </div>
 
       {loading ? (
