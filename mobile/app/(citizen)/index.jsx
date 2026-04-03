@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, ActivityIndicator, TextInput,
+  RefreshControl, ActivityIndicator, TextInput, Alert, Vibration,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,8 @@ import { useAuthStore } from '../../src/store/authStore';
 import { authApi } from '../../src/api/auth';
 import IssueCard from '../../src/components/common/IssueCard';
 import CitizenProfileModal from '../../src/components/CitizenProfileModal';
+import * as Location from 'expo-location';
+import logger from '../../src/utils/logger';
 
 const CATEGORIES = ['All', 'open', 'in_progress', 'resolved'];
 
@@ -205,6 +207,54 @@ export default function HomeScreen() {
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
 
+      {/* SOS Emergency Button */}
+      <TouchableOpacity
+        style={styles.sosFab}
+        onPress={() => {
+          Alert.alert(
+            '⚠️ Emergency SOS',
+            'This will report an emergency hazard at your current location and alert nearby citizens. Continue?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'SEND SOS',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    Vibration.vibrate([0, 200, 100, 200]);
+                    const { status } = await Location.requestForegroundPermissionsAsync();
+                    let latitude = user?.latitude || 0;
+                    let longitude = user?.longitude || 0;
+                    if (status === 'granted') {
+                      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+                      latitude = loc.coords.latitude;
+                      longitude = loc.coords.longitude;
+                    }
+                    const { data } = await issuesApi.create({
+                      issue_type: 'other',
+                      description: 'EMERGENCY SOS — Citizen reported an immediate hazard at this location.',
+                      latitude,
+                      longitude,
+                      address: user?.ward || 'Unknown',
+                      ward: user?.ward || '',
+                      is_sos: true,
+                    });
+                    logger.info('SOS', `SOS issue created: ${data?.id}`);
+                    Alert.alert('SOS Sent', 'Emergency reported! Nearby citizens and all admins have been alerted.');
+                    fetchIssues(true);
+                  } catch (err) {
+                    logger.error('SOS', 'Failed to send SOS', err);
+                    Alert.alert('Error', 'Failed to send SOS. Please try again.');
+                  }
+                },
+              },
+            ],
+          );
+        }}
+      >
+        <Text style={styles.sosText}>SOS</Text>
+      </TouchableOpacity>
+
       {/* Profile Completion Modal */}
       <CitizenProfileModal 
         visible={showProfileModal}
@@ -237,5 +287,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a56db', justifyContent: 'center', alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8,
     elevation: 8,
+  },
+  sosFab: {
+    position: 'absolute', bottom: 24, left: 20,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: '#dc2626', justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#dc2626', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8,
+    elevation: 8, borderWidth: 2, borderColor: '#fca5a5',
+  },
+  sosText: {
+    color: '#fff', fontSize: 13, fontWeight: '900', letterSpacing: 1,
   },
 });

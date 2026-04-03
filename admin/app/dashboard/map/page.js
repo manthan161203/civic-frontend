@@ -220,6 +220,14 @@ export default function MapPage() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const autoRefreshRef = useRef(null);
 
+  // Time Machine state
+  const [tmSnapshots, setTmSnapshots] = useState([]);
+  const [tmIndex, setTmIndex] = useState(0);
+  const [tmStartDate, setTmStartDate] = useState('');
+  const [tmEndDate, setTmEndDate] = useState('');
+  const [tmPlaying, setTmPlaying] = useState(false);
+  const tmIntervalRef = useRef(null);
+
   const fetchIssues = useCallback(async () => {
     setLoading(true);
     try {
@@ -243,8 +251,60 @@ export default function MapPage() {
 
   useEffect(() => {
     if (view === 'issues') fetchIssues();
-    else fetchWorkers();
+    else if (view === 'workers') fetchWorkers();
   }, [view, fetchIssues, fetchWorkers]);
+
+  // Time Machine fetch
+  const fetchTimeMachine = useCallback(async () => {
+    if (!tmStartDate || !tmEndDate) return;
+    setLoading(true);
+    try {
+      const { data } = await adminApi.getHeatmapTimeMachine({
+        start_date: tmStartDate,
+        end_date: tmEndDate,
+        interval_days: 1,
+        ...(typeFilter && { issue_type: typeFilter }),
+      });
+      setTmSnapshots(data || []);
+      setTmIndex(0);
+      setLastRefreshed(new Date());
+    } catch {}
+    setLoading(false);
+  }, [tmStartDate, tmEndDate, typeFilter]);
+
+  useEffect(() => {
+    if (view === 'timemachine') fetchTimeMachine();
+  }, [view, fetchTimeMachine]);
+
+  // Time Machine playback
+  useEffect(() => {
+    clearInterval(tmIntervalRef.current);
+    if (tmPlaying && tmSnapshots.length > 1) {
+      tmIntervalRef.current = setInterval(() => {
+        setTmIndex((i) => {
+          if (i >= tmSnapshots.length - 1) {
+            setTmPlaying(false);
+            return i;
+          }
+          return i + 1;
+        });
+      }, 800);
+    }
+    return () => clearInterval(tmIntervalRef.current);
+  }, [tmPlaying, tmSnapshots.length]);
+
+  // Set default time machine dates (last 14 days)
+  useEffect(() => {
+    if (!tmStartDate) {
+      const end = new Date();
+      const start = new Date(end);
+      start.setDate(start.getDate() - 14);
+      setTmStartDate(start.toISOString().split('T')[0]);
+      setTmEndDate(end.toISOString().split('T')[0]);
+    }
+  }, [tmStartDate]);
+
+  const tmCurrentPoints = tmSnapshots[tmIndex]?.points || [];
 
   // Auto-refresh every 30s for workers
   useEffect(() => {
@@ -263,7 +323,9 @@ export default function MapPage() {
   const positions =
     view === 'issues'
       ? issuePoints.map((p) => ({ lat: p.lat, lng: p.lng }))
-      : workerPoints.map((w) => ({ lat: w.latitude, lng: w.longitude }));
+      : view === 'workers'
+      ? workerPoints.map((w) => ({ lat: w.latitude, lng: w.longitude }))
+      : tmCurrentPoints.map((p) => ({ lat: p.lat, lng: p.lng }));
 
   const onlineCount = workerPoints.filter((w) => w.is_online).length;
 
@@ -284,6 +346,12 @@ export default function MapPage() {
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${view === 'workers' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
             Worker Locations
+          </button>
+          <button
+            onClick={() => setView('timemachine')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${view === 'timemachine' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            ⏱ Time Machine
           </button>
         </div>
 
@@ -317,6 +385,35 @@ export default function MapPage() {
           </>
         )}
 
+        {/* Time Machine controls */}
+        {view === 'timemachine' && (
+          <>
+            <input type="date" value={tmStartDate} onChange={(e) => setTmStartDate(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400 bg-white" />
+            <span className="text-xs text-gray-400">to</span>
+            <input type="date" value={tmEndDate} onChange={(e) => setTmEndDate(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400 bg-white" />
+            <button onClick={fetchTimeMachine}
+              className="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition-colors">
+              Load
+            </button>
+            {tmSnapshots.length > 1 && (
+              <>
+                <button onClick={() => setTmPlaying(!tmPlaying)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${tmPlaying ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>
+                  {tmPlaying ? '⏸ Pause' : '▶ Play'}
+                </button>
+                <input type="range" min={0} max={tmSnapshots.length - 1} value={tmIndex}
+                  onChange={(e) => { setTmPlaying(false); setTmIndex(Number(e.target.value)); }}
+                  className="w-32 accent-purple-600" />
+                <span className="text-xs font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
+                  {tmSnapshots[tmIndex]?.date || '—'} ({tmSnapshots[tmIndex]?.active_count ?? 0})
+                </span>
+              </>
+            )}
+          </>
+        )}
+
         <div className="flex-1" />
 
         {/* Stats badge */}
@@ -325,7 +422,7 @@ export default function MapPage() {
             <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold">
               {issuePoints.length} issues
             </span>
-          ) : (
+          ) : view === 'workers' ? (
             <>
               <span className="bg-green-50 text-green-700 px-2.5 py-1 rounded-full font-semibold">
                 {onlineCount} online
@@ -334,7 +431,11 @@ export default function MapPage() {
                 {workerPoints.length - onlineCount} offline
               </span>
             </>
-          )}
+          ) : tmSnapshots.length > 0 ? (
+            <span className="bg-purple-50 text-purple-700 px-2.5 py-1 rounded-full font-semibold">
+              {tmSnapshots.length} snapshots
+            </span>
+          ) : null}
         </div>
 
         {/* Last refreshed */}
@@ -370,6 +471,7 @@ export default function MapPage() {
         >
           {view === 'issues' && <IssueMarkers points={issuePoints} />}
           {view === 'workers' && <WorkerMarkers workers={workerPoints} />}
+          {view === 'timemachine' && <IssueMarkers points={tmCurrentPoints} />}
           <FitBoundsOnce positions={positions} viewKey={view} />
           <PanToUser trigger={locateTrigger} />
         </Map>
@@ -446,7 +548,7 @@ export default function MapPage() {
         {!loading && positions.length === 0 && (
           <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
             <div className="bg-white rounded-xl shadow-lg px-4 py-2.5 text-sm text-gray-500 font-medium">
-              No {view === 'issues' ? 'active issues' : 'workers'} to display
+              No {view === 'issues' ? 'active issues' : view === 'workers' ? 'workers' : 'data for selected range'} to display
             </div>
           </div>
         )}

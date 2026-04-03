@@ -63,6 +63,21 @@ export const adminApi = {
   getAnnouncements: () => api.get('/admin/announcements'),
   createAnnouncement: (data) => api.post('/admin/announcements', data),
   deleteAnnouncement: (id) => api.delete(`/admin/announcements/${id}`),
+
+  // SOS
+  getActiveSOS: () => api.get('/admin/sos/active'),
+
+  // Heatmap Time Machine
+  getHeatmapTimeMachine: (params) => api.get('/admin/heatmap/timemachine', { params }),
+
+  // Squads
+  createSquad: (params) => api.post('/admin/squads', null, { params }),
+  getSquad: (issueId) => api.get(`/admin/squads/${issueId}`),
+};
+
+// Public (unauthenticated)
+export const publicApi = {
+  getLeaderboard: (params) => api.get('/public/leaderboard', { params }),
 };
 
 // Locations

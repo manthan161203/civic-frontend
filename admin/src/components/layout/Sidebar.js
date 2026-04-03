@@ -42,6 +42,18 @@ const NAV = [
     ),
   },
   {
+    href: '/dashboard/squads',
+    label: 'Squads',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:18,height:18}}>
+        <circle cx="9" cy="7" r="3" />
+        <circle cx="17" cy="7" r="3" />
+        <path d="M13 21v-2a4 4 0 00-8 0v2" />
+        <path d="M21 21v-2a4 4 0 00-4-4h-1" />
+      </svg>
+    ),
+  },
+  {
     href: '/dashboard/citizens',
     label: 'Citizens',
     icon: (
@@ -126,6 +138,19 @@ const NAV = [
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:18,height:18}}>
         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
         <circle cx="12" cy="10" r="3" />
+      </svg>
+    ),
+  },
+  {
+    href: '/dashboard/leaderboard',
+    label: 'Leaderboard',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:18,height:18}}>
+        <path d="M6 9H4.5a2.5 2.5 0 010-5C7 4 7 7 7 7" />
+        <path d="M18 9h1.5a2.5 2.5 0 000-5C17 4 17 7 17 7" />
+        <rect x="6" y="9" width="12" height="10" rx="2" />
+        <path d="M12 19v3M8 22h8" />
+        <path d="M12 9V4" />
       </svg>
     ),
   },
