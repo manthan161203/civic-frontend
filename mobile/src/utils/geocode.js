@@ -50,3 +50,27 @@ export const reverseGeocode = async (latitude, longitude) => {
     return null;
   }
 };
+
+export const forwardGeocode = async (address) => {
+  try {
+    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) throw new Error('Google Maps API key not configured');
+
+    const response = await axios.get(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`
+    );
+
+    if (response.data.results?.length > 0) {
+      const { lat, lng } = response.data.results[0].geometry.location;
+      return {
+        latitude: lat,
+        longitude: lng,
+        address: response.data.results[0].formatted_address,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Forward geocoding error:', error);
+    return null;
+  }
+};

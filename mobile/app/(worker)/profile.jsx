@@ -188,7 +188,10 @@ export default function WorkerProfile() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statVal}>{stats.avg_rating ? `${stats.avg_rating.toFixed(1)}★` : '—'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+              <Text style={styles.statVal}>{stats.avg_rating ? stats.avg_rating.toFixed(1) : '—'}</Text>
+              {!!stats.avg_rating && <Ionicons name="star" size={13} color="#f59e0b" />}
+            </View>
             <Text style={styles.statLabel}>Rating</Text>
           </View>
         </View>

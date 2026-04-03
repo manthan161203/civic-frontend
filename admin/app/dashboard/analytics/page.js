@@ -9,8 +9,10 @@
  * - PDF export functionality
  */
 import { useState, useEffect } from 'react';
-import { adminApi } from '../../../src/api/index';
+import { adminApi, locationsApi } from '../../../src/api/index';
 import { logger } from '../../../src/lib/logger';
+import { useAuthStore } from '../../../src/store/authStore';
+import AdminScopeHeader from '../../../src/components/AdminScopeHeader';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
@@ -22,11 +24,13 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'
 const COMPONENT_NAME = 'AnalyticsPage';
 
 export default function AnalyticsPage() {
+  const { user } = useAuthStore();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(30);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState(null);
+  const [locationTree, setLocationTree] = useState([]);
 
   /**
    * Fetch analytics data on mount and when days filter changes
@@ -34,6 +38,15 @@ export default function AnalyticsPage() {
   useEffect(() => {
     fetchAnalyticsData();
   }, [days]);
+
+  /**
+   * Fetch location tree on mount
+   */
+  useEffect(() => {
+    locationsApi.getTree()
+      .then(({ data }) => setLocationTree(data || []))
+      .catch(() => {});
+  }, []);
 
   /**
    * Fetch analytics data with proper error handling
@@ -212,6 +225,9 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Admin Scope Header */}
+      {user && <AdminScopeHeader user={user} locationTree={locationTree} />}
+
       {/* Time Range & Export */}
       <div className="flex gap-2 justify-between items-center">
         <div className="flex gap-2">
@@ -230,7 +246,23 @@ export default function AnalyticsPage() {
           disabled={exporting || !data}
           className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2 ${exporting || !data ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}
         >
-          {exporting ? <><span className="animate-spin">⟳</span>Exporting...</> : <>📄 Export PDF</>}
+          {exporting ? (
+            <>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="animate-spin" style={{ width: 16, height: 16 }}>
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v6l4 2" />
+              </svg>
+              Exporting...
+            </>
+          ) : (
+            <>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ width: 16, height: 16 }}>
+                <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" />
+                <polyline points="13 2 13 9 20 9" />
+              </svg>
+              Export PDF
+            </>
+          )}
         </button>
       </div>
 

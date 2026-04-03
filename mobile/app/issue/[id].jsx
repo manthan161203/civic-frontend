@@ -150,9 +150,9 @@ export default function IssueDetailScreen() {
     setPosting(false);
   };
 
-  const handleFlag = async (reason, description) => {
+  const handleFlag = async (reason, details) => {
     try {
-      await issuesApi.flag(id, reason, description);
+      await issuesApi.flag(id, reason, details);
       Alert.alert('Reported', 'Thank you. Our team will review this issue.');
     } catch (err) {
       Alert.alert('Error', err.response?.data?.detail || 'Failed to submit report.');

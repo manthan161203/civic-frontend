@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { adminApi, locationsApi } from '../../../src/api/index';
 import { getErrorMessage } from '../../../src/lib/apiError';
 import { formatDate } from '../../../src/lib/dateUtils';
@@ -49,6 +50,8 @@ function CreateModal({ onClose, onCreated }) {
   const [selectedDistrict, setSelectedDistrict] = useState('');
   const [selectedTaluka, setSelectedTaluka] = useState('');
   const [selectedWard, setSelectedWard] = useState('');
+  const [attachLocation, setAttachLocation] = useState(false);
+  const [pin, setPin] = useState({ lat: 22.2587, lng: 71.1924 }); // default: Gujarat center
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -82,6 +85,10 @@ function CreateModal({ onClose, onCreated }) {
     if (form.scope === 'district' && selectedDistrict) payload.district_id = selectedDistrict;
     if (form.scope === 'taluka' && selectedTaluka) payload.taluka_id = selectedTaluka;
     if (form.scope === 'ward' && selectedWard) payload.ward_id = selectedWard;
+    if (attachLocation) {
+      payload.location_lat = pin.lat;
+      payload.location_lng = pin.lng;
+    }
 
     setSaving(true);
     try {
@@ -97,7 +104,7 @@ function CreateModal({ onClose, onCreated }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-gray-900 mb-4">New Announcement</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -192,6 +199,66 @@ function CreateModal({ onClose, onCreated }) {
           )}
 
           {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+          {/* Attach Location (optional) */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setAttachLocation((v) => !v)}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-semibold transition-colors ${
+                attachLocation ? 'bg-green-50 border-green-400 text-green-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:16,height:16}}>
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" />
+              </svg>
+              {attachLocation ? 'Location attached — tap map to move pin' : 'Attach a clickable location (optional)'}
+            </button>
+
+            {attachLocation && (
+              <div className="mt-3 space-y-2">
+                <div style={{ height: 220, borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+                  <Map
+                    defaultCenter={pin}
+                    defaultZoom={12}
+                    mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_ID}
+                    onClick={(e) => {
+                      const latLng = e.detail?.latLng;
+                      if (latLng) setPin({ lat: latLng.lat, lng: latLng.lng });
+                    }}
+                    style={{ width: '100%', height: '100%' }}
+                    gestureHandling="greedy"
+                    disableDefaultUI
+                  >
+                    <AdvancedMarker position={pin} />
+                  </Map>
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 mb-0.5">Latitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={pin.lat.toFixed(6)}
+                      onChange={(e) => setPin((p) => ({ ...p, lat: parseFloat(e.target.value) || p.lat }))}
+                      className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 mb-0.5">Longitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={pin.lng.toFixed(6)}
+                      onChange={(e) => setPin((p) => ({ ...p, lng: parseFloat(e.target.value) || p.lng }))}
+                      className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">Citizens will see a "View on Map" button in the notification.</p>
+              </div>
+            )}
+          </div>
 
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-semibold">
@@ -298,6 +365,14 @@ export default function AnnouncementsPage() {
                     {(a.ward_name || a.taluka_name || a.district_name) && (
                       <span className="text-xs text-gray-400">
                         · {a.ward_name || a.taluka_name || a.district_name}
+                      </span>
+                    )}
+                    {a.location_lat != null && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-100">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:11,height:11}}>
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" />
+                        </svg>
+                        Location
                       </span>
                     )}
                   </div>

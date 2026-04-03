@@ -1,8 +1,11 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { adminApi, locationsApi } from '../../../src/api/index';
 import { formatDate } from '../../../src/lib/dateUtils';
+import { useAuthStore } from '../../../src/store/authStore';
+import AdminScopeHeader from '../../../src/components/AdminScopeHeader';
 
 const STATUS_COLORS = {
   open: 'bg-red-100 text-red-700',
@@ -18,6 +21,20 @@ const PRIORITY_COLORS = {
   medium: 'bg-yellow-100 text-yellow-700',
   high: 'bg-red-100 text-red-700',
   critical: 'bg-purple-100 text-purple-700',
+};
+
+const ROLE_COLORS = {
+  admin: { bg: 'bg-red-50', text: 'text-red-700', icon: 'bg-red-100' },
+  district_admin: { bg: 'bg-orange-50', text: 'text-orange-700', icon: 'bg-orange-100' },
+  taluka_admin: { bg: 'bg-yellow-50', text: 'text-yellow-700', icon: 'bg-yellow-100' },
+  ward_admin: { bg: 'bg-blue-50', text: 'text-blue-700', icon: 'bg-blue-100' },
+};
+
+const ROLE_LABELS = {
+  admin: 'Super Admin',
+  district_admin: 'District Admin',
+  taluka_admin: 'Taluka Admin',
+  ward_admin: 'Ward Admin',
 };
 
 // ── Assign Modal ───────────────────────────────────────────────────────────────
@@ -221,6 +238,8 @@ function IssueDetailModal({ issue, workerMap, onClose }) {
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function IssuesPage() {
+  const searchParams = useSearchParams();
+  const { user } = useAuthStore();
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -232,6 +251,7 @@ export default function IssuesPage() {
   const [detailIssue, setDetailIssue] = useState(null);
   const [workerMap, setWorkerMap] = useState({});
   const [autoAssigning, setAutoAssigning] = useState(false);
+  const [locationTree, setLocationTree] = useState([]);
   const fetchedWorkerIds = useRef(new Set());
 
   const PAGE_SIZE = 20;
@@ -252,11 +272,26 @@ export default function IssuesPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Pre-populate worker id→name map on mount
+  // Handle issue_id query parameter (from SLA dashboard)
   useEffect(() => {
-    adminApi.getWorkers({ size: 200 })
-      .then(({ data }) => {
-        const workers = data.items || data;
+    const issueId = searchParams.get('issue_id');
+    if (issueId && issues.length > 0) {
+      const found = issues.find((i) => i.id === issueId);
+      if (found) {
+        setDetailIssue(found);
+      }
+    }
+  }, [searchParams, issues]);
+
+  // Fetch location tree and workers on mount
+  useEffect(() => {
+    Promise.all([
+      locationsApi.getTree(),
+      adminApi.getWorkers({ size: 200 })
+    ])
+      .then(([locationRes, workersRes]) => {
+        setLocationTree(locationRes.data || []);
+        const workers = workersRes.data.items || workersRes.data;
         const map = {};
         workers.forEach((w) => { map[w.id] = w.name; });
         setWorkerMap(map);
@@ -334,6 +369,9 @@ export default function IssuesPage() {
 
   return (
     <div className="space-y-4">
+      {/* Admin Scope Header */}
+      {user && <AdminScopeHeader user={user} locationTree={locationTree} />}
+
       {/* Modals */}
       {assignIssue && (
         <AssignModal
@@ -410,9 +448,12 @@ export default function IssuesPage() {
         <button
           onClick={handleAutoAssign}
           disabled={autoAssigning}
-          className="px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+          className="px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
         >
-          {autoAssigning ? 'Assigning…' : '⚡ Auto-Assign Open'}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ width: 14, height: 14 }}>
+            <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+          {autoAssigning ? 'Assigning…' : 'Auto-Assign Open'}
         </button>
         <button
           onClick={handleExport}

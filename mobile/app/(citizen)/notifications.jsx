@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, ActivityIndicator, Alert,
+  RefreshControl, ActivityIndicator, Alert, Modal, ScrollView, Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -10,6 +10,8 @@ import { formatDateTime } from '../../src/utils/dateUtils';
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
+  const [selected, setSelected] = useState(null); // notification shown in detail modal
   const {
     notifications, unreadCount, isLoading,
     fetchNotifications, markAllRead, markOneRead, deleteOne, deleteAll,
@@ -17,9 +19,20 @@ export default function NotificationsScreen() {
 
   useEffect(() => { fetchNotifications(); }, []);
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchNotifications();
+    setRefreshing(false);
+  };
+
   const handlePress = (n) => {
     markOneRead(n.id);
-    if (n.issue_id) router.push(`/issue/${n.issue_id}`);
+    if (n.issue_id) {
+      router.push(`/issue/${n.issue_id}`);
+    } else {
+      // System / bulk / geofence notification — show full content in modal
+      setSelected(n);
+    }
   };
 
   const handleDeleteAll = () => {
@@ -48,7 +61,7 @@ export default function NotificationsScreen() {
     >
       <View style={[styles.iconBg, { backgroundColor: n.is_read ? '#f3f4f6' : '#eff6ff' }]}>
         <Ionicons
-          name={n.is_read ? 'notifications-outline' : 'notifications'}
+          name={n.issue_id ? (n.is_read ? 'document-text-outline' : 'document-text') : (n.is_read ? 'megaphone-outline' : 'megaphone')}
           size={20}
           color={n.is_read ? '#9ca3af' : '#1a56db'}
         />
@@ -56,14 +69,23 @@ export default function NotificationsScreen() {
       <View style={styles.textCol}>
         <Text style={[styles.title, !n.is_read && styles.titleUnread]}>{n.title}</Text>
         <Text style={styles.body} numberOfLines={2}>{n.body || n.message}</Text>
+        {n.location_lat != null && (
+          <View style={styles.locBadge}>
+            <Ionicons name="location-outline" size={11} color="#16a34a" />
+            <Text style={styles.locBadgeText}>Has location</Text>
+          </View>
+        )}
         <Text style={styles.time}>
           {formatDateTime(n.created_at, 'en-IN')}
         </Text>
       </View>
       {!n.is_read && <View style={styles.dot} />}
-      <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteOne(n.id)}>
-        <Ionicons name="trash-outline" size={16} color="#d1d5db" />
-      </TouchableOpacity>
+      <View style={styles.rightActions}>
+        <Ionicons name="chevron-forward" size={14} color="#d1d5db" />
+        <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteOne(n.id)}>
+          <Ionicons name="trash-outline" size={16} color="#d1d5db" />
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 
@@ -92,7 +114,7 @@ export default function NotificationsScreen() {
           data={notifications}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderItem}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={fetchNotifications} tintColor="#1a56db" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a56db" />}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="notifications-off-outline" size={48} color="#d1d5db" />
@@ -101,6 +123,61 @@ export default function NotificationsScreen() {
           }
         />
       )}
+
+      {/* Notification Detail Modal */}
+      <Modal
+        visible={!!selected}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelected(null)}
+      >
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setSelected(null)}>
+          <TouchableOpacity style={styles.modalSheet} activeOpacity={1}>
+            {/* Handle */}
+            <View style={styles.modalHandle} />
+
+            {/* Icon + type label */}
+            <View style={styles.modalIconRow}>
+              <View style={styles.modalIconBg}>
+                <Ionicons name="megaphone" size={28} color="#1a56db" />
+              </View>
+              <Text style={styles.modalTypeLabel}>Announcement</Text>
+            </View>
+
+            {/* Title */}
+            <Text style={styles.modalTitle}>{selected?.title}</Text>
+
+            {/* Body — scrollable in case it's long */}
+            <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalBody}>{selected?.body || selected?.message}</Text>
+            </ScrollView>
+
+            {/* Timestamp */}
+            <Text style={styles.modalTime}>
+              {selected ? formatDateTime(selected.created_at, 'en-IN') : ''}
+            </Text>
+
+            {/* View on Map button — only shown when location is attached */}
+            {selected?.location_lat != null && selected?.location_lng != null && (
+              <TouchableOpacity
+                style={styles.mapBtn}
+                onPress={() => {
+                  const url = `https://maps.google.com/?q=${selected.location_lat},${selected.location_lng}`;
+                  Linking.openURL(url);
+                }}
+              >
+                <Ionicons name="location" size={18} color="#fff" />
+                <Text style={styles.mapBtnText}>View on Map</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Close */}
+            <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setSelected(null)}>
+              <Text style={styles.modalCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -128,7 +205,44 @@ const styles = StyleSheet.create({
   body: { fontSize: 13, color: '#6b7280', lineHeight: 18 },
   time: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1a56db', marginTop: 6, flexShrink: 0 },
-  deleteBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginLeft: 4, backgroundColor: '#fef2f2' },
+  rightActions: { flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0 },
+  deleteBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fef2f2' },
   empty: { alignItems: 'center', marginTop: 80, gap: 12 },
   emptyText: { fontSize: 16, color: '#9ca3af' },
+
+  // Detail modal
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 36, maxHeight: '80%',
+  },
+  modalHandle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: '#e5e7eb',
+    alignSelf: 'center', marginBottom: 20,
+  },
+  modalIconRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  modalIconBg: {
+    width: 52, height: 52, borderRadius: 26, backgroundColor: '#eff6ff',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  modalTypeLabel: { fontSize: 13, fontWeight: '600', color: '#1a56db', textTransform: 'uppercase', letterSpacing: 0.5 },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 12 },
+  modalBodyScroll: { maxHeight: 200, marginBottom: 16 },
+  modalBody: { fontSize: 15, color: '#374151', lineHeight: 24 },
+  modalTime: { fontSize: 12, color: '#9ca3af', marginBottom: 20 },
+  modalCloseBtn: {
+    backgroundColor: '#1a56db', borderRadius: 14, paddingVertical: 14,
+    alignItems: 'center',
+  },
+  modalCloseBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  mapBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#16a34a', borderRadius: 14, paddingVertical: 14, marginBottom: 10,
+  },
+  mapBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  locBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    marginTop: 3,
+  },
+  locBadgeText: { fontSize: 11, color: '#16a34a', fontWeight: '600' },
 });

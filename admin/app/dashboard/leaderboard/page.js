@@ -2,8 +2,6 @@
 import { useEffect, useState } from 'react';
 import { publicApi } from '../../../src/api/index';
 
-const MEDAL = ['🥇', '🥈', '🥉'];
-
 function ScoreBar({ value, max = 100, color }) {
   return (
     <div className="h-2 bg-gray-100 rounded-full overflow-hidden" style={{ width: 80 }}>
@@ -68,7 +66,21 @@ export default function LeaderboardPage() {
               const color = i === 0 ? '#f59e0b' : i === 1 ? '#9ca3af' : '#cd7f32';
               return (
                 <div key={w.ward} className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm text-center">
-                  <span className="text-3xl">{MEDAL[i]}</span>
+                  <div style={{
+                    width: 48,
+                    height: 48,
+                    margin: '0 auto 8px',
+                    borderRadius: '50%',
+                    backgroundColor: color,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: 24,
+                    fontWeight: 'bold',
+                  }}>
+                    {i + 1}
+                  </div>
                   <h3 className="font-bold text-gray-900 mt-2 text-sm truncate">{w.ward}</h3>
                   <div className="text-3xl font-black mt-1" style={{ color }}>{w.score}</div>
                   <p className="text-xs text-gray-500 mt-1">{w.total_issues} issues · {w.resolution_rate}% resolved</p>
@@ -120,7 +132,14 @@ export default function LeaderboardPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center text-gray-600">
-                        {'⭐'.repeat(Math.round(w.avg_rating))} {w.avg_rating}
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {[...Array(Math.round(w.avg_rating))].map((_, i) => (
+                            <svg key={i} viewBox="0 0 24 24" fill="#fbbf24" style={{ width: 14, height: 14 }}>
+                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27z" />
+                            </svg>
+                          ))}
+                          {w.avg_rating}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">

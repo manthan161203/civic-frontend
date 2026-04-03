@@ -57,7 +57,7 @@ export const adminApi = {
 
   // Flags
   getFlags: (params) => api.get('/admin/flags', { params }),
-  resolveFlag: (id, status) => api.patch(`/admin/flags/${id}`, { status }),
+  resolveFlag: (id, status) => api.patch(`/admin/flags/${id}`, null, { params: { status } }),
 
   // Announcements
   getAnnouncements: () => api.get('/admin/announcements'),
@@ -73,6 +73,16 @@ export const adminApi = {
   // Squads
   createSquad: (params) => api.post('/admin/squads', null, { params }),
   getSquad: (issueId) => api.get(`/admin/squads/${issueId}`),
+
+  // SLA & Auto-Escalation
+  getSLADashboard: () => api.get('/issues/sla/dashboard'),
+  getSLAIssueDetail: (id) => api.get(`/issues/sla/${id}`),
+
+  // Notifications
+  sendGeofenceNotification: (latitude, longitude, radius_km, title, body) =>
+    api.post('/admin/notifications/geofence', null, {
+      params: { latitude, longitude, radius_km, title, body },
+    }),
 };
 
 // Public (unauthenticated)

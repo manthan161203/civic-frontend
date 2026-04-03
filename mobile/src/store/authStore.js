@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import * as SecureStore from '../utils/secureStoreShim';
 import { authApi } from '../api/auth';
 
-// Attempt to register Expo push token and save it to the backend (best-effort)
+// Attempt to register native FCM device token and save it to the backend (best-effort)
 async function registerPushToken() {
   try {
     const Notifications = await import('expo-notifications');
@@ -14,10 +14,11 @@ async function registerPushToken() {
     }
     if (finalStatus !== 'granted') return;
 
-    const tokenData = await Notifications.getExpoPushTokenAsync();
-    const expoToken = tokenData.data;
-    if (expoToken) {
-      await authApi.updateProfile({ fcm_token: expoToken });
+    // Use native FCM device token (required for firebase_admin direct sends)
+    const tokenData = await Notifications.getDevicePushTokenAsync();
+    const fcmToken = tokenData.data;
+    if (fcmToken) {
+      await authApi.updateProfile({ fcm_token: fcmToken });
     }
   } catch {
     // Push notifications are best-effort — never block login

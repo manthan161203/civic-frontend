@@ -37,6 +37,34 @@ function IssueMarkers({ points }) {
   return (
     <>
       {points.map((p, i) => {
+        // SOS issues: flashing red star
+        if (p.is_sos) {
+          return (
+            <AdvancedMarker
+              key={`sos-${i}`}
+              position={{ lat: p.lat, lng: p.lng }}
+              onClick={() => setSelected(selected?.id === p.id ? null : p)}
+              zIndex={10}
+            >
+              <div style={{
+                width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                animation: 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              }}>
+                <svg viewBox="0 0 24 24" fill="#ff0000" stroke="#fff" strokeWidth={1} style={{ width: 24, height: 24 }}>
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+              </div>
+              <style>{`
+                @keyframes pulse {
+                  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 2px rgba(255, 0, 0, 0.8)); }
+                  50% { transform: scale(1.2); filter: drop-shadow(0 0 8px rgba(255, 0, 0, 1)); }
+                }
+              `}</style>
+            </AdvancedMarker>
+          );
+        }
+
+        // Regular issues: colored circles
         const color = TYPE_COLORS[p.issue_type] || TYPE_COLORS.other;
         const size = p.weight === 3 ? 20 : p.weight === 2 ? 15 : 11;
         return (
@@ -64,21 +92,37 @@ function IssueMarkers({ points }) {
           pixelOffset={[0, -12]}
         >
           <div style={{ minWidth: 180, maxWidth: 220, padding: '2px 4px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <span style={{
-                width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                backgroundColor: TYPE_COLORS[selected.issue_type] || TYPE_COLORS.other,
-              }} />
-              <span style={{ fontWeight: 700, fontSize: 13, color: '#111827' }}>
-                {TYPE_LABELS[selected.issue_type] || selected.issue_type}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {selected.is_sos ? (
+                  <svg viewBox="0 0 24 24" fill="#ff0000" style={{ width: 12, height: 12, flexShrink: 0 }}>
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                ) : (
+                  <span style={{
+                    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                    backgroundColor: TYPE_COLORS[selected.issue_type] || TYPE_COLORS.other,
+                  }} />
+                )}
+                <span style={{ fontWeight: 700, fontSize: 13, color: '#111827' }}>
+                  {TYPE_LABELS[selected.issue_type] || selected.issue_type}
+                </span>
+              </div>
+              {selected.is_sos && (
+                <span style={{
+                  padding: '1px 6px', borderRadius: 4, backgroundColor: '#ff0000', color: '#fff',
+                  fontSize: 10, fontWeight: 700, textTransform: 'uppercase'
+                }}>
+                  SOS
+                </span>
+              )}
             </div>
             {selected.description && (
               <p style={{ fontSize: 12, color: '#374151', marginBottom: 4, lineHeight: 1.4 }}>
                 {selected.description.slice(0, 100)}{selected.description.length > 100 ? '…' : ''}
               </p>
             )}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 8px', fontSize: 11 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 8px', fontSize: 11, marginBottom: 4 }}>
               <span style={{
                 padding: '1px 7px', borderRadius: 99,
                 backgroundColor: STATUS_COLORS[selected.status] || '#6b7280',
@@ -86,12 +130,30 @@ function IssueMarkers({ points }) {
               }}>
                 {(selected.status || 'open').replace('_', ' ')}
               </span>
-              <span style={{ color: '#6b7280', alignSelf: 'center' }}>
-                Severity: {selected.weight === 3 ? '🔴 High' : selected.weight === 2 ? '🟡 Medium' : '🟢 Low'}
+              <span style={{ color: '#6b7280', alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span>Severity:</span>
+                {selected.weight === 3 ? (
+                  <svg viewBox="0 0 24 24" fill="#ef4444" style={{ width: 12, height: 12 }}><circle cx="12" cy="12" r="10" /></svg>
+                ) : selected.weight === 2 ? (
+                  <svg viewBox="0 0 24 24" fill="#f59e0b" style={{ width: 12, height: 12 }}><circle cx="12" cy="12" r="10" /></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="#10b981" style={{ width: 12, height: 12 }}><circle cx="12" cy="12" r="10" /></svg>
+                )}
+                <span>{selected.weight === 3 ? 'High' : selected.weight === 2 ? 'Medium' : 'Low'}</span>
               </span>
             </div>
+            {selected.address && (
+              <p style={{ fontSize: 11, color: '#6b7280', marginBottom: 2, display: 'flex', alignItems: 'start', gap: 4 }}>
+                <svg viewBox="0 0 24 24" fill="#6b7280" style={{ width: 12, height: 12, marginTop: 1, flexShrink: 0 }}>
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" />
+                </svg>
+                <span>{selected.address}</span>
+              </p>
+            )}
             {selected.ward_name && (
-              <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>📍 {selected.ward_name}</p>
+              <p style={{ fontSize: 11, color: '#9ca3af' }}>
+                Ward: <strong style={{ color: '#6b7280' }}>{selected.ward_name}</strong>
+              </p>
             )}
           </div>
         </InfoWindow>
@@ -156,17 +218,38 @@ function WorkerMarkers({ workers }) {
               </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 13, color: '#111827' }}>{selected.name}</div>
-                <div style={{ fontSize: 11, color: selected.is_online ? '#16a34a' : '#9ca3af', fontWeight: 600 }}>
-                  {selected.is_online ? '● Online' : '○ Offline'}
+                <div style={{ fontSize: 11, color: selected.is_online ? '#16a34a' : '#9ca3af', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 8, height: 8 }}>
+                    <circle cx="12" cy="12" r="10" />
+                  </svg>
+                  {selected.is_online ? 'Online' : 'Offline'}
                 </div>
               </div>
             </div>
             <div style={{ fontSize: 11, color: '#6b7280', display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {selected.phone && <span>📞 {selected.phone}</span>}
-              {selected.department && <span>🏢 {selected.department}</span>}
-              {selected.ward && <span>📍 {selected.ward}</span>}
+              {selected.phone && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <svg viewBox="0 0 24 24" fill="#6b7280" style={{ width: 12, height: 12 }}><path d="M17.92 7.02C17.45 6.18 16.51 5.55 15.43 5.55c-1.08 0-2.02.63-2.49 1.47C12.25 5.82 11.01 5 9.5 5C7.57 5 6 6.57 6 8.5c0 5.08 5.25 9.5 9.5 9.5s9.5-4.42 9.5-9.5c0-1.25-.25-2.45-.58-3.48zM9.5 17c-4 0-7.5-3-7.5-7.5C2 8.04 4.5 5.5 8 5.5c1.5 0 2.8.5 3.8 1.3-.5.6-.8 1.4-.8 2.2 0 2.2 1.8 4 4 4s4-1.8 4-4c0-.8-.3-1.6-.8-2.2 1 1 1.8 2.3 1.8 3.9 0 4.5-3.5 7.5-7.5 7.5z" /></svg>
+                  {selected.phone}
+                </span>
+              )}
+              {selected.department && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <svg viewBox="0 0 24 24" fill="#6b7280" style={{ width: 12, height: 12 }}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" /></svg>
+                  {selected.department}
+                </span>
+              )}
+              {selected.ward && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <svg viewBox="0 0 24 24" fill="#6b7280" style={{ width: 12, height: 12 }}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" /></svg>
+                  {selected.ward}
+                </span>
+              )}
               {selected.location_updated_at && (
-                <span>🕒 Updated {new Date(selected.location_updated_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <svg viewBox="0 0 24 24" fill="#6b7280" style={{ width: 12, height: 12 }}><path d="M11.99 5V1h2v4h4v2h-4v4h-2V7h-4V5h4zm-7 8.5c0-2.64 2.05-4.78 4.65-4.99V7c-3.87.22-7 3.68-7 7.5s3.13 7.28 7 7.5v-1.51c-2.6-.21-4.65-2.35-4.65-4.99zm7 4.99v1.51c3.87-.22 7-3.63 7-7.5s-3.13-7.28-7-7.5V5c2.6.21 4.65 2.35 4.65 4.99 0 2.64-2.05 4.78-4.65 4.99z" /></svg>
+                  Updated {new Date(selected.location_updated_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                </span>
               )}
             </div>
           </div>
@@ -211,6 +294,7 @@ function FitBoundsOnce({ positions, viewKey }) {
 export default function MapPage() {
   const [view, setView] = useState('issues');
   const [typeFilter, setTypeFilter] = useState('');
+  const [sosOnly, setSosOnly] = useState(false);
   const [onlineOnly, setOnlineOnly] = useState(true);
   const [loading, setLoading] = useState(false);
   const [issuePoints, setIssuePoints] = useState([]);
@@ -233,11 +317,15 @@ export default function MapPage() {
     try {
       const params = typeFilter ? { issue_type: typeFilter } : {};
       const { data } = await adminApi.getHeatmap(params);
-      setIssuePoints((data || []).filter((p) => p.lat && p.lng));
+      let points = (data || []).filter((p) => p.lat && p.lng);
+      if (sosOnly) {
+        points = points.filter((p) => p.is_sos);
+      }
+      setIssuePoints(points);
       setLastRefreshed(new Date());
     } catch {}
     setLoading(false);
-  }, [typeFilter]);
+  }, [typeFilter, sosOnly]);
 
   const fetchWorkers = useCallback(async () => {
     setLoading(true);
@@ -349,24 +437,36 @@ export default function MapPage() {
           </button>
           <button
             onClick={() => setView('timemachine')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${view === 'timemachine' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-2 ${view === 'timemachine' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
-            ⏱ Time Machine
+            <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 14, height: 14 }}>
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
+            </svg>
+            Time Machine
           </button>
         </div>
 
         {/* Issue filter */}
         {view === 'issues' && (
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:border-blue-400 bg-white"
-          >
-            <option value="">All issue types</option>
-            {Object.entries(TYPE_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
+          <>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:border-blue-400 bg-white"
+            >
+              <option value="">All issue types</option>
+              {Object.entries(TYPE_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-xs text-red-600 cursor-pointer select-none font-semibold">
+              <input type="checkbox" checked={sosOnly} onChange={(e) => setSosOnly(e.target.checked)} className="rounded accent-red-600" />
+              <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 14, height: 14 }}>
+                <path d="M12 2L1 21h22L12 2zm1 16h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+              </svg>
+              SOS Only
+            </label>
+          </>
         )}
 
         {/* Worker filters */}
@@ -378,8 +478,13 @@ export default function MapPage() {
             </label>
             <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
               <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} className="rounded accent-green-600" />
-              <span className={autoRefresh ? 'text-green-600 font-semibold' : ''}>
-                {autoRefresh ? '● Live (30s)' : 'Auto-refresh'}
+              <span className={autoRefresh ? 'text-green-600 font-semibold flex items-center gap-2' : ''}>
+                {autoRefresh && (
+                  <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 8, height: 8 }}>
+                    <circle cx="12" cy="12" r="10" />
+                  </svg>
+                )}
+                {autoRefresh ? 'Live (30s)' : 'Auto-refresh'}
               </span>
             </label>
           </>
@@ -401,7 +506,11 @@ export default function MapPage() {
               <>
                 <button onClick={() => setTmPlaying(!tmPlaying)}
                   className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${tmPlaying ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>
-                  {tmPlaying ? '⏸ Pause' : '▶ Play'}
+                  <span className="inline-flex items-center gap-1.5">
+                    {tmPlaying
+                      ? <><svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause</>
+                      : <><svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Play</>}
+                  </span>
                 </button>
                 <input type="range" min={0} max={tmSnapshots.length - 1} value={tmIndex}
                   onChange={(e) => { setTmPlaying(false); setTmIndex(Number(e.target.value)); }}
@@ -462,7 +571,7 @@ export default function MapPage() {
       {/* Map */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }} className="rounded-xl overflow-hidden shadow-sm border border-gray-100">
         <Map
-          defaultCenter={{ lat: 22.3072, lng: 70.8022 }}
+          defaultCenter={{ lat: 22.2587, lng: 71.1924 }}
           defaultZoom={7}
           mapId="civic-admin-map"
           gestureHandling="greedy"

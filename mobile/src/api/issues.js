@@ -26,8 +26,10 @@ export const issuesApi = {
   upvote: (id) => api.post(`/issues/${id}/upvote`),
   removeUpvote: (id) => api.delete(`/issues/${id}/upvote`),
   // Flags
-  flag: (id, reason, description) =>
-    api.post(`/issues/${id}/flag`, { reason, description }),
+  flag: (id, reason, details) =>
+    api.post(`/issues/${id}/flag`, { reason, details }),
+  flagComment: (issueId, commentId, reason, details) =>
+    api.post(`/issues/${issueId}/flag`, { reason, details, comment_id: commentId }),
   // Ward health
   wardHealth: (ward) => api.get('/issues/ward-health', { params: { ward } }),
 };

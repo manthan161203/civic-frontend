@@ -39,7 +39,7 @@ function PanToCoords({ lat, lon }) {
 
 function WardMapPicker({ lat, lon, onSetLat, onSetLon, onManualSet, fallbackCenter }) {
   const hasCoords = lat != null && lon != null;
-  const defaultC = hasCoords ? { lat, lng: lon } : (fallbackCenter || { lat: 22.3072, lng: 70.8022 });
+  const defaultC = hasCoords ? { lat, lng: lon } : (fallbackCenter || { lat: 22.2587, lng: 71.1924 });
   const defaultZ = hasCoords ? 14 : fallbackCenter ? 11 : 8;
   const handleDragEnd = useCallback((e) => {
     onSetLat(e.latLng.lat());
@@ -168,7 +168,7 @@ export default function LocationsPage() {
     setGeoStatus('fetching');
     try {
       // Bias toward parent location if available, else Gujarat center
-      const biasLat = adding?.parentLat ?? editing?.centroid_lat ?? 22.3072;
+      const biasLat = adding?.parentLat ?? editing?.centroid_lat ?? 22.2587;
       const biasLon = adding?.parentLon ?? editing?.centroid_lon ?? 72.1;
       const features = await photonFetch(name, biasLat, biasLon, 5);
       const match = features.find(
@@ -551,7 +551,7 @@ export default function LocationsPage() {
               {/* District */}
               <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 group">
                 <button onClick={() => toggle(`d-${district.id}`)} className="text-gray-400 hover:text-gray-600">
-                  {expanded[`d-${district.id}`] ? '▾' : '▸'}
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 transition-transform" style={{ transform: expanded[`d-${district.id}`] ? 'rotate(90deg)' : 'rotate(0deg)' }} viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
                 </button>
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${district.centroid_lat != null ? 'bg-green-400' : 'bg-gray-300'}`} />
                 <span className="font-semibold text-gray-900 flex-1">{district.name}</span>
@@ -582,7 +582,7 @@ export default function LocationsPage() {
                 <div key={taluka.id}>
                   <div className="flex items-center gap-3 px-8 py-2.5 hover:bg-gray-50 group">
                     <button onClick={() => toggle(`t-${taluka.id}`)} className="text-gray-400 hover:text-gray-600">
-                      {expanded[`t-${taluka.id}`] ? '▾' : '▸'}
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 transition-transform" style={{ transform: expanded[`t-${taluka.id}`] ? 'rotate(90deg)' : 'rotate(0deg)' }} viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
                     </button>
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${taluka.centroid_lat != null ? 'bg-green-400' : 'bg-gray-300'}`} />
                     <span className="text-gray-800 flex-1">{taluka.name}</span>

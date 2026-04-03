@@ -1,8 +1,11 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { adminApi } from '../../../src/api/index';
+import { adminApi, locationsApi } from '../../../src/api/index';
+import { useAuthStore } from '../../../src/store/authStore';
+import AdminScopeHeader from '../../../src/components/AdminScopeHeader';
 
 export default function CitizensPage() {
+  const { user } = useAuthStore();
   const [citizens, setCitizens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -10,6 +13,7 @@ export default function CitizensPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [locationTree, setLocationTree] = useState([]);
 
   const PAGE_SIZE = 20;
 
@@ -26,6 +30,13 @@ export default function CitizensPage() {
   }, [page, search]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Fetch location tree on mount
+  useEffect(() => {
+    locationsApi.getTree()
+      .then(({ data }) => setLocationTree(data || []))
+      .catch(() => {});
+  }, []);
 
   const handleToggle = async (id, active) => {
     if (!confirm(`${active ? 'Deactivate' : 'Reactivate'} this citizen?`)) return;
@@ -46,6 +57,9 @@ export default function CitizensPage() {
 
   return (
     <div className="space-y-4">
+      {/* Admin Scope Header */}
+      {user && <AdminScopeHeader user={user} locationTree={locationTree} />}
+
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex gap-3 items-center">
         <input

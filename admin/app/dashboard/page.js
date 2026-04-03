@@ -90,7 +90,7 @@ function DashboardMap({ points }) {
       <h2 className="text-sm font-bold text-gray-700 mb-3">Issue Heatmap</h2>
       <div className="rounded-xl overflow-hidden border border-gray-100" style={{ height: 320 }}>
         <Map
-          defaultCenter={{ lat: 22.3072, lng: 70.8022 }}
+          defaultCenter={{ lat: 22.2587, lng: 71.1924 }}
           defaultZoom={7}
           mapId="civic-dashboard-mini"
           gestureHandling="cooperative"

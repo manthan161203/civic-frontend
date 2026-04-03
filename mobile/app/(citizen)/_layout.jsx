@@ -38,6 +38,14 @@ export default function CitizenLayout() {
     fetchNotifications();
   }, []);
 
+  // On first login (missing name or home location), send user to profile tab
+  // so the mandatory setup modal fires immediately.
+  useEffect(() => {
+    if (user && (!user.name || !user.latitude)) {
+      router.replace('/(citizen)/profile');
+    }
+  }, [user?.id]); // run once per login session
+
   return (
     <Tabs
       screenOptions={{

@@ -11,7 +11,7 @@ import { authApi } from '../../src/api/auth';
 import IssueCard from '../../src/components/common/IssueCard';
 import CitizenProfileModal from '../../src/components/CitizenProfileModal';
 import * as Location from 'expo-location';
-import logger from '../../src/utils/logger';
+import { logger } from '../../src/utils/logger';
 
 const CATEGORIES = ['All', 'open', 'in_progress', 'resolved'];
 
@@ -65,7 +65,7 @@ const bannerStyles = StyleSheet.create({
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, setUser } = useAuthStore();
+  const { user, updateUser } = useAuthStore();
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -81,7 +81,7 @@ export default function HomeScreen() {
     try {
       const { data } = await authApi.getMe();
       if (data) {
-        setUser(data);
+        updateUser(data);
       }
     } catch (err) {
       // Even if refresh fails, modal is already closed
@@ -212,7 +212,7 @@ export default function HomeScreen() {
         style={styles.sosFab}
         onPress={() => {
           Alert.alert(
-            '⚠️ Emergency SOS',
+            'Emergency SOS',
             'This will report an emergency hazard at your current location and alert nearby citizens. Continue?',
             [
               { text: 'Cancel', style: 'cancel' },
@@ -243,8 +243,11 @@ export default function HomeScreen() {
                     Alert.alert('SOS Sent', 'Emergency reported! Nearby citizens and all admins have been alerted.');
                     fetchIssues(true);
                   } catch (err) {
-                    logger.error('SOS', 'Failed to send SOS', err);
-                    Alert.alert('Error', 'Failed to send SOS. Please try again.');
+                    const errorMsg = err?.response?.status === 403 
+                      ? 'Not authorized to create issue' 
+                      : err?.message || 'Unknown error';
+                    logger.error('SOS', `Failed to send SOS: ${errorMsg}`, err);
+                    Alert.alert('Error', `Failed to send SOS: ${errorMsg}. Please try again.`);
                   }
                 },
               },

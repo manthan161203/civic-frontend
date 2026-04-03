@@ -9,8 +9,11 @@
  * - Detail modal for individual issue SLA metrics
  */
 import { useState, useEffect } from 'react';
-import { adminApi } from '../../../src/api/index';
+import { useRouter } from 'next/navigation';
+import { adminApi, locationsApi } from '../../../src/api/index';
 import { logger } from '../../../src/lib/logger';
+import { useAuthStore } from '../../../src/store/authStore';
+import AdminScopeHeader from '../../../src/components/AdminScopeHeader';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const PRIORITY_COLORS = {
@@ -30,11 +33,14 @@ const SLA_THRESHOLDS = {
 const COMPONENT_NAME = 'SLADashboard';
 
 export default function SLADashboard() {
+  const router = useRouter();
+  const { user } = useAuthStore();
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [issueDetail, setIssueDetail] = useState(null);
   const [error, setError] = useState(null);
+  const [locationTree, setLocationTree] = useState([]);
 
   /**
    * Initialize component with auto-refresh interval
@@ -46,6 +52,15 @@ export default function SLADashboard() {
   }, []);
 
   /**
+   * Fetch location tree on mount
+   */
+  useEffect(() => {
+    locationsApi.getTree()
+      .then(({ data }) => setLocationTree(data || []))
+      .catch(() => {});
+  }, []);
+
+  /**
    * Fetch SLA dashboard data from API
    */
   const fetchDashboard = async () => {
@@ -54,7 +69,7 @@ export default function SLADashboard() {
       setError(null);
       logger.debug(COMPONENT_NAME, 'Fetching SLA dashboard data');
       
-      const res = await adminApi.get('/issues/sla/dashboard');
+      const res = await adminApi.getSLADashboard();
       
       if (!res.data) {
         throw new Error('No SLA dashboard data returned');
@@ -80,7 +95,7 @@ export default function SLADashboard() {
       
       if (!issueId) throw new Error('Issue ID is required');
       
-      const res = await adminApi.get(`/issues/sla/${issueId}`);
+      const res = await adminApi.getSLAIssueDetail(issueId);
       
       if (!res.data) throw new Error('No issue detail data returned');
       
@@ -88,8 +103,9 @@ export default function SLADashboard() {
       setSelectedIssue(issueId);
       logger.info(COMPONENT_NAME, `Issue detail loaded for ${issueId}`);
     } catch (error) {
+      const status = error?.response?.status;
       const errorMsg = error?.response?.data?.detail || error?.message || 'Failed to load issue details';
-      logger.error(COMPONENT_NAME, 'Error fetching issue detail', error);
+      logger.error(COMPONENT_NAME, `Error fetching issue detail (${status}): ${errorMsg}`, error);
       alert(`Error: ${errorMsg}`);
     }
   };
@@ -108,7 +124,10 @@ export default function SLADashboard() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="animate-spin text-4xl mb-4">⟳</div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="animate-spin w-8 h-8 mb-4 inline text-gray-400">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
           <p className="text-gray-400">Loading SLA dashboard…</p>
         </div>
       </div>
@@ -138,11 +157,18 @@ export default function SLADashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Admin Scope Header */}
+      {user && <AdminScopeHeader user={user} locationTree={locationTree} />}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">SLA & Auto-Escalation Monitor</h1>
-        <button onClick={fetchDashboard} className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-          🔄 Refresh
+        <button onClick={fetchDashboard} className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-2">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ width: 16, height: 16 }}>
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+          </svg>
+          Refresh
         </button>
       </div>
 
@@ -207,7 +233,10 @@ export default function SLADashboard() {
       {/* Escalated Issues Table */}
       {dashboard.escalated_count > 0 && (
         <div className="bg-white rounded-xl shadow-sm p-5">
-          <h2 className="text-sm font-bold text-gray-700 mb-4">🔴 Escalated Issues ({dashboard.escalated_count})</h2>
+          <h2 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+            <svg viewBox="0 0 24 24" fill="#ef4444" style={{ width: 16, height: 16 }}><circle cx="12" cy="12" r="10" /></svg>
+            Escalated Issues ({dashboard.escalated_count})
+          </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -252,7 +281,10 @@ export default function SLADashboard() {
       {/* At-Risk Issues Table */}
       {dashboard.at_risk_count > 0 && (
         <div className="bg-white rounded-xl shadow-sm p-5">
-          <h2 className="text-sm font-bold text-gray-700 mb-4">⚠️  Issues At Risk ({dashboard.at_risk_count})</h2>
+          <h2 className="text-sm font-bold text-yellow-700 mb-4 flex items-center gap-2">
+            <svg viewBox="0 0 24 24" fill="#f59e0b" style={{ width: 16, height: 16 }}><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" /></svg>
+            Issues At Risk ({dashboard.at_risk_count})
+          </h2>
           <p className="text-xs text-gray-500 mb-4">Approaching SLA breach window (less than 2 hours remaining)</p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -344,20 +376,29 @@ export default function SLADashboard() {
 
               {issueDetail.sla_breach && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <div className="text-xs text-red-700 font-semibold mb-1">🔴 SLA BREACHED</div>
+                  <div className="text-xs text-red-700 font-semibold mb-1 flex items-center gap-1.5">
+                    <svg viewBox="0 0 24 24" fill="#dc2626" style={{ width: 14, height: 14 }}><circle cx="12" cy="12" r="10" /></svg>
+                    SLA BREACHED
+                  </div>
                   <div className="text-sm text-red-600">{issueDetail.escalation_reason}</div>
                 </div>
               )}
 
               {issueDetail.is_escalated && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                  <div className="text-xs text-yellow-700 font-semibold mb-1">⚠️  ESCALATED</div>
+                  <div className="text-xs text-yellow-700 font-semibold mb-1 flex items-center gap-1.5">
+                    <svg viewBox="0 0 24 24" fill="#ca8a04" style={{ width: 14, height: 14 }}><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" /></svg>
+                    ESCALATED
+                  </div>
                   <div className="text-sm text-yellow-600">Escalated at: {new Date(issueDetail.escalated_at).toLocaleString()}</div>
                 </div>
               )}
 
               <div className="pt-4 flex gap-2">
-                <button onClick={() => window.open('/dashboard/issues', '_blank')} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700">
+                <button onClick={() => {
+                  closeDetailModal();
+                  router.push(`/dashboard/issues?issue_id=${issueDetail.issue_id}`);
+                }} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700">
                   View Issue
                 </button>
                 <button onClick={closeDetailModal} className="flex-1 px-4 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-300">

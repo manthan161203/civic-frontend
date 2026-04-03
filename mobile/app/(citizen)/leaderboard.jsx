@@ -18,9 +18,9 @@ const BADGE_COLORS = {
 };
 
 function MedalIcon({ rank }) {
-  if (rank === 1) return <Text style={styles.medal}>🥇</Text>;
-  if (rank === 2) return <Text style={styles.medal}>🥈</Text>;
-  if (rank === 3) return <Text style={styles.medal}>🥉</Text>;
+  if (rank === 1) return <Text style={styles.medal}>1st</Text>;
+  if (rank === 2) return <Text style={styles.medal}>2nd</Text>;
+  if (rank === 3) return <Text style={styles.medal}>3rd</Text>;
   return <Text style={styles.rankText}>#{rank}</Text>;
 }
 
@@ -59,7 +59,10 @@ function WorkerRow({ item, index }) {
       </View>
       <View style={styles.rowInfo}>
         <Text style={styles.rowName} numberOfLines={1}>{item.name || 'Worker'}</Text>
-        <Text style={styles.rowSub}>{item.tasks_completed ?? 0} tasks · {item.avg_rating ? `${item.avg_rating.toFixed(1)}★` : 'No rating'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+          <Text style={styles.rowSub}>{item.tasks_completed ?? 0} tasks ·{item.avg_rating ? ` ${item.avg_rating.toFixed(1)}` : ' No rating'}</Text>
+          {!!item.avg_rating && <Ionicons name="star" size={10} color="#f59e0b" />}
+        </View>
       </View>
       <View style={styles.pointsCell}>
         <Text style={styles.points}>{item.total_points ?? 0}</Text>

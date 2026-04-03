@@ -88,7 +88,7 @@ export default function OtpScreen() {
         </Text>
 
         {!!devOtp && (
-          <Text style={styles.devOtpBanner}>🛠 Dev OTP: {devOtp}</Text>
+          <Text style={styles.devOtpBanner}>[DEV] OTP: {devOtp}</Text>
         )}
 
         <View style={styles.otpRow}>

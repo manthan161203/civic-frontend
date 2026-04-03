@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, TextInput, Modal, Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+import MapView, { Marker, PROVIDER_GOOGLE } from '../../src/components/PlatformMap';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../src/store/authStore';
@@ -11,6 +13,7 @@ import { rewardsApi } from '../../src/api/rewards';
 import { authApi } from '../../src/api/auth';
 import { locationsApi } from '../../src/api/locations';
 import { compressImage } from '../../src/utils/imageUtils';
+import { reverseGeocode, forwardGeocode } from '../../src/utils/geocode';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -48,11 +51,43 @@ export default function ProfileScreen() {
   const [showMandatoryModal, setShowMandatoryModal] = useState(false);
   const [mandatoryName, setMandatoryName] = useState(user?.name || '');
   const [mandatoryEmail, setMandatoryEmail] = useState(user?.email || '');
-  const [mandatoryWard, setMandatoryWard] = useState(user?.ward || '');
   const [mandatoryLanguage, setMandatoryLanguage] = useState(user?.language || 'en');
-  const [mandatoryShowWardDropdown, setMandatoryShowWardDropdown] = useState(false);
   const [mandatoryShowLanguageDropdown, setMandatoryShowLanguageDropdown] = useState(false);
   const [mandatorySaving, setMandatorySaving] = useState(false);
+  // Mandatory modal — location fields (proper cascading district/taluka/ward + GPS)
+  const [mandatoryDistrict, setMandatoryDistrict] = useState(null);
+  const [mandatoryTaluka, setMandatoryTaluka] = useState(null);
+  const [mandatoryWardObj, setMandatoryWardObj] = useState(null);
+  const [mandatoryTalukas, setMandatoryTalukas] = useState([]);
+  const [mandatoryWards, setMandatoryWards] = useState([]);
+  const [mandatoryShowDistrictDropdown, setMandatoryShowDistrictDropdown] = useState(false);
+  const [mandatoryShowTalukaDropdown, setMandatoryShowTalukaDropdown] = useState(false);
+  const [mandatoryShowWardDropdown, setMandatoryShowWardDropdown] = useState(false);
+  const [mandatoryLat, setMandatoryLat] = useState(null);
+  const [mandatoryLon, setMandatoryLon] = useState(null);
+  const [mandatoryGettingGPS, setMandatoryGettingGPS] = useState(false);
+  // Edit Home Location modal
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [locationLat, setLocationLat] = useState(user?.latitude || null);
+  const [locationLon, setLocationLon] = useState(user?.longitude || null);
+  const [locationDistrict, setLocationDistrict] = useState(null);
+  const [locationTaluka, setLocationTaluka] = useState(null);
+  const [locationWardObj, setLocationWardObj] = useState(null);
+  const [locationTalukas, setLocationTalukas] = useState([]);
+  const [locationWards, setLocationWards] = useState([]);
+  const [locationShowDistrictDropdown, setLocationShowDistrictDropdown] = useState(false);
+  const [locationShowTalukaDropdown, setLocationShowTalukaDropdown] = useState(false);
+  const [locationShowWardDropdown, setLocationShowWardDropdown] = useState(false);
+  const [locationGettingGPS, setLocationGettingGPS] = useState(false);
+  const [locationSaving, setLocationSaving] = useState(false);
+  // Address search states
+  const [mandatoryAddress, setMandatoryAddress] = useState('');
+  const [mandatorySearching, setMandatorySearching] = useState(false);
+  const [locationAddress, setLocationAddress] = useState('');
+  const [locationSearching, setLocationSearching] = useState(false);
+  // Map refs for animateToRegion
+  const mandatoryMapRef = useRef(null);
+  const locationMapRef = useRef(null);
 
   useEffect(() => {
     rewardsApi.getMyRewards()
@@ -60,19 +95,9 @@ export default function ProfileScreen() {
       .catch(() => {})
       .finally(() => setLoading(false));
       
-    // Load wards for dropdown
-    locationsApi.getTree()
-      .then(({ data }) => {
-        const allWards = [];
-        (data.districts || data).forEach((district) => {
-          (district.talukas || []).forEach((taluka) => {
-            (taluka.wards || []).forEach((ward) => {
-              allWards.push({ id: ward.id, name: ward.name });
-            });
-          });
-        });
-        setWards(allWards);
-      })
+    // Preload districts for modals
+    locationsApi.getDistricts()
+      .then(({ data }) => setDistricts(data || []))
       .catch(() => {});
       
     // Update profile photo when user changes
@@ -80,6 +105,13 @@ export default function ProfileScreen() {
       setProfilePhoto(user.profile_photo_url);
     }
   }, [user?.profile_photo_url]);
+
+  // Trigger first-login setup modal
+  useEffect(() => {
+    if (user && (!user.name || !user.latitude)) {
+      setShowMandatoryModal(true);
+    }
+  }, []);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -91,7 +123,7 @@ export default function ProfileScreen() {
   const pickProfilePhoto = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -173,35 +205,141 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Full Name is required.');
       return;
     }
-    if (!mandatoryEmail.trim()) {
-      Alert.alert('Error', 'Email is required.');
+    if (!mandatoryWardObj) {
+      Alert.alert('Error', 'Please select your ward.');
       return;
     }
-    if (!mandatoryWard) {
-      Alert.alert('Error', 'Ward is required.');
+    if (!mandatoryLat || !mandatoryLon) {
+      Alert.alert('Error', 'Please set your home location using GPS or enter it manually.');
       return;
     }
     setMandatorySaving(true);
     try {
       const updateData = {
         name: mandatoryName.trim(),
-        email: mandatoryEmail.trim(),
-        ward: mandatoryWard,
+        email: mandatoryEmail.trim() || undefined,
+        ward: mandatoryWardObj.name,
+        ward_id: mandatoryWardObj.id,
+        taluka_id: mandatoryTaluka?.id,
+        district_id: mandatoryDistrict?.id,
         language: mandatoryLanguage,
-        phone: '',
+        latitude: mandatoryLat,
+        longitude: mandatoryLon,
       };
       const { data } = await authApi.updateProfile(updateData);
-      updateUser({ 
-        name: data.name,
-        email: data.email,
-        ward: data.ward,
-        language: data.language,
-      });
+      updateUser(data);
       setShowMandatoryModal(false);
     } catch (error) {
       Alert.alert('Error', error?.response?.data?.detail || 'Failed to complete profile setup.');
     }
     setMandatorySaving(false);
+  };
+
+  const getGPSLocation = async (setLat, setLon, setGetting, { setAddress, mapRef } = {}) => {
+    setGetting(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location access is required. Please enable it in Settings.');
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const { latitude, longitude } = loc.coords;
+      setLat(latitude);
+      setLon(longitude);
+      mapRef?.current?.animateToRegion({ latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 }, 500);
+      if (setAddress) {
+        const geo = await reverseGeocode(latitude, longitude);
+        if (geo) setAddress(geo.address);
+      }
+    } catch {
+      Alert.alert('Error', 'Could not get your location. Please try again.');
+    } finally {
+      setGetting(false);
+    }
+  };
+
+  const handleAddressSearch = async (address, setLat, setLon, setAddress, mapRef, setSearching) => {
+    if (!address.trim()) return;
+    setSearching(true);
+    try {
+      const result = await forwardGeocode(address.trim());
+      if (result) {
+        setLat(result.latitude);
+        setLon(result.longitude);
+        setAddress(result.address);
+        mapRef?.current?.animateToRegion({
+          latitude: result.latitude,
+          longitude: result.longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        }, 500);
+      } else {
+        Alert.alert('Not found', 'Could not find that address. Try a more specific search.');
+      }
+    } catch {
+      Alert.alert('Error', 'Address search failed. Please try again.');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const openLocationModal = async () => {
+    setLocationLat(user?.latitude || null);
+    setLocationLon(user?.longitude || null);
+    setLocationDistrict(null);
+    setLocationTaluka(null);
+    setLocationWardObj(null);
+    setLocationTalukas([]);
+    setLocationWards([]);
+    // Preload existing district/taluka/ward
+    if (user?.district_id && districts.length > 0) {
+      const d = districts.find(x => x.id === user.district_id);
+      if (d) {
+        setLocationDistrict(d);
+        try {
+          const { data: tData } = await locationsApi.getTalukas(d.id);
+          setLocationTalukas(tData || []);
+          if (user?.taluka_id) {
+            const t = (tData || []).find(x => x.id === user.taluka_id);
+            if (t) {
+              setLocationTaluka(t);
+              const { data: wData } = await locationsApi.getWards(t.id);
+              setLocationWards(wData || []);
+              if (user?.ward_id) {
+                const w = (wData || []).find(x => x.id === user.ward_id);
+                if (w) setLocationWardObj(w);
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+    setShowLocationModal(true);
+  };
+
+  const handleSaveLocation = async () => {
+    if (!locationLat || !locationLon) {
+      Alert.alert('Error', 'Please set your location using GPS or select it manually.');
+      return;
+    }
+    setLocationSaving(true);
+    try {
+      const updateData = {
+        latitude: locationLat,
+        longitude: locationLon,
+        ...(locationWardObj && { ward_id: locationWardObj.id, ward: locationWardObj.name }),
+        ...(locationTaluka && { taluka_id: locationTaluka.id }),
+        ...(locationDistrict && { district_id: locationDistrict.id }),
+      };
+      const { data } = await authApi.updateProfile(updateData);
+      updateUser(data);
+      setShowLocationModal(false);
+      Alert.alert('Success', 'Home location updated!');
+    } catch (error) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to save location.');
+    }
+    setLocationSaving(false);
   };
 
   return (
@@ -252,6 +390,28 @@ export default function ProfileScreen() {
           </View>
         </View>
       )}
+
+      {/* Home Location Card */}
+      <View style={styles.locationCard}>
+        <View style={styles.locationCardLeft}>
+          <Ionicons name="home" size={20} color={user?.latitude ? '#1a56db' : '#9ca3af'} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.locationCardTitle}>Home Location</Text>
+            {user?.latitude ? (
+              <Text style={styles.locationCardValue}>
+                {user.ward ? `${user.ward}` : ''}{user.ward && '\n'}
+                {user.latitude.toFixed(5)}, {user.longitude.toFixed(5)}
+              </Text>
+            ) : (
+              <Text style={styles.locationCardEmpty}>Not set — tap to add</Text>
+            )}
+          </View>
+        </View>
+        <TouchableOpacity style={styles.locationEditBtn} onPress={openLocationModal}>
+          <Ionicons name={user?.latitude ? 'pencil' : 'add'} size={16} color="#1a56db" />
+          <Text style={styles.locationEditBtnText}>{user?.latitude ? 'Edit' : 'Set'}</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Menu */}
       <View style={styles.menu}>
@@ -631,33 +791,36 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* Mandatory Profile Completion Modal (First-time Registration) */}
+      {/* First-Login Setup Modal */}
       <Modal visible={showMandatoryModal} transparent animationType="fade" onRequestClose={() => {}} statusBarTranslucent>
         <View style={styles.mandatoryModalOverlay}>
           <View style={styles.mandatoryModal}>
             <View style={styles.mandatoryModalHeader}>
-              <Text style={styles.mandatoryModalTitle}>Complete Your Profile</Text>
-              <Text style={styles.mandatoryModalSubtitle}>Required information to get started</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Ionicons name="hand-left" size={22} color="#1a56db" />
+                <Text style={styles.mandatoryModalTitle}>Welcome to Civic!</Text>
+              </View>
+              <Text style={styles.mandatoryModalSubtitle}>Set up your profile and home location to get started</Text>
             </View>
 
-            <ScrollView style={styles.mandatoryModalContent}>
+            <ScrollView style={styles.mandatoryModalContent} keyboardShouldPersistTaps="handled">
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>Full Name *</Text>
                 <TextInput
                   style={styles.fieldInput}
                   placeholder="Enter your full name"
-                  placeholderTextColor="#d1d5db"
+                  placeholderTextColor="#9ca3af"
                   value={mandatoryName}
                   onChangeText={setMandatoryName}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Email *</Text>
+                <Text style={styles.fieldLabel}>Email</Text>
                 <TextInput
                   style={styles.fieldInput}
-                  placeholder="Enter your email"
-                  placeholderTextColor="#d1d5db"
+                  placeholder="Enter your email (optional)"
+                  placeholderTextColor="#9ca3af"
                   value={mandatoryEmail}
                   onChangeText={setMandatoryEmail}
                   keyboardType="email-address"
@@ -665,37 +828,35 @@ export default function ProfileScreen() {
                 />
               </View>
 
+              {/* District → Taluka → Ward */}
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Ward *</Text>
+                <Text style={styles.fieldLabel}>District *</Text>
                 <TouchableOpacity
                   style={styles.dropdownBtn}
-                  onPress={() => setMandatoryShowWardDropdown(!mandatoryShowWardDropdown)}
+                  onPress={() => setMandatoryShowDistrictDropdown(!mandatoryShowDistrictDropdown)}
                 >
-                  <Text style={styles.dropdownBtnText}>{mandatoryWard || '-- Select Ward --'}</Text>
-                  <Ionicons name={mandatoryShowWardDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#374151" />
+                  <Text style={styles.dropdownBtnText}>{mandatoryDistrict?.name || '-- Select District --'}</Text>
+                  <Ionicons name={mandatoryShowDistrictDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#374151" />
                 </TouchableOpacity>
-                {mandatoryShowWardDropdown && (
+                {mandatoryShowDistrictDropdown && (
                   <View style={styles.dropdownMenu}>
-                    <ScrollView nestedScrollEnabled={true} style={{ maxHeight: 200 }}>
-                      <TouchableOpacity
-                        style={[styles.dropdownItem, mandatoryWard === '' && styles.dropdownItemActive]}
-                        onPress={() => {
-                          setMandatoryWard('');
-                          setMandatoryShowWardDropdown(false);
-                        }}
-                      >
-                        <Text style={styles.dropdownItemText}>-- Select Ward --</Text>
-                      </TouchableOpacity>
-                      {wards.map((item) => (
+                    <ScrollView nestedScrollEnabled style={{ maxHeight: 150 }}>
+                      {districts.map((d) => (
                         <TouchableOpacity
-                          key={item.id}
-                          style={[styles.dropdownItem, mandatoryWard === item.name && styles.dropdownItemActive]}
-                          onPress={() => {
-                            setMandatoryWard(item.name);
-                            setMandatoryShowWardDropdown(false);
+                          key={d.id}
+                          style={[styles.dropdownItem, mandatoryDistrict?.id === d.id && styles.dropdownItemActive]}
+                          onPress={async () => {
+                            setMandatoryDistrict(d);
+                            setMandatoryTaluka(null);
+                            setMandatoryWardObj(null);
+                            setMandatoryShowDistrictDropdown(false);
+                            try {
+                              const { data } = await locationsApi.getTalukas(d.id);
+                              setMandatoryTalukas(data || []);
+                            } catch {}
                           }}
                         >
-                          <Text style={styles.dropdownItemText}>{item.name}</Text>
+                          <Text style={[styles.dropdownItemText, mandatoryDistrict?.id === d.id && styles.dropdownItemTextActive]}>{d.name}</Text>
                         </TouchableOpacity>
                       ))}
                     </ScrollView>
@@ -704,51 +865,186 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Language Preference *</Text>
+                <Text style={styles.fieldLabel}>Taluka *</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownBtn, !mandatoryDistrict && styles.dropdownBtnDisabled]}
+                  onPress={() => mandatoryDistrict && setMandatoryShowTalukaDropdown(!mandatoryShowTalukaDropdown)}
+                  disabled={!mandatoryDistrict}
+                >
+                  <Text style={[styles.dropdownBtnText, !mandatoryDistrict && styles.dropdownBtnTextDisabled]}>
+                    {mandatoryTaluka?.name || '-- Select Taluka --'}
+                  </Text>
+                  <Ionicons name={mandatoryShowTalukaDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={!mandatoryDistrict ? '#d1d5db' : '#374151'} />
+                </TouchableOpacity>
+                {mandatoryShowTalukaDropdown && (
+                  <View style={styles.dropdownMenu}>
+                    <ScrollView nestedScrollEnabled style={{ maxHeight: 150 }}>
+                      {mandatoryTalukas.map((t) => (
+                        <TouchableOpacity
+                          key={t.id}
+                          style={[styles.dropdownItem, mandatoryTaluka?.id === t.id && styles.dropdownItemActive]}
+                          onPress={async () => {
+                            setMandatoryTaluka(t);
+                            setMandatoryWardObj(null);
+                            setMandatoryShowTalukaDropdown(false);
+                            try {
+                              const { data } = await locationsApi.getWards(t.id);
+                              setMandatoryWards(data || []);
+                            } catch {}
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, mandatoryTaluka?.id === t.id && styles.dropdownItemTextActive]}>{t.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Ward *</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownBtn, !mandatoryTaluka && styles.dropdownBtnDisabled]}
+                  onPress={() => mandatoryTaluka && setMandatoryShowWardDropdown(!mandatoryShowWardDropdown)}
+                  disabled={!mandatoryTaluka}
+                >
+                  <Text style={[styles.dropdownBtnText, !mandatoryTaluka && styles.dropdownBtnTextDisabled]}>
+                    {mandatoryWardObj ? `${mandatoryWardObj.name}` : '-- Select Ward --'}
+                  </Text>
+                  <Ionicons name={mandatoryShowWardDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={!mandatoryTaluka ? '#d1d5db' : '#374151'} />
+                </TouchableOpacity>
+                {mandatoryShowWardDropdown && (
+                  <View style={styles.dropdownMenu}>
+                    <ScrollView nestedScrollEnabled style={{ maxHeight: 150 }}>
+                      {mandatoryWards.map((w) => (
+                        <TouchableOpacity
+                          key={w.id}
+                          style={[styles.dropdownItem, mandatoryWardObj?.id === w.id && styles.dropdownItemActive]}
+                          onPress={() => {
+                            setMandatoryWardObj(w);
+                            setMandatoryShowWardDropdown(false);
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, mandatoryWardObj?.id === w.id && styles.dropdownItemTextActive]}>
+                            {w.name}{w.ward_number ? ` (${w.ward_number})` : ''}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              {/* Home Location (Address + GPS + Map) */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Home Location *</Text>
+                <Text style={styles.fieldHint}>Set your home so we can send relevant local alerts.</Text>
+
+                {/* Address search row */}
+                <View style={styles.addressRow}>
+                  <TextInput
+                    style={[styles.fieldInput, styles.addressInput]}
+                    placeholder="Search address…"
+                    placeholderTextColor="#9ca3af"
+                    value={mandatoryAddress}
+                    onChangeText={setMandatoryAddress}
+                    onSubmitEditing={() => handleAddressSearch(mandatoryAddress, setMandatoryLat, setMandatoryLon, setMandatoryAddress, mandatoryMapRef, setMandatorySearching)}
+                    returnKeyType="search"
+                  />
+                  <TouchableOpacity
+                    style={[styles.addressSearchBtn, mandatorySearching && { opacity: 0.6 }]}
+                    onPress={() => handleAddressSearch(mandatoryAddress, setMandatoryLat, setMandatoryLon, setMandatoryAddress, mandatoryMapRef, setMandatorySearching)}
+                    disabled={mandatorySearching}
+                  >
+                    {mandatorySearching
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Ionicons name="search" size={18} color="#fff" />}
+                  </TouchableOpacity>
+                </View>
+
+                {/* GPS button */}
+                <TouchableOpacity
+                  style={[styles.gpsBtn, { marginTop: 8 }, mandatoryGettingGPS && { opacity: 0.7 }]}
+                  onPress={() => getGPSLocation(setMandatoryLat, setMandatoryLon, setMandatoryGettingGPS, { setAddress: setMandatoryAddress, mapRef: mandatoryMapRef })}
+                  disabled={mandatoryGettingGPS}
+                >
+                  {mandatoryGettingGPS
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Ionicons name="locate" size={18} color="#fff" />}
+                  <Text style={styles.gpsBtnText}>
+                    {mandatoryGettingGPS ? 'Getting location…' : 'Use My Current Location'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Map */}
+                <View style={styles.locationMapContainer}>
+                  <MapView
+                    ref={mandatoryMapRef}
+                    style={styles.locationMapView}
+                    provider={PROVIDER_GOOGLE}
+                    initialRegion={{
+                      latitude: 22.2587,
+                      longitude: 71.1924,
+                      latitudeDelta: 0.5,
+                      longitudeDelta: 0.5,
+                    }}
+                    onPress={(e) => {
+                      const { latitude, longitude } = e.nativeEvent.coordinate;
+                      setMandatoryLat(latitude);
+                      setMandatoryLon(longitude);
+                      reverseGeocode(latitude, longitude).then((geo) => { if (geo) setMandatoryAddress(geo.address); });
+                    }}
+                  >
+                    {mandatoryLat && (
+                      <Marker
+                        coordinate={{ latitude: mandatoryLat, longitude: mandatoryLon }}
+                        draggable
+                        pinColor="#1a56db"
+                        onDragEnd={async (e) => {
+                          const { latitude, longitude } = e.nativeEvent.coordinate;
+                          setMandatoryLat(latitude);
+                          setMandatoryLon(longitude);
+                          const geo = await reverseGeocode(latitude, longitude);
+                          if (geo) setMandatoryAddress(geo.address);
+                        }}
+                      />
+                    )}
+                  </MapView>
+                  <View style={styles.mapDragHint}>
+                    <Ionicons name="location-sharp" size={13} color="#fff" />
+                    <Text style={styles.mapDragHintText}>
+                      {mandatoryLat
+                        ? `${mandatoryLat.toFixed(5)}, ${mandatoryLon.toFixed(5)}  ·  Drag pin or tap to adjust`
+                        : 'Tap map to pin your location'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Language Preference</Text>
                 <TouchableOpacity
                   style={styles.dropdownBtn}
                   onPress={() => setMandatoryShowLanguageDropdown(!mandatoryShowLanguageDropdown)}
                 >
                   <Text style={styles.dropdownBtnText}>
-                    {mandatoryLanguage === 'en' ? 'English (en)' : mandatoryLanguage === 'gu' ? 'Gujarati (gu)' : 'Hindi (hi)'}
+                    {mandatoryLanguage === 'en' ? 'English' : mandatoryLanguage === 'gu' ? 'Gujarati' : 'Hindi'}
                   </Text>
                   <Ionicons name={mandatoryShowLanguageDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#374151" />
                 </TouchableOpacity>
                 {mandatoryShowLanguageDropdown && (
                   <View style={styles.dropdownMenu}>
-                    <TouchableOpacity
-                      style={[styles.dropdownItem, mandatoryLanguage === 'en' && styles.dropdownItemActive]}
-                      onPress={() => {
-                        setMandatoryLanguage('en');
-                        setMandatoryShowLanguageDropdown(false);
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, mandatoryLanguage === 'en' && styles.dropdownItemTextActive]}>
-                        English (en)
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.dropdownItem, mandatoryLanguage === 'gu' && styles.dropdownItemActive]}
-                      onPress={() => {
-                        setMandatoryLanguage('gu');
-                        setMandatoryShowLanguageDropdown(false);
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, mandatoryLanguage === 'gu' && styles.dropdownItemTextActive]}>
-                        Gujarati (gu)
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.dropdownItem, mandatoryLanguage === 'hi' && styles.dropdownItemActive]}
-                      onPress={() => {
-                        setMandatoryLanguage('hi');
-                        setMandatoryShowLanguageDropdown(false);
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, mandatoryLanguage === 'hi' && styles.dropdownItemTextActive]}>
-                        Hindi (hi)
-                      </Text>
-                    </TouchableOpacity>
+                    {['en', 'gu', 'hi'].map((lang) => (
+                      <TouchableOpacity
+                        key={lang}
+                        style={[styles.dropdownItem, mandatoryLanguage === lang && styles.dropdownItemActive]}
+                        onPress={() => { setMandatoryLanguage(lang); setMandatoryShowLanguageDropdown(false); }}
+                      >
+                        <Text style={[styles.dropdownItemText, mandatoryLanguage === lang && styles.dropdownItemTextActive]}>
+                          {lang === 'en' ? 'English' : lang === 'gu' ? 'Gujarati' : 'Hindi'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 )}
               </View>
@@ -760,7 +1056,228 @@ export default function ProfileScreen() {
                 onPress={handleMandatorySaveProfile}
                 disabled={mandatorySaving}
               >
-                <Text style={styles.mandatorySaveBtnText}>{mandatorySaving ? 'Setting up…' : 'Continue'}</Text>
+                <Text style={styles.mandatorySaveBtnText}>{mandatorySaving ? 'Setting up…' : 'Get Started'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Home Location Modal */}
+      <Modal visible={showLocationModal} transparent animationType="slide" onRequestClose={() => setShowLocationModal(false)}>
+        <View style={styles.modalOverlay2}>
+          <View style={styles.modal2}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle2}>Edit Home Location</Text>
+              <TouchableOpacity onPress={() => setShowLocationModal(false)}>
+                <Ionicons name="close" size={28} color="#111827" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+              {/* Address search + GPS + Map */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Location</Text>
+
+                {/* Address search row */}
+                <View style={styles.addressRow}>
+                  <TextInput
+                    style={[styles.fieldInput, styles.addressInput]}
+                    placeholder="Search address…"
+                    placeholderTextColor="#9ca3af"
+                    value={locationAddress}
+                    onChangeText={setLocationAddress}
+                    onSubmitEditing={() => handleAddressSearch(locationAddress, setLocationLat, setLocationLon, setLocationAddress, locationMapRef, setLocationSearching)}
+                    returnKeyType="search"
+                  />
+                  <TouchableOpacity
+                    style={[styles.addressSearchBtn, locationSearching && { opacity: 0.6 }]}
+                    onPress={() => handleAddressSearch(locationAddress, setLocationLat, setLocationLon, setLocationAddress, locationMapRef, setLocationSearching)}
+                    disabled={locationSearching}
+                  >
+                    {locationSearching
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Ionicons name="search" size={18} color="#fff" />}
+                  </TouchableOpacity>
+                </View>
+
+                {/* GPS button */}
+                <TouchableOpacity
+                  style={[styles.gpsBtn, { marginTop: 8 }, locationGettingGPS && { opacity: 0.7 }]}
+                  onPress={() => getGPSLocation(setLocationLat, setLocationLon, setLocationGettingGPS, { setAddress: setLocationAddress, mapRef: locationMapRef })}
+                  disabled={locationGettingGPS}
+                >
+                  {locationGettingGPS
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Ionicons name="locate" size={18} color="#fff" />}
+                  <Text style={styles.gpsBtnText}>
+                    {locationGettingGPS ? 'Getting location…' : 'Use My Current Location'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Map */}
+                <View style={styles.locationMapContainer}>
+                  <MapView
+                    ref={locationMapRef}
+                    style={styles.locationMapView}
+                    provider={PROVIDER_GOOGLE}
+                    initialRegion={{
+                      latitude: locationLat || 22.2587,
+                      longitude: locationLon || 71.1924,
+                      latitudeDelta: locationLat ? 0.005 : 0.5,
+                      longitudeDelta: locationLon ? 0.005 : 0.5,
+                    }}
+                    onPress={(e) => {
+                      const { latitude, longitude } = e.nativeEvent.coordinate;
+                      setLocationLat(latitude);
+                      setLocationLon(longitude);
+                      reverseGeocode(latitude, longitude).then((geo) => { if (geo) setLocationAddress(geo.address); });
+                    }}
+                  >
+                    {locationLat && (
+                      <Marker
+                        coordinate={{ latitude: locationLat, longitude: locationLon }}
+                        draggable
+                        pinColor="#1a56db"
+                        onDragEnd={async (e) => {
+                          const { latitude, longitude } = e.nativeEvent.coordinate;
+                          setLocationLat(latitude);
+                          setLocationLon(longitude);
+                          const geo = await reverseGeocode(latitude, longitude);
+                          if (geo) setLocationAddress(geo.address);
+                        }}
+                      />
+                    )}
+                  </MapView>
+                  <View style={styles.mapDragHint}>
+                    <Ionicons name="location-sharp" size={13} color="#fff" />
+                    <Text style={styles.mapDragHintText}>
+                      {locationLat
+                        ? `${locationLat.toFixed(5)}, ${locationLon.toFixed(5)}  ·  Drag pin or tap to adjust`
+                        : 'Tap map to pin your location'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* District / Taluka / Ward (optional for edit) */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>District</Text>
+                <TouchableOpacity
+                  style={styles.dropdownBtn}
+                  onPress={() => setLocationShowDistrictDropdown(!locationShowDistrictDropdown)}
+                >
+                  <Text style={styles.dropdownBtnText}>{locationDistrict?.name || '-- Select District --'}</Text>
+                  <Ionicons name={locationShowDistrictDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#374151" />
+                </TouchableOpacity>
+                {locationShowDistrictDropdown && (
+                  <View style={styles.dropdownMenu}>
+                    <ScrollView nestedScrollEnabled style={{ maxHeight: 150 }}>
+                      {districts.map((d) => (
+                        <TouchableOpacity
+                          key={d.id}
+                          style={[styles.dropdownItem, locationDistrict?.id === d.id && styles.dropdownItemActive]}
+                          onPress={async () => {
+                            setLocationDistrict(d);
+                            setLocationTaluka(null);
+                            setLocationWardObj(null);
+                            setLocationShowDistrictDropdown(false);
+                            try {
+                              const { data } = await locationsApi.getTalukas(d.id);
+                              setLocationTalukas(data || []);
+                            } catch {}
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, locationDistrict?.id === d.id && styles.dropdownItemTextActive]}>{d.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Taluka</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownBtn, !locationDistrict && styles.dropdownBtnDisabled]}
+                  onPress={() => locationDistrict && setLocationShowTalukaDropdown(!locationShowTalukaDropdown)}
+                  disabled={!locationDistrict}
+                >
+                  <Text style={[styles.dropdownBtnText, !locationDistrict && styles.dropdownBtnTextDisabled]}>
+                    {locationTaluka?.name || '-- Select Taluka --'}
+                  </Text>
+                  <Ionicons name={locationShowTalukaDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={!locationDistrict ? '#d1d5db' : '#374151'} />
+                </TouchableOpacity>
+                {locationShowTalukaDropdown && (
+                  <View style={styles.dropdownMenu}>
+                    <ScrollView nestedScrollEnabled style={{ maxHeight: 150 }}>
+                      {locationTalukas.map((t) => (
+                        <TouchableOpacity
+                          key={t.id}
+                          style={[styles.dropdownItem, locationTaluka?.id === t.id && styles.dropdownItemActive]}
+                          onPress={async () => {
+                            setLocationTaluka(t);
+                            setLocationWardObj(null);
+                            setLocationShowTalukaDropdown(false);
+                            try {
+                              const { data } = await locationsApi.getWards(t.id);
+                              setLocationWards(data || []);
+                            } catch {}
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, locationTaluka?.id === t.id && styles.dropdownItemTextActive]}>{t.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Ward</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownBtn, !locationTaluka && styles.dropdownBtnDisabled]}
+                  onPress={() => locationTaluka && setLocationShowWardDropdown(!locationShowWardDropdown)}
+                  disabled={!locationTaluka}
+                >
+                  <Text style={[styles.dropdownBtnText, !locationTaluka && styles.dropdownBtnTextDisabled]}>
+                    {locationWardObj?.name || '-- Select Ward --'}
+                  </Text>
+                  <Ionicons name={locationShowWardDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={!locationTaluka ? '#d1d5db' : '#374151'} />
+                </TouchableOpacity>
+                {locationShowWardDropdown && (
+                  <View style={styles.dropdownMenu}>
+                    <ScrollView nestedScrollEnabled style={{ maxHeight: 150 }}>
+                      {locationWards.map((w) => (
+                        <TouchableOpacity
+                          key={w.id}
+                          style={[styles.dropdownItem, locationWardObj?.id === w.id && styles.dropdownItemActive]}
+                          onPress={() => {
+                            setLocationWardObj(w);
+                            setLocationShowWardDropdown(false);
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, locationWardObj?.id === w.id && styles.dropdownItemTextActive]}>
+                            {w.name}{w.ward_number ? ` (${w.ward_number})` : ''}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalActions2}>
+              <TouchableOpacity style={styles.modalCancel2} onPress={() => setShowLocationModal(false)}>
+                <Text style={styles.modalCancelText2}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSave2, locationSaving && { opacity: 0.6 }]}
+                onPress={handleSaveLocation}
+                disabled={locationSaving}
+              >
+                <Text style={styles.modalSaveText2}>{locationSaving ? 'Saving…' : 'Save Location'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -867,7 +1384,7 @@ const styles = StyleSheet.create({
   dropdownItemTextActive: { color: '#1a56db', fontWeight: '600' },
   // Mandatory profile modal styles
   mandatoryModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: 16 },
-  mandatoryModal: { backgroundColor: '#fff', borderRadius: 16, paddingBottom: 0, maxHeight: '85%' },
+  mandatoryModal: { backgroundColor: '#fff', borderRadius: 16, paddingBottom: 0, maxHeight: '90%' },
   mandatoryModalHeader: { paddingHorizontal: 20, paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: '#f9fafb' },
   mandatoryModalTitle: { fontSize: 20, fontWeight: '700', color: '#111827', marginBottom: 4 },
   mandatoryModalSubtitle: { fontSize: 14, color: '#6b7280' },
@@ -875,4 +1392,27 @@ const styles = StyleSheet.create({
   mandatoryModalActions: { paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#f9fafb' },
   mandatorySaveBtn: { backgroundColor: '#1a56db', borderRadius: 8, paddingVertical: 14, justifyContent: 'center', alignItems: 'center' },
   mandatorySaveBtnText: { fontSize: 16, color: '#fff', fontWeight: '700' },
+  // GPS / location styles
+  gpsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#059669', paddingVertical: 12, borderRadius: 8, marginBottom: 8 },
+  gpsBtnText: { fontSize: 14, color: '#fff', fontWeight: '600' },
+  locationSetCard: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  locationSetText: { fontSize: 13, color: '#059669', fontWeight: '500', flex: 1 },
+  fieldHint: { fontSize: 12, color: '#6b7280', marginBottom: 8 },
+  // Address search row
+  addressRow: { flexDirection: 'row', gap: 8, marginBottom: 0 },
+  addressInput: { flex: 1 },
+  addressSearchBtn: { width: 44, height: 44, backgroundColor: '#1a56db', borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  // Map
+  locationMapContainer: { borderRadius: 12, overflow: 'hidden', marginTop: 8, height: 220, backgroundColor: '#e5e7eb' },
+  locationMapView: { flex: 1 },
+  mapDragHint: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 10, paddingVertical: 6 },
+  mapDragHintText: { fontSize: 12, color: '#fff' },
+  // Home location card
+  locationCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 12, borderRadius: 12, padding: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  locationCardLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, flex: 1 },
+  locationCardTitle: { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 2 },
+  locationCardValue: { fontSize: 13, color: '#6b7280', lineHeight: 18 },
+  locationCardEmpty: { fontSize: 13, color: '#9ca3af', fontStyle: 'italic' },
+  locationEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eff6ff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  locationEditBtnText: { fontSize: 13, color: '#1a56db', fontWeight: '600' },
 });

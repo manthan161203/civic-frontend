@@ -6,6 +6,7 @@ import { getErrorMessage } from '../../../src/lib/apiError';
 import { locationsApi } from '../../../src/api/index';
 import { formatDate } from '../../../src/lib/dateUtils';
 import { useAuthStore } from '../../../src/store/authStore';
+import AdminScopeHeader from '../../../src/components/AdminScopeHeader';
 
 const DEPT_OPTIONS = ['water', 'roads', 'electricity', 'sanitation', 'parks', 'other'];
 
@@ -237,7 +238,7 @@ function WorkerReportModal({ worker, onClose }) {
                     </svg>
                     {report.avg_citizen_rating != null ? report.avg_citizen_rating.toFixed(1) : '—'}
                   </div>
-                  <div className="text-xs text-gray-500">Avg Rating ({report.five_star_count ?? 0}★5)</div>
+                  <div className="text-xs text-gray-500">Avg Rating ({report.five_star_count ?? 0} / 5 stars)</div>
                 </div>
               </div>
 
@@ -411,6 +412,7 @@ function Leaderboard() {
 
 // ── Worker List ────────────────────────────────────────────────────────────────
 function WorkerList() {
+  const { user } = useAuthStore();
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -425,6 +427,7 @@ function WorkerList() {
   const [wardNames, setWardNames] = useState({});
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [locationTree, setLocationTree] = useState([]);
 
   const PAGE_SIZE = 20;
 
@@ -441,6 +444,7 @@ function WorkerList() {
       // Fetch and build ward name mapping
       try {
         const tree = await locationsApi.getTree();
+        setLocationTree(tree.data || []);
         const names = {};
         if (tree.data && tree.data.length) {
           tree.data.forEach((district) => {
@@ -532,6 +536,9 @@ function WorkerList() {
 
   return (
     <div className="space-y-4">
+      {/* Admin Scope Header */}
+      {user && <AdminScopeHeader user={user} locationTree={locationTree} />}
+
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3 items-center">
         <input
@@ -805,7 +812,7 @@ function WorkerMapTab() {
       </div>
       <div className="rounded-xl overflow-hidden shadow-sm border border-gray-100" style={{ height: 'calc(100vh - 14rem)' }}>
         <Map
-          defaultCenter={{ lat: 22.3072, lng: 70.8022 }}
+          defaultCenter={{ lat: 22.2587, lng: 71.1924 }}
           defaultZoom={7}
           mapId="civic-workers-map"
           gestureHandling="greedy"
@@ -839,7 +846,14 @@ function WorkerMapTab() {
               <div className="text-xs">
                 <strong>{selected.name}</strong><br />
                 {selected.ward || '—'} · {selected.department || '—'}<br />
-                {selected.is_online ? '● Online' : '○ Offline'}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                  <svg viewBox="0 0 24 24" fill={selected.is_online ? '#16a34a' : '#9ca3af'} style={{ width: 8, height: 8 }}>
+                    <circle cx="12" cy="12" r="10" />
+                  </svg>
+                  <span style={{ color: selected.is_online ? '#16a34a' : '#9ca3af', fontWeight: 600 }}>
+                    {selected.is_online ? 'Online' : 'Offline'}
+                  </span>
+                </span>
                 {selected.location_updated_at && (
                   <><br />Updated: {new Date(selected.location_updated_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</>
                 )}

@@ -7,9 +7,9 @@ import { rewardsApi } from '../../src/api/rewards';
 import { useAuthStore } from '../../src/store/authStore';
 
 function MedalIcon({ rank }) {
-  if (rank === 1) return <Text style={styles.medal}>🥇</Text>;
-  if (rank === 2) return <Text style={styles.medal}>🥈</Text>;
-  if (rank === 3) return <Text style={styles.medal}>🥉</Text>;
+  if (rank === 1) return <Text style={styles.medal}>1st</Text>;
+  if (rank === 2) return <Text style={styles.medal}>2nd</Text>;
+  if (rank === 3) return <Text style={styles.medal}>3rd</Text>;
   return <Text style={styles.rankText}>#{rank}</Text>;
 }
 
@@ -98,7 +98,7 @@ export default function WorkerLeaderboardScreen() {
                 </Text>
                 <Text style={styles.rowSub}>
                   {item.tasks_completed ?? 0} tasks · {item.level_name || `Level ${item.level}`}
-                  {item.badge_count ? ` · ${item.badge_count} 🏅` : ''}
+                  {item.badge_count ? ` · ${item.badge_count} badges` : ''}
                 </Text>
               </View>
               <View style={styles.pointsCell}>
