@@ -11,6 +11,57 @@ import { logger } from '../../../src/lib/logger';
 
 const COMPONENT_NAME = 'BulkNotificationsPage';
 
+// ── Confirmation Modal ─────────────────────────────────────────────────────────
+function ConfirmModal({ formData, onConfirm, onCancel, loading }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-gray-900 mb-4">Confirm Notification</h2>
+
+        <div className="space-y-4 mb-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+            <div>
+              <p className="text-xs text-gray-600 uppercase font-semibold">Title</p>
+              <p className="text-sm font-semibold text-gray-900 mt-1">{formData.title}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-600 uppercase font-semibold">Message</p>
+              <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{formData.body}</p>
+            </div>
+            <div className="border-t border-blue-100 pt-3">
+              <p className="text-xs text-gray-600 uppercase font-semibold">Coverage Area</p>
+              <p className="text-sm text-gray-700 mt-1">{formData.radius_km} km radius centered at {formData.latitude.toFixed(4)}°N, {formData.longitude.toFixed(4)}°E</p>
+            </div>
+          </div>
+
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <p className="text-xs text-yellow-800">
+              <strong>Note:</strong> This notification will be sent to all citizens with active FCM tokens in the selected area.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {loading ? 'Sending…' : 'Send Notification'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BulkNotificationsPage() {
   const [mapCenter, setMapCenter] = useState({ lat: 22.2587, lng: 71.1924 });
   const [formData, setFormData] = useState({
@@ -24,6 +75,7 @@ export default function BulkNotificationsPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleChange = (field, value) => {
     if (field === 'latitude' || field === 'longitude' || field === 'radius_km') {
@@ -108,8 +160,23 @@ export default function BulkNotificationsPage() {
   const radiusMeters = Math.round(formData.radius_km * 1000);
   const isValid = formData.title.trim() && formData.body.trim() && formData.radius_km > 0;
 
+  const handleConfirmSend = async () => {
+    await handleSendNotification();
+    setShowConfirm(false);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Confirmation Modal */}
+      {showConfirm && (
+        <ConfirmModal
+          formData={formData}
+          onConfirm={handleConfirmSend}
+          onCancel={() => setShowConfirm(false)}
+          loading={loading}
+        />
+      )}
+
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Bulk Location Notifications</h1>
@@ -421,7 +488,7 @@ export default function BulkNotificationsPage() {
       {/* Action Buttons */}
       <div className="flex gap-3">
         <button
-          onClick={handleSendNotification}
+          onClick={() => setShowConfirm(true)}
           disabled={loading || !isValid}
           className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
         >
@@ -430,7 +497,7 @@ export default function BulkNotificationsPage() {
             <polyline points="17 8 12 3 7 8" />
             <line x1="12" y1="3" x2="12" y2="15" />
           </svg>
-          {loading ? 'Sending…' : 'Send Notification'}
+          Send Notification
         </button>
 
         <button

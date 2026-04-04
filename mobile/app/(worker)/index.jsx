@@ -112,7 +112,7 @@ export default function WorkerDashboard() {
       {/* Stats */}
       <View style={styles.statsGrid}>
         <StatCard label="Total Assigned" value={stats?.tasks_assigned_today} icon="briefcase" color="#1a56db" />
-        <StatCard label="Completed" value={stats?.tasks_completed_today} icon="checkmark-circle" color="#059669" />
+        <StatCard label="Total Resolved" value={stats?.tasks_completed_today} icon="checkmark-circle" color="#059669" />
         <StatCard label="Pending" value={stats?.tasks_pending} icon="time" color="#f59e0b" />
         <StatCard label="Avg Rating" value={stats?.avg_rating ? stats.avg_rating.toFixed(1) : '—'} icon="star" color="#f59e0b" />
       </View>

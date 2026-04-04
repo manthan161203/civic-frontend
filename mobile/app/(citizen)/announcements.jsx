@@ -4,7 +4,8 @@ import {
   RefreshControl, TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { locationsApi } from '../../src/api/locations';
 import { formatDate } from '../../src/utils/dateUtils';
 
@@ -42,6 +43,13 @@ export default function AnnouncementsScreen() {
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, []);
+
+  // Clear badge on focus
+  useFocusEffect(
+    useCallback(() => {
+      AsyncStorage.setItem('lastSeenAnnouncement', new Date().toISOString()).catch(() => {});
+    }, [])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);

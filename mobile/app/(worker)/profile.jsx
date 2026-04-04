@@ -46,7 +46,10 @@ export default function WorkerProfile() {
   const [saving, setSaving] = useState(false);
 
   const loadStats = useCallback(() => {
-    workersApi.getStats().then(({ data }) => setStats(data)).catch(() => {});
+    workersApi.getStats().then(({ data }) => {
+      setStats(data);
+      setIsAvailable(data.is_available ?? true);
+    }).catch(() => {});
     rewardsApi.getMyRewards().then(({ data }) => setRewards(data)).catch(() => {});
   }, []);
 
@@ -203,8 +206,14 @@ export default function WorkerProfile() {
         <Switch
           value={isAvailable}
           onValueChange={async (val) => {
-            await workersApi.setAvailability(val).catch(() => {});
+            const prev = isAvailable;
             setIsAvailable(val);
+            try {
+              await workersApi.setAvailability(val);
+            } catch {
+              setIsAvailable(prev);
+              Alert.alert('Error', 'Could not update availability. Please try again.');
+            }
           }}
           trackColor={{ false: '#d1d5db', true: '#6ee7b7' }}
           thumbColor={isAvailable ? '#059669' : '#9ca3af'}

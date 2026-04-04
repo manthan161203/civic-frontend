@@ -23,6 +23,8 @@ export default function TaskDetailScreen() {
   const [actionLoading, setActionLoading] = useState(false);
   const [reasonModal, setReasonModal] = useState(null); // 'reject' | 'block' | null
   const [reasonText, setReasonText] = useState('');
+  const [noteInput, setNoteInput] = useState('');
+  const [notesLoading, setNotesLoading] = useState(false);
 
   useEffect(() => {
     issuesApi.get(id)
@@ -82,6 +84,21 @@ export default function TaskDetailScreen() {
   const block = () => {
     setReasonText('');
     setReasonModal('block');
+  };
+
+  const addNote = async () => {
+    if (!noteInput.trim()) return;
+    setNotesLoading(true);
+    try {
+      await issuesApi.addComment(id, noteInput.trim());
+      setNoteInput('');
+      // Reload issue to get updated comments
+      const { data } = await issuesApi.get(id);
+      setIssue(data);
+    } catch (err) {
+      Alert.alert('Error', 'Could not add note');
+    }
+    setNotesLoading(false);
   };
 
   const submitReason = async () => {
@@ -206,6 +223,47 @@ export default function TaskDetailScreen() {
         </View>
       )}
 
+      {/* Task Notes */}
+      <View style={styles.notesSection}>
+        <Text style={styles.notesTitle}>Task Notes</Text>
+
+        {/* Comments List */}
+        {issue.comments && issue.comments.length > 0 ? (
+          <View style={styles.commentsList}>
+            {issue.comments.map((comment) => (
+              <View key={comment.id} style={styles.commentItem}>
+                <View style={styles.commentHeader}>
+                  <Text style={styles.commentAuthor}>{comment.author?.name || 'Unknown'}</Text>
+                  <Text style={styles.commentTime}>{formatDateTime(comment.created_at, 'en-IN')}</Text>
+                </View>
+                <Text style={styles.commentBody}>{comment.body}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.noComments}>No notes yet</Text>
+        )}
+
+        {/* Add Note Input */}
+        <View style={styles.noteInputSection}>
+          <TextInput
+            style={styles.noteInput}
+            placeholder="Add a note..."
+            value={noteInput}
+            onChangeText={setNoteInput}
+            multiline
+            editable={!notesLoading}
+          />
+          <TouchableOpacity
+            style={[styles.addNoteBtn, (!noteInput.trim() || notesLoading) && { opacity: 0.4 }]}
+            onPress={addNote}
+            disabled={!noteInput.trim() || notesLoading}
+          >
+            <Text style={styles.addNoteBtnText}>{notesLoading ? 'Adding...' : 'Add Note'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <View style={{ height: 40 }} />
 
       {/* Reason Modal for Reject / Block (cross-platform replacement for Alert.prompt) */}
@@ -281,6 +339,22 @@ const styles = StyleSheet.create({
     margin: 16, backgroundColor: '#d1fae5', borderRadius: 12, padding: 16,
   },
   resolvedText: { fontSize: 15, color: '#065f46', fontWeight: '600' },
+  notesSection: { backgroundColor: '#fff', padding: 16, marginTop: 8 },
+  notesTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  commentsList: { marginBottom: 12, borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 8 },
+  commentItem: { marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  commentAuthor: { fontSize: 13, fontWeight: '600', color: '#111827' },
+  commentTime: { fontSize: 12, color: '#9ca3af' },
+  commentBody: { fontSize: 13, color: '#374151', lineHeight: 18 },
+  noComments: { fontSize: 13, color: '#9ca3af', fontStyle: 'italic', marginBottom: 12 },
+  noteInputSection: { gap: 8 },
+  noteInput: {
+    borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 10,
+    fontSize: 13, color: '#111827', minHeight: 60, textAlignVertical: 'top',
+  },
+  addNoteBtn: { backgroundColor: '#059669', borderRadius: 8, padding: 12, alignItems: 'center' },
+  addNoteBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
 });
 
 const modalStyles = StyleSheet.create({

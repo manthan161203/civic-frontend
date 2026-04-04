@@ -14,8 +14,8 @@ export const issuesApi = {
     api.post(`/issues/${id}/photos?photo_type=${photoType}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
-  deletePhoto: (id, url) =>
-    api.delete(`/issues/${id}/photos`, { data: { photo_url: url } }),
+  deletePhoto: (id, url, photo_type) =>
+    api.delete(`/issues/${id}/photos`, { params: { url, photo_type } }),
   // Comments
   getComments: (id) => api.get(`/issues/${id}/comments`),
   addComment: (id, text) =>

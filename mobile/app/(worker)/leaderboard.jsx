@@ -3,7 +3,7 @@ import {
   View, Text, FlatList, StyleSheet, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useNavigation } from 'expo-router';
-import { rewardsApi } from '../../src/api/rewards';
+import { workersApi } from '../../src/api/workers';
 import { useAuthStore } from '../../src/store/authStore';
 
 function MedalIcon({ rank }) {
@@ -17,7 +17,7 @@ export default function WorkerLeaderboardScreen() {
   const navigation = useNavigation();
   const { user } = useAuthStore();
   const [workers, setWorkers] = useState([]);
-  const [myRewards, setMyRewards] = useState(null);
+  const [myRank, setMyRank] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -33,14 +33,16 @@ export default function WorkerLeaderboardScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [wRes, mRes] = await Promise.all([
-        rewardsApi.workerLeaderboard({ page: 1, size: 50 }),
-        rewardsApi.getMyRewards(),
-      ]);
-      setWorkers(wRes.data.items || wRes.data);
-      setMyRewards(mRes.data);
+      const wRes = await workersApi.getLeaderboard({ page: 1, size: 50 });
+      const workersList = wRes.data.items || wRes.data;
+      setWorkers(workersList);
+
+      // Derive rank from list position
+      const myEntry = workersList.find((w) => w.user_id === user?.id);
+      const rank = myEntry ? workersList.indexOf(myEntry) + 1 : null;
+      setMyRank(rank);
     } catch {}
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     load().finally(() => setLoading(false));
@@ -54,23 +56,25 @@ export default function WorkerLeaderboardScreen() {
 
   if (loading) return <ActivityIndicator style={{ flex: 1 }} color="#059669" size="large" />;
 
+  const myEntry = workers.find((w) => w.user_id === user?.id);
+
   return (
     <View style={styles.container}>
       {/* My Position Banner */}
-      {myRewards && (
+      {myEntry && (
         <View style={styles.banner}>
           <View style={styles.bannerItem}>
-            <Text style={styles.bannerVal}>{myRewards.total_points ?? 0}</Text>
+            <Text style={styles.bannerVal}>{myEntry.total_points ?? 0}</Text>
             <Text style={styles.bannerLabel}>My Points</Text>
           </View>
           <View style={styles.bannerDivider} />
           <View style={styles.bannerItem}>
-            <Text style={styles.bannerVal}>#{myRewards.rank ?? '—'}</Text>
+            <Text style={styles.bannerVal}>{myRank ? `#${myRank}` : 'Unranked'}</Text>
             <Text style={styles.bannerLabel}>My Rank</Text>
           </View>
           <View style={styles.bannerDivider} />
           <View style={styles.bannerItem}>
-            <Text style={styles.bannerVal}>{myRewards.badges?.length ?? 0}</Text>
+            <Text style={styles.bannerVal}>{myEntry.badge_count ?? 0}</Text>
             <Text style={styles.bannerLabel}>Badges</Text>
           </View>
         </View>

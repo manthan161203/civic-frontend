@@ -22,6 +22,7 @@ export const workersApi = {
     api.post(`/workers/tasks/${issue_id}/block`, { reason }),
   // Leaderboard
   leaderboard: () => api.get('/workers/leaderboard'),
+  getLeaderboard: (params) => api.get('/workers/leaderboard', { params }),
   // Shifts
   getShifts: () => api.get('/workers/shifts'),
   setShift: (day_of_week, start_time, end_time) =>

@@ -1,8 +1,10 @@
 import { Tabs, useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../../src/store/authStore';
 import { useNotificationStore } from '../../src/store/notificationStore';
+import { locationsApi } from '../../src/api/locations';
 import { View, Text } from 'react-native';
 
 function BadgeIcon({ name, color, size, count }) {
@@ -28,6 +30,7 @@ export default function CitizenLayout() {
   const { user } = useAuthStore();
   const { unreadCount, fetchNotifications } = useNotificationStore();
   const router = useRouter();
+  const [announcementBadge, setAnnouncementBadge] = useState(0);
 
   useEffect(() => {
     // Redirect workers to worker tabs; admin roles are blocked at root layout
@@ -36,6 +39,22 @@ export default function CitizenLayout() {
 
   useEffect(() => {
     fetchNotifications();
+  }, []);
+
+  // Calculate announcement badge count
+  useEffect(() => {
+    (async () => {
+      try {
+        const lastSeen = await AsyncStorage.getItem('lastSeenAnnouncement');
+        const lastSeenTime = lastSeen ? new Date(lastSeen).getTime() : 0;
+        const { data } = await locationsApi.getAnnouncements({ page: 1, size: 100 });
+        const announcements = data.items || data;
+        const unread = announcements.filter(
+          (a) => new Date(a.created_at).getTime() > lastSeenTime
+        ).length;
+        setAnnouncementBadge(unread);
+      } catch {}
+    })();
   }, []);
 
   // On first login (missing name or home location), send user to profile tab
@@ -94,11 +113,17 @@ export default function CitizenLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="announcements"
+        options={{
+          title: 'Announcements',
+          tabBarIcon: ({ color, size }) => <BadgeIcon name="megaphone" size={size} color={color} count={announcementBadge} />,
+        }}
+      />
       {/* Hidden screens — accessible via router.push but not shown in tab bar */}
       <Tabs.Screen name="chat" options={{ href: null, title: 'AI Assistant', headerShown: true, headerStyle: { backgroundColor: '#1a56db' }, headerTintColor: '#fff' }} />
       <Tabs.Screen name="leaderboard" options={{ href: null }} />
       <Tabs.Screen name="subscriptions" options={{ href: null }} />
-      <Tabs.Screen name="announcements" options={{ href: null }} />
     </Tabs>
   );
 }

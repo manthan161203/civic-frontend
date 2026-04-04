@@ -274,11 +274,252 @@ function CreateModal({ onClose, onCreated }) {
   );
 }
 
+// ── Edit Modal ────────────────────────────────────────────────────────────────
+function EditModal({ announcement, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    title: announcement.title,
+    body: announcement.body,
+    scope: announcement.scope
+  });
+  const [districts, setDistricts] = useState([]);
+  const [talukas, setTalukas] = useState([]);
+  const [wards, setWards] = useState([]);
+  const [selectedDistrict, setSelectedDistrict] = useState(announcement.district_id || '');
+  const [selectedTaluka, setSelectedTaluka] = useState(announcement.taluka_id || '');
+  const [selectedWard, setSelectedWard] = useState(announcement.ward_id || '');
+  const [attachLocation, setAttachLocation] = useState(announcement.location_lat != null);
+  const [pin, setPin] = useState({
+    lat: announcement.location_lat || 22.2587,
+    lng: announcement.location_lng || 71.1924
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    locationsApi.getDistricts()
+      .then(({ data }) => setDistricts(data.items || data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selectedDistrict) { setTalukas([]); setSelectedTaluka(''); return; }
+    locationsApi.getTalukas(selectedDistrict)
+      .then(({ data }) => setTalukas(data.items || data))
+      .catch(() => {});
+    setSelectedTaluka('');
+    setSelectedWard('');
+  }, [selectedDistrict]);
+
+  useEffect(() => {
+    if (!selectedTaluka) { setWards([]); setSelectedWard(''); return; }
+    locationsApi.getWards(selectedTaluka)
+      .then(({ data }) => setWards(data.items || data))
+      .catch(() => {});
+    setSelectedWard('');
+  }, [selectedTaluka]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    const payload = { ...form };
+    if (form.scope === 'district' && selectedDistrict) payload.district_id = selectedDistrict;
+    if (form.scope === 'taluka' && selectedTaluka) payload.taluka_id = selectedTaluka;
+    if (form.scope === 'ward' && selectedWard) payload.ward_id = selectedWard;
+    if (attachLocation) {
+      payload.location_lat = pin.lat;
+      payload.location_lng = pin.lng;
+    }
+
+    setSaving(true);
+    try {
+      await adminApi.updateAnnouncement(announcement.id, payload);
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update announcement.'));
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-gray-900 mb-4">Edit Announcement</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Title</label>
+            <input
+              required
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Water supply disruption today"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Message</label>
+            <textarea
+              required
+              rows={4}
+              value={form.body}
+              onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
+              placeholder="Write the announcement message here…"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400 resize-none"
+            />
+          </div>
+
+          {/* Scope */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-2 uppercase">Target Audience</label>
+            <div className="grid grid-cols-4 gap-2">
+              {['state', 'district', 'taluka', 'ward'].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => { setForm((f) => ({ ...f, scope: s })); setSelectedDistrict(''); setSelectedTaluka(''); setSelectedWard(''); }}
+                  className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-xs font-semibold transition-colors ${
+                    form.scope === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <span>{SCOPE_SVGS[s]}</span>
+                  <span className="capitalize">{s}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Location selector */}
+          {form.scope !== 'state' && (
+            <div className="p-4 bg-gray-50 rounded-xl space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase">Select Location</p>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">District</label>
+                <select
+                  value={selectedDistrict}
+                  onChange={(e) => setSelectedDistrict(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
+                >
+                  <option value="">— Select district —</option>
+                  {districts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+
+              {(form.scope === 'taluka' || form.scope === 'ward') && (
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Taluka</label>
+                  <select
+                    value={selectedTaluka}
+                    onChange={(e) => setSelectedTaluka(e.target.value)}
+                    disabled={!selectedDistrict}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white disabled:opacity-50"
+                  >
+                    <option value="">— Select taluka —</option>
+                    {talukas.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {form.scope === 'ward' && (
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Ward</label>
+                  <select
+                    value={selectedWard}
+                    onChange={(e) => setSelectedWard(e.target.value)}
+                    disabled={!selectedTaluka}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white disabled:opacity-50"
+                  >
+                    <option value="">— Select ward —</option>
+                    {wards.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
+          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+          {/* Attach Location (optional) */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setAttachLocation((v) => !v)}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-semibold transition-colors ${
+                attachLocation ? 'bg-green-50 border-green-400 text-green-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:16,height:16}}>
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" />
+              </svg>
+              {attachLocation ? 'Location attached — tap map to move pin' : 'Attach a clickable location (optional)'}
+            </button>
+
+            {attachLocation && (
+              <div className="mt-3 space-y-2">
+                <div style={{ height: 220, borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+                  <Map
+                    defaultCenter={pin}
+                    defaultZoom={12}
+                    mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_ID}
+                    onClick={(e) => {
+                      const latLng = e.detail?.latLng;
+                      if (latLng) setPin({ lat: latLng.lat, lng: latLng.lng });
+                    }}
+                    style={{ width: '100%', height: '100%' }}
+                    gestureHandling="greedy"
+                    disableDefaultUI
+                  >
+                    <AdvancedMarker position={pin} />
+                  </Map>
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 mb-0.5">Latitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={pin.lat.toFixed(6)}
+                      onChange={(e) => setPin((p) => ({ ...p, lat: parseFloat(e.target.value) || p.lat }))}
+                      className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 mb-0.5">Longitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={pin.lng.toFixed(6)}
+                      onChange={(e) => setPin((p) => ({ ...p, lng: parseFloat(e.target.value) || p.lng }))}
+                      className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">Citizens will see a "View on Map" button in the notification.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-semibold">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors">
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function AnnouncementsPage() {
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
   const [filterScope, setFilterScope] = useState('');
 
   const load = () => {
@@ -303,6 +544,9 @@ export default function AnnouncementsPage() {
     <div className="space-y-4">
       {showCreate && (
         <CreateModal onClose={() => setShowCreate(false)} onCreated={load} />
+      )}
+      {showEdit && editTarget && (
+        <EditModal announcement={editTarget} onClose={() => { setShowEdit(false); setEditTarget(null); }} onSaved={load} />
       )}
 
       {/* Toolbar */}
@@ -381,12 +625,20 @@ export default function AnnouncementsPage() {
                     {formatDate(a.created_at, 'en-IN')}
                   </p>
                 </div>
-                <button
-                  onClick={() => handleDelete(a.id)}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 transition-colors flex-shrink-0"
-                >
-                  Delete
-                </button>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => { setEditTarget(a); setShowEdit(true); }}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(a.id)}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}

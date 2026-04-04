@@ -14,15 +14,25 @@ import MapView, { Marker } from '../../src/components/PlatformMap';
 import { compressImage } from '../../src/utils/imageUtils';
 
 const ISSUE_TYPES = [
-  'pothole', 'streetlight', 'garbage', 'drain', 'other',
+  'roads', 'water', 'electricity', 'sanitation', 'parks', 'garbage', 'other',
 ];
+
+const TYPE_LABELS = {
+  roads: 'Roads',
+  water: 'Water',
+  electricity: 'Electricity',
+  sanitation: 'Sanitation',
+  parks: 'Parks',
+  garbage: 'Garbage',
+  other: 'Other',
+};
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
 export default function ReportScreen() {
   const router = useRouter();
   const [description, setDescription] = useState('');
-  const [issueType, setIssueType] = useState('pothole');
+  const [issueType, setIssueType] = useState('roads');
   const [priority, setPriority] = useState('medium');
   const [photos, setPhotos] = useState([]);
   const [location, setLocation] = useState(null);

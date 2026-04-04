@@ -111,6 +111,13 @@ export default function HomeScreen() {
     fetchIssues(true).finally(() => setLoading(false));
   }, [filter]);
 
+  // Trigger profile modal if ward or name is missing
+  useEffect(() => {
+    if (user && (!user.name || !user.ward)) {
+      setShowProfileModal(true);
+    }
+  }, [user]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchIssues(true);
@@ -176,7 +183,51 @@ export default function HomeScreen() {
           data={issues}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <IssueCard issue={item} onPress={() => router.push(`/issue/${item.id}`)} />
+            <View>
+              <IssueCard issue={item} onPress={() => router.push(`/issue/${item.id}`)} />
+              {item.status === 'resolved' && (
+                <View style={styles.actionRow}>
+                  {!item.citizen_rating && (
+                    <View style={styles.ratingRow}>
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <TouchableOpacity
+                          key={star}
+                          onPress={async () => {
+                            try {
+                              await issuesApi.update(item.id, { citizen_rating: star });
+                              setIssues((prev) =>
+                                prev.map((i) => (i.id === item.id ? { ...i, citizen_rating: star } : i))
+                              );
+                            } catch {
+                              Alert.alert('Error', 'Could not submit rating');
+                            }
+                          }}
+                          style={styles.star}
+                        >
+                          <Ionicons name="star" size={20} color="#f59e0b" />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    style={styles.closeBtn}
+                    onPress={async () => {
+                      try {
+                        await issuesApi.update(item.id, { status: 'closed' });
+                        setIssues((prev) =>
+                          prev.map((i) => (i.id === item.id ? { ...i, status: 'closed' } : i))
+                        );
+                      } catch {
+                        Alert.alert('Error', 'Could not close issue');
+                      }
+                    }}
+                  >
+                    <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                    <Text style={styles.closeBtnText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           )}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a56db" />}
           onEndReached={() => {
@@ -301,4 +352,9 @@ const styles = StyleSheet.create({
   sosText: {
     color: '#fff', fontSize: 13, fontWeight: '900', letterSpacing: 1,
   },
+  actionRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center', justifyContent: 'space-between' },
+  ratingRow: { flexDirection: 'row', gap: 4 },
+  star: { padding: 4 },
+  closeBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#059669', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 },
+  closeBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 });

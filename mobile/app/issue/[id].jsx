@@ -96,6 +96,7 @@ export default function IssueDetailScreen() {
   const [flagModal, setFlagModal] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
 
   useEffect(() => {
     load();
@@ -191,13 +192,11 @@ export default function IssueDetailScreen() {
     try {
       const { data } = await issuesApi.update(id, { citizen_rating: rating });
       setIssue((prev) => ({ ...prev, citizen_rating: data.citizen_rating ?? rating }));
-      
+      setRatingSubmitted(true);
+
       if (rating === 1) {
         await issuesApi.reopen(id);
         await load();
-        Alert.alert('Issue Reopened', 'Since you rated this 1 star, the issue has been reopened for further investigation.');
-      } else {
-        Alert.alert('Thank you!', 'Your rating has been submitted.');
       }
     } catch (err) {
       Alert.alert('Error', err.response?.data?.detail || 'Failed to submit rating.');
@@ -378,26 +377,42 @@ export default function IssueDetailScreen() {
       {/* Citizen Rating — shown for reporter on resolved/closed issues */}
       {isReporter && (issue.status === 'resolved' || issue.status === 'closed') && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            {issue.citizen_rating ? 'Your Rating' : 'Rate Resolution'}
-          </Text>
-          <View style={styles.ratingRow}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity
-                key={star}
-                onPress={() => !issue.citizen_rating && !ratingSubmitting && handleRate(star)}
-                disabled={!!issue.citizen_rating || ratingSubmitting}
-              >
-                <Ionicons
-                  name={(issue.citizen_rating || 0) >= star ? 'star' : 'star-outline'}
-                  size={32}
-                  color={(issue.citizen_rating || 0) >= star ? '#f59e0b' : '#d1d5db'}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-          {!issue.citizen_rating && (
-            <Text style={styles.ratingHint}>Tap a star to rate the resolution</Text>
+          {issue.citizen_rating ? (
+            <View style={styles.thankYouBox}>
+              <Ionicons name="checkmark-circle" size={40} color="#059669" />
+              <Text style={styles.thankYouTitle}>Thank you for your feedback!</Text>
+              <Text style={styles.thankYouSub}>Your rating helps us improve our service</Text>
+              <View style={styles.ratingDisplay}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Ionicons
+                    key={star}
+                    name={issue.citizen_rating >= star ? 'star' : 'star-outline'}
+                    size={24}
+                    color={issue.citizen_rating >= star ? '#f59e0b' : '#d1d5db'}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.sectionTitle}>Rate Resolution</Text>
+              <View style={styles.ratingRow}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <TouchableOpacity
+                    key={star}
+                    onPress={() => !ratingSubmitting && handleRate(star)}
+                    disabled={ratingSubmitting}
+                  >
+                    <Ionicons
+                      name="star-outline"
+                      size={32}
+                      color="#f59e0b"
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.ratingHint}>Tap a star to rate the resolution</Text>
+            </>
           )}
         </View>
       )}
@@ -539,4 +554,8 @@ const styles = StyleSheet.create({
   submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   ratingRow: { flexDirection: 'row', gap: 8, justifyContent: 'center', paddingVertical: 8 },
   ratingHint: { fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 4 },
+  thankYouBox: { alignItems: 'center', paddingVertical: 24, backgroundColor: '#f0fdf4', borderRadius: 12, padding: 16 },
+  thankYouTitle: { fontSize: 16, fontWeight: '700', color: '#059669', marginTop: 12 },
+  thankYouSub: { fontSize: 13, color: '#6b7280', marginTop: 4 },
+  ratingDisplay: { flexDirection: 'row', gap: 8, marginTop: 16, justifyContent: 'center' },
 });

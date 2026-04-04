@@ -298,27 +298,25 @@ export default function ChatScreen() {
           contentContainerStyle={styles.list}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           ListFooterComponent={
-            !hasStarted || messages.length <= 1 ? (
-              <View style={styles.chipsWrap}>
-                <Text style={styles.chipsLabel}>Suggested questions</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.chipsRow}
-                >
-                  {suggestions.map((s) => (
-                    <TouchableOpacity
-                      key={s.id}
-                      style={styles.chip}
-                      onPress={() => send(s.prompt)}
-                      disabled={loading}
-                    >
-                      <Text style={styles.chipText}>{s.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null
+            <View style={styles.chipsWrap}>
+              <Text style={styles.chipsLabel}>Suggested questions</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipsRow}
+              >
+                {suggestions.map((s) => (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={styles.chip}
+                    onPress={() => send(s.prompt)}
+                    disabled={loading}
+                  >
+                    <Text style={styles.chipText}>{s.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
           }
         />
       )}
