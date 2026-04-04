@@ -4,6 +4,7 @@ import { adminApi, locationsApi } from '../../../src/api/index';
 import { getErrorMessage } from '../../../src/lib/apiError';
 import { useAuthStore } from '../../../src/store/authStore';
 import { formatDate } from '../../../src/lib/dateUtils';
+import LoadingButton from '../../../src/components/ui/LoadingButton';
 
 const ROLE_LABELS = {
   admin: { label: 'Super Admin', color: 'bg-purple-100 text-purple-700' },
@@ -241,9 +242,9 @@ function EditAdminModal({ admin, onClose, onUpdated }) {
             <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-bold transition-colors">
               Cancel
             </button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-md shadow-blue-100">
-              {saving ? 'Saving…' : 'Save Changes'}
-            </button>
+            <LoadingButton type="submit" isLoading={saving} variant="primary" className="flex-1" loadingText="Saving...">
+              Save Changes
+            </LoadingButton>
           </div>
         </form>
       </div>

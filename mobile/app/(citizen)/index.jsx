@@ -3,7 +3,7 @@ import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, ActivityIndicator, TextInput, Alert, Vibration,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { issuesApi } from '../../src/api/issues';
 import { useAuthStore } from '../../src/store/authStore';
@@ -13,7 +13,7 @@ import CitizenProfileModal from '../../src/components/CitizenProfileModal';
 import * as Location from 'expo-location';
 import { logger } from '../../src/utils/logger';
 
-const CATEGORIES = ['All', 'open', 'in_progress', 'resolved'];
+const CATEGORIES = ['All', 'open', 'in_progress', 'resolved', 'closed'];
 
 function WardHealthBanner({ wardName }) {
   const [health, setHealth] = useState(null);
@@ -66,7 +66,9 @@ const bannerStyles = StyleSheet.create({
 export default function HomeScreen() {
   const router = useRouter();
   const { user, updateUser } = useAuthStore();
+  const [mainTab, setMainTab] = useState('my');
   const [issues, setIssues] = useState([]);
+  const [following, setFollowing] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('All');
@@ -106,21 +108,36 @@ export default function HomeScreen() {
     } catch {}
   }, [filter, page]);
 
+  const fetchFollowing = useCallback(async () => {
+    try {
+      const { data } = await issuesApi.following({ page: 1, size: 50 });
+      setFollowing(data.items || data);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     setLoading(true);
-    fetchIssues(true).finally(() => setLoading(false));
+    Promise.all([fetchIssues(true), fetchFollowing()]).finally(() => setLoading(false));
   }, [filter]);
 
-  // Trigger profile modal if ward or name is missing
+  // Refresh on every tab focus (catches changes from issue detail, report, etc.)
+  useFocusEffect(
+    useCallback(() => {
+      fetchIssues(true);
+      fetchFollowing();
+    }, [filter])
+  );
+
+  // Show/hide profile modal based on whether profile is complete
   useEffect(() => {
-    if (user && (!user.name || !user.ward)) {
-      setShowProfileModal(true);
+    if (user) {
+      setShowProfileModal(!user.name || !user.ward_id);
     }
   }, [user]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchIssues(true);
+    await Promise.all([fetchIssues(true), fetchFollowing()]);
     setRefreshing(false);
   };
 
@@ -161,24 +178,44 @@ export default function HomeScreen() {
       {/* Ward Health Banner */}
       <WardHealthBanner wardName={user?.ward} />
 
-      {/* Filter Tabs */}
-      <View style={styles.filters}>
-        {CATEGORIES.map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={[styles.chip, filter === cat && styles.chipActive]}
-            onPress={() => setFilter(cat)}
-          >
-            <Text style={[styles.chipText, filter === cat && styles.chipTextActive]}>
-              {cat === 'All' ? 'All' : cat.replace('_', ' ')}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Main Tab Switcher */}
+      <View style={styles.mainTabs}>
+        <TouchableOpacity
+          style={[styles.mainTab, mainTab === 'my' && styles.mainTabActive]}
+          onPress={() => setMainTab('my')}
+        >
+          <Text style={[styles.mainTabText, mainTab === 'my' && styles.mainTabTextActive]}>My Issues</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.mainTab, mainTab === 'following' && styles.mainTabActive]}
+          onPress={() => setMainTab('following')}
+        >
+          <Text style={[styles.mainTabText, mainTab === 'following' && styles.mainTabTextActive]}>
+            Following{following.length > 0 ? ` (${following.length})` : ''}
+          </Text>
+        </TouchableOpacity>
       </View>
+
+      {mainTab === 'my' && (
+        /* Filter Chips */
+        <View style={styles.filters}>
+          {CATEGORIES.map((cat) => (
+            <TouchableOpacity
+              key={cat}
+              style={[styles.chip, filter === cat && styles.chipActive]}
+              onPress={() => setFilter(cat)}
+            >
+              <Text style={[styles.chipText, filter === cat && styles.chipTextActive]}>
+                {cat === 'All' ? 'All' : cat.replace('_', ' ')}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color="#1a56db" size="large" />
-      ) : (
+      ) : mainTab === 'my' ? (
         <FlatList
           data={issues}
           keyExtractor={(item) => item.id}
@@ -246,6 +283,23 @@ export default function HomeScreen() {
           ListFooterComponent={loadingMore ? (
             <ActivityIndicator style={{ paddingVertical: 16 }} color="#1a56db" />
           ) : null}
+          contentContainerStyle={{ paddingBottom: 20 }}
+        />
+      ) : (
+        <FlatList
+          data={following}
+          keyExtractor={(item, index) => item.id ?? String(index)}
+          renderItem={({ item }) => (
+            <IssueCard issue={item} onPress={() => router.push(`/issue/${item.id}`)} />
+          )}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a56db" />}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="bookmark-outline" size={48} color="#d1d5db" />
+              <Text style={styles.emptyText}>No followed issues yet</Text>
+              <Text style={styles.emptySubText}>When a duplicate is found while reporting, tap it to follow it</Text>
+            </View>
+          }
           contentContainerStyle={{ paddingBottom: 20 }}
         />
       )}
@@ -333,8 +387,20 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#1a56db' },
   chipText: { fontSize: 13, fontWeight: '600', color: '#6b7280', textTransform: 'capitalize' },
   chipTextActive: { color: '#fff' },
-  empty: { alignItems: 'center', marginTop: 80, gap: 12 },
+  empty: { alignItems: 'center', marginTop: 80, gap: 12, paddingHorizontal: 32 },
   emptyText: { fontSize: 16, color: '#9ca3af' },
+  emptySubText: { fontSize: 13, color: '#d1d5db', textAlign: 'center' },
+  mainTabs: {
+    flexDirection: 'row', backgroundColor: '#fff',
+    borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+  },
+  mainTab: {
+    flex: 1, paddingVertical: 11, alignItems: 'center',
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  mainTabActive: { borderBottomColor: '#1a56db' },
+  mainTabText: { fontSize: 14, fontWeight: '600', color: '#6b7280' },
+  mainTabTextActive: { color: '#1a56db' },
   fab: {
     position: 'absolute', bottom: 24, right: 20,
     width: 56, height: 56, borderRadius: 28,

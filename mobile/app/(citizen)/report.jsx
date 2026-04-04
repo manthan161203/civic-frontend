@@ -293,8 +293,10 @@ export default function ReportScreen() {
                 <TouchableOpacity
                   key={issue.id}
                   style={styles.dupItem}
-                  onPress={() => {
+                  onPress={async () => {
                     setShowDuplicateModal(false);
+                    // Auto-follow (upvote) so it appears on their dashboard
+                    try { await issuesApi.upvote(issue.id); } catch {}
                     router.push(`/issue/${issue.id}`);
                   }}
                 >

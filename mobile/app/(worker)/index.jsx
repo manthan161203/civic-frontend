@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle as SvgCircle } from 'react-native-svg';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import { workersApi } from '../../src/api/workers';
 import { useAuthStore } from '../../src/store/authStore';
@@ -46,6 +46,8 @@ export default function WorkerDashboard() {
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   // Push location updates to server while online
   useEffect(() => {

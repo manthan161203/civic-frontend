@@ -4,6 +4,7 @@ import { useAuthStore } from '../../../src/store/authStore';
 import { authApi, locationsApi } from '../../../src/api/index';
 import { getErrorMessage } from '../../../src/lib/apiError';
 import { formatDate } from '../../../src/lib/dateUtils';
+import LoadingButton from '../../../src/components/ui/LoadingButton';
 
 const ROLE_LABELS = {
   admin: 'Super Admin',
@@ -139,13 +140,14 @@ function ProfileInfo() {
         {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
         {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{success}</p>}
 
-        <button
+        <LoadingButton
           type="submit"
-          disabled={saving}
-          className="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors"
+          isLoading={saving}
+          variant="primary"
+          loadingText="Saving..."
         >
-          {saving ? 'Saving…' : 'Save Changes'}
-        </button>
+          Save Changes
+        </LoadingButton>
       </form>
     </div>
   );

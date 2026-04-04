@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminApi, locationsApi } from '../../../src/api/index';
 import { useAuthStore } from '../../../src/store/authStore';
 import AdminScopeHeader from '../../../src/components/AdminScopeHeader';
+import LoadingButton from '../../../src/components/ui/LoadingButton';
 
 export default function CitizensPage() {
   const { user } = useAuthStore();
@@ -103,7 +104,7 @@ export default function CitizensPage() {
                 </div>
               ))}
             </div>
-            <button onClick={() => setSelected(null)} className="mt-4 w-full py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-semibold">Close</button>
+            <LoadingButton onClick={() => setSelected(null)} variant="outline" className="mt-4 w-full">Close</LoadingButton>
           </div>
         </div>
       )}
@@ -167,12 +168,13 @@ export default function CitizensPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
+                    <LoadingButton
                       onClick={() => handleToggle(c.id, c.is_active)}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${c.is_active ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}
+                      variant={c.is_active ? 'danger' : 'success'}
+                      size="sm"
                     >
                       {c.is_active ? 'Deactivate' : 'Reactivate'}
-                    </button>
+                    </LoadingButton>
                   </td>
                 </tr>
               ))

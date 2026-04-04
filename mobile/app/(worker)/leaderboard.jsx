@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet, ActivityIndicator, RefreshControl,
 } from 'react-native';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useFocusEffect } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
 import { useAuthStore } from '../../src/store/authStore';
 
@@ -47,6 +47,8 @@ export default function WorkerLeaderboardScreen() {
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const onRefresh = async () => {
     setRefreshing(true);

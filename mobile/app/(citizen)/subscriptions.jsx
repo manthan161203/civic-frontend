@@ -4,7 +4,7 @@ import {
   ActivityIndicator, RefreshControl, Alert, Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useFocusEffect } from 'expo-router';
 import { locationsApi } from '../../src/api/locations';
 
 export default function SubscriptionsScreen() {
@@ -41,6 +41,8 @@ export default function SubscriptionsScreen() {
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const onRefresh = async () => {
     setRefreshing(true);

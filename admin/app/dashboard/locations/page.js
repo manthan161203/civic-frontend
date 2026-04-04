@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { locationsApi } from '../../../src/api/index';
 import { useAuthStore } from '../../../src/store/authStore';
+import LoadingButton from '../../../src/components/ui/LoadingButton';
 
 // ── Ward Map Picker (Google Maps) ────────────────────────────────────────────
 // Defined outside LocationsPage so React never unmounts it during re-renders.
@@ -449,13 +450,15 @@ export default function LocationsPage() {
                 >
                   Cancel
                 </button>
-                <button
+                <LoadingButton
                   type="submit"
-                  disabled={saving}
-                  className="flex-1 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 disabled:opacity-60"
+                  isLoading={saving}
+                  variant="primary"
+                  className="flex-1"
+                  loadingText="Saving..."
                 >
-                  {saving ? 'Saving…' : 'Add'}
-                </button>
+                  Add
+                </LoadingButton>
               </div>
             </form>
           </div>
@@ -520,13 +523,15 @@ export default function LocationsPage() {
                 >
                   Cancel
                 </button>
-                <button
+                <LoadingButton
                   type="submit"
-                  disabled={saving}
-                  className="flex-1 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 disabled:opacity-60"
+                  isLoading={saving}
+                  variant="primary"
+                  className="flex-1"
+                  loadingText="Updating..."
                 >
-                  {saving ? 'Updating…' : 'Update'}
-                </button>
+                  Update
+                </LoadingButton>
               </div>
             </form>
           </div>

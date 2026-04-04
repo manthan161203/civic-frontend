@@ -1,19 +1,28 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '../../src/api/index';
 import { useAuthStore } from '../../src/store/authStore';
 import { getErrorMessage } from '../../src/lib/apiError';
+import CivicLogo from '../../src/components/ui/CivicLogo';
+import LoadingButton from '../../src/components/ui/LoadingButton';
+import SvgIcon from '../../src/components/ui/SvgIcon';
 
 export default function LoginPage() {
   const router = useRouter();
   const { setSession } = useAuthStore();
-  const [step, setStep] = useState('phone'); // 'phone' | 'otp'
+  const [step, setStep] = useState('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [countdown, setCountdown] = useState(0);
+
+  const maskPhone = (phoneNumber) => {
+    if (!phoneNumber) return '';
+    // Show only last 4 digits, e.g., "+91****1203"
+    return phoneNumber.slice(0, 3) + '****' + phoneNumber.slice(-4);
+  };
 
   const startCountdown = () => {
     setCountdown(60);
@@ -65,53 +74,105 @@ export default function LoginPage() {
     setLoading(false);
   };
 
+  const bgClass = 'bg-gradient-to-br from-blue-50 via-white to-indigo-50';
+  const cardBg = 'bg-white';
+  const textColor = 'text-gray-900';
+  const labelColor = 'text-gray-700';
+  const inputBg = 'bg-white text-gray-900 border-gray-200';
+  const errorColor = 'text-red-500';
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+    <div className={`min-h-screen flex flex-col items-center justify-center ${bgClass} relative overflow-hidden transition-all duration-300`}>
+      {/* Animated background elements */}
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(20px); }
+        }
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .float-element {
+          animation: float 6s ease-in-out infinite;
+        }
+        .slide-in {
+          animation: slideIn 0.6s ease-out forwards;
+        }
+      `}</style>
+
+      {/* Floating background circles */}
+      <div className="absolute top-10 left-10 w-64 h-64 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 float-element"></div>
+      <div className="absolute bottom-20 right-10 w-72 h-72 bg-indigo-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 float-element" style={{ animationDelay: '2s' }}></div>
+      <div className="absolute top-1/2 left-1/3 w-56 h-56 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 float-element" style={{ animationDelay: '4s' }}></div>
+
+
+      {/* Main login card */}
+      <div className={`${cardBg} rounded-3xl shadow-2xl p-8 sm:p-10 w-full max-w-md mx-4 backdrop-blur-xl border border-white/10 slide-in relative z-10`}>
+
         {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center mb-3">
-            <span className="text-2xl font-black text-white">C</span>
+        <div className="flex flex-col items-center mb-10">
+          <div className="mb-4">
+            <CivicLogo size="lg" showText={true} darkMode={false} />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Civic Admin</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {step === 'phone' ? 'Sign in to your admin account' : `OTP sent to ${phone}`}
+          <p className={`text-sm font-medium text-gray-600`}>
+            {step === 'phone' ? 'Admin Portal Sign In' : `Verification Code sent to ${maskPhone(phone)}`}
           </p>
         </div>
 
         {step === 'phone' ? (
-          <form onSubmit={sendOtp} className="space-y-4">
+          <form onSubmit={sendOtp} className="space-y-6">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
+              <label className={`block text-sm font-semibold ${labelColor} mb-2`}>
                 Mobile Number
               </label>
-              <div className="flex border-2 border-gray-200 rounded-xl overflow-hidden focus-within:border-blue-500 transition-colors">
-                <div className="px-3 flex items-center bg-gray-50 border-r-2 border-gray-200">
-                  <span className="text-sm font-semibold text-gray-600">+91</span>
+              <div className={`flex border-2 rounded-xl overflow-hidden focus-within:border-blue-500 focus-within:shadow-lg transition-all ${inputBg}`}>
+                <div className={`px-4 flex items-center bg-gray-50 border-r-2 border-gray-200`}>
+                  <span className={`text-sm font-semibold ${labelColor}`}>+91</span>
                 </div>
                 <input
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                   placeholder="10-digit number"
-                  className="flex-1 px-3 py-3 text-sm outline-none text-gray-900"
+                  className={`flex-1 px-4 py-3 text-sm outline-none bg-transparent ${textColor} placeholder-gray-400`}
+                  maxLength={10}
                   required
+                  autoFocus
                 />
               </div>
             </div>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <button
+
+            {error && (
+              <div className={`p-3 rounded-lg bg-red-50 border border-red-200`}>
+                <p className={`text-sm ${errorColor}`}>{error}</p>
+              </div>
+            )}
+
+            <LoadingButton
               type="submit"
-              disabled={loading}
-              className="w-full h-11 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors"
+              isLoading={loading}
+              variant="primary"
+              className="w-full"
+              loadingText="Sending..."
             >
-              {loading ? 'Sending…' : 'Get OTP'}
-            </button>
+              Get OTP
+            </LoadingButton>
+
+            <p className={`text-xs text-gray-500 text-center`}>
+              Admin-only login. Your credentials are secure.
+            </p>
           </form>
         ) : (
-          <form onSubmit={verifyOtp} className="space-y-4">
+          <form onSubmit={verifyOtp} className="space-y-6">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">
+              <label className={`block text-sm font-semibold ${labelColor} mb-2`}>
                 Enter 6-digit OTP
               </label>
               <input
@@ -119,41 +180,56 @@ export default function LoginPage() {
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 placeholder="• • • • • •"
-                className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-center text-2xl font-bold tracking-widest outline-none focus:border-blue-500 text-gray-900"
+                className={`w-full border-2 rounded-xl px-4 py-4 text-center text-3xl font-bold tracking-widest outline-none focus:border-blue-500 focus:shadow-lg transition-all ${inputBg}`}
                 autoFocus
                 maxLength={6}
               />
             </div>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <button
+
+            {error && (
+              <div className={`p-3 rounded-lg bg-red-50 border border-red-200`}>
+                <p className={`text-sm ${errorColor}`}>{error}</p>
+              </div>
+            )}
+
+            <LoadingButton
               type="submit"
-              disabled={loading}
-              className="w-full h-11 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors"
+              isLoading={loading}
+              variant="primary"
+              className="w-full"
+              loadingText="Verifying..."
             >
-              {loading ? 'Verifying…' : 'Verify & Sign In'}
-            </button>
-            <div className="text-center">
+              Verify & Sign In
+            </LoadingButton>
+
+            <div className={`text-center text-sm text-gray-600`}>
               {countdown > 0 ? (
-                <p className="text-sm text-gray-400">Resend OTP in {countdown}s</p>
+                <p>Resend OTP in <span className="font-semibold">{countdown}s</span></p>
               ) : (
                 <button
                   type="button"
                   onClick={sendOtp}
-                  className="text-sm text-blue-600 font-semibold hover:underline"
+                  className="text-blue-500 font-semibold hover:underline"
                 >
                   Resend OTP
                 </button>
               )}
             </div>
+
             <button
               type="button"
-              onClick={() => { setStep('phone'); setOtp(''); setError(''); }}
-              className="w-full text-sm text-gray-500 hover:text-gray-700"
+              onClick={() => { setStep('phone'); setPhone(''); setOtp(''); setError(''); }}
+              className={`w-full text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors`}
             >
               ← Change number
             </button>
           </form>
         )}
+      </div>
+
+      {/* Footer info */}
+      <div className={`mt-8 text-center text-sm text-gray-600`}>
+        <p>Secure access for administrators only</p>
       </div>
     </div>
   );

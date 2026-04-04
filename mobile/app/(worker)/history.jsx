@@ -4,7 +4,7 @@ import {
   ActivityIndicator, RefreshControl, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRouter } from 'expo-router';
+import { useNavigation, useRouter, useFocusEffect } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
 import { formatDate } from '../../src/utils/dateUtils';
 
@@ -131,6 +131,8 @@ export default function TaskHistoryScreen() {
     setLoading(true);
     fetchHistory(true).finally(() => setLoading(false));
   }, [filter]);
+
+  useFocusEffect(useCallback(() => { fetchHistory(true); }, [fetchHistory]));
 
   const onRefresh = async () => {
     setRefreshing(true);

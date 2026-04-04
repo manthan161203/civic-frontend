@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, ActivityIndicator, Alert, Modal, ScrollView, Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useNotificationStore } from '../../src/store/notificationStore';
 import { formatDateTime } from '../../src/utils/dateUtils';
 
@@ -18,6 +18,7 @@ export default function NotificationsScreen() {
   } = useNotificationStore();
 
   useEffect(() => { fetchNotifications(); }, []);
+  useFocusEffect(useCallback(() => { fetchNotifications(); }, [fetchNotifications]));
 
   const onRefresh = async () => {
     setRefreshing(true);

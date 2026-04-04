@@ -7,6 +7,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { locationsApi } from '../api/locations';
 import { authApi } from '../api/auth';
+import LoadingButton from './LoadingButton';
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -382,17 +383,16 @@ export default function CitizenProfileModal({ visible, onComplete, onCancel, use
 
           {/* Save Button */}
           <View style={styles.footer}>
-            <TouchableOpacity
-              style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+            <LoadingButton
+              isLoading={saving}
               onPress={handleSave}
-              disabled={saving || loading}
+              disabled={loading}
+              variant="primary"
+              size="lg"
+              loadingText="Saving..."
             >
-              {saving ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.saveBtnText}>Complete</Text>
-              )}
-            </TouchableOpacity>
+              Complete
+            </LoadingButton>
           </View>
         </KeyboardAvoidingView>
       </View>

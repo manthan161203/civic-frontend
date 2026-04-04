@@ -44,6 +44,12 @@ export default function OtpScreen() {
     }
   };
 
+  const maskPhone = (phoneNumber) => {
+    if (!phoneNumber) return '';
+    // Show only last 4 digits, e.g., "+91****1203"
+    return phoneNumber.slice(0, 3) + '****' + phoneNumber.slice(-4);
+  };
+
   const verifyOtp = async (code) => {
     setLoading(true);
     try {
@@ -65,7 +71,7 @@ export default function OtpScreen() {
     try {
       await authApi.sendOtp(phone);
       setCountdown(60);
-      Alert.alert('Sent', 'A new OTP has been sent to ' + phone);
+      Alert.alert('Sent', 'A new OTP has been sent to ' + maskPhone(phone));
     } catch {
       Alert.alert('Error', 'Could not resend OTP.');
     }
@@ -84,7 +90,7 @@ export default function OtpScreen() {
         <Text style={styles.title}>Enter OTP</Text>
         <Text style={styles.subtitle}>
           We sent a 6-digit code to{'\n'}
-          <Text style={styles.phone}>{phone}</Text>
+          <Text style={styles.phone}>{maskPhone(phone)}</Text>
         </Text>
 
         {!!devOtp && (

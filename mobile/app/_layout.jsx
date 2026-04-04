@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { View, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '../src/store/authStore';
 
 SplashScreen.preventAutoHideAsync();
@@ -93,6 +94,14 @@ export default function RootLayout() {
       }
     }
   }, [isLoading, isAuthenticated]);
+
+  if (isLoading) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f9ff' }}>
+        <ActivityIndicator size="large" color="#1a56db" />
+      </GestureHandlerRootView>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

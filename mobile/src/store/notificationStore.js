@@ -1,10 +1,12 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationsApi } from '../api/notifications';
 
 export const useNotificationStore = create((set) => ({
   notifications: [],
   unreadCount: 0,
   isLoading: false,
+  announcementBadge: 0,
 
   fetchNotifications: async () => {
     set({ isLoading: true });
@@ -60,5 +62,24 @@ export const useNotificationStore = create((set) => ({
       await notificationsApi.deleteAll();
       set({ notifications: [], unreadCount: 0 });
     } catch {}
+  },
+
+  fetchAnnouncementBadge: async () => {
+    try {
+      const { locationsApi } = await import('../api/locations');
+      const lastSeen = await AsyncStorage.getItem('lastSeenAnnouncement');
+      const lastSeenTime = lastSeen ? new Date(lastSeen).getTime() : 0;
+      const { data } = await locationsApi.getAnnouncements({ page: 1, size: 100 });
+      const announcements = data.items || data;
+      const unread = announcements.filter(
+        (a) => new Date(a.created_at).getTime() > lastSeenTime
+      ).length;
+      set({ announcementBadge: unread });
+    } catch {}
+  },
+
+  clearAnnouncementBadge: async () => {
+    await AsyncStorage.setItem('lastSeenAnnouncement', new Date().toISOString()).catch(() => {});
+    set({ announcementBadge: 0 });
   },
 }));

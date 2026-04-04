@@ -82,6 +82,84 @@ function FlagModal({ visible, onClose, onSubmit }) {
   );
 }
 
+const AVATAR_COLORS = {
+  citizen: { bg: '#dbeafe', text: '#1a56db' },
+  worker:  { bg: '#d1fae5', text: '#065f46' },
+  admin:   { bg: '#fef3c7', text: '#92400e' },
+};
+
+const ROLE_BADGES = {
+  worker: { bg: '#d1fae5', text: '#065f46', label: 'Worker' },
+  admin:  { bg: '#fef3c7', text: '#92400e', label: 'Admin' },
+};
+
+function CommentBubble({ comment, user, onReply, onDelete, isReply = false }) {
+  const role = comment.author?.role || 'citizen';
+  const colors = AVATAR_COLORS[role] || AVATAR_COLORS.citizen;
+  const roleBadge = ROLE_BADGES[role];
+  const canDelete = comment.author?.id === user?.id || user?.role?.includes('admin');
+  const avatarSize = isReply ? 28 : 34;
+
+  return (
+    <View style={[cbStyles.row, isReply && cbStyles.replyRow]}>
+      <View style={[cbStyles.avatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, backgroundColor: colors.bg }]}>
+        <Text style={[cbStyles.avatarText, { color: colors.text, fontSize: isReply ? 12 : 14 }]}>
+          {comment.author?.name?.charAt(0)?.toUpperCase() || '?'}
+        </Text>
+      </View>
+
+      <View style={cbStyles.bubble}>
+        <View style={cbStyles.bubbleHeader}>
+          <Text style={cbStyles.authorName}>{comment.author?.name || 'User'}</Text>
+          {roleBadge && (
+            <View style={[cbStyles.rolePill, { backgroundColor: roleBadge.bg }]}>
+              <Text style={[cbStyles.rolePillText, { color: roleBadge.text }]}>{roleBadge.label}</Text>
+            </View>
+          )}
+        </View>
+        <Text style={cbStyles.bodyText}>{comment.body}</Text>
+        <View style={cbStyles.footer}>
+          <Text style={cbStyles.timeText}>{formatDate(comment.created_at, 'en-IN')}</Text>
+          {!isReply && onReply && (
+            <TouchableOpacity onPress={onReply} style={cbStyles.replyBtn}>
+              <Ionicons name="return-down-forward-outline" size={12} color="#1a56db" />
+              <Text style={cbStyles.replyBtnText}>Reply</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {canDelete && (
+        <TouchableOpacity style={cbStyles.deleteBtn} onPress={onDelete}>
+          <Ionicons name="trash-outline" size={13} color="#ef4444" />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+const cbStyles = StyleSheet.create({
+  row: { flexDirection: 'row', gap: 10, marginBottom: 10, alignItems: 'flex-start' },
+  replyRow: { marginBottom: 8 },
+  avatar: { justifyContent: 'center', alignItems: 'center', flexShrink: 0, marginTop: 2 },
+  avatarText: { fontWeight: '700' },
+  bubble: {
+    flex: 1, backgroundColor: '#f8fafc', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 9,
+    borderWidth: 1, borderColor: '#f1f5f9',
+  },
+  bubbleHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  authorName: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  rolePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  rolePillText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+  bodyText: { fontSize: 14, color: '#374151', lineHeight: 20 },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 6 },
+  timeText: { fontSize: 11, color: '#9ca3af' },
+  replyBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  replyBtnText: { fontSize: 11, fontWeight: '600', color: '#1a56db' },
+  deleteBtn: { padding: 6, alignSelf: 'flex-start', marginTop: 2 },
+});
+
 export default function IssueDetailScreen() {
   const { id } = useLocalSearchParams();
   const navigation = useNavigation();
@@ -90,6 +168,7 @@ export default function IssueDetailScreen() {
   const [timeline, setTimeline] = useState([]);
   const [comments, setComments] = useState([]);
   const [comment, setComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null); // { id, authorName }
   const [upvoted, setUpvoted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
@@ -144,9 +223,21 @@ export default function IssueDetailScreen() {
     if (!comment.trim()) return;
     setPosting(true);
     try {
-      const { data } = await issuesApi.addComment(id, comment.trim());
-      setComments((prev) => [...prev, data]);
+      const { data } = await issuesApi.addComment(id, comment.trim(), replyingTo?.id ?? null);
+      if (replyingTo) {
+        // Append reply under its parent
+        setComments((prev) =>
+          prev.map((c) =>
+            c.id === replyingTo.id
+              ? { ...c, replies: [...(c.replies || []), data] }
+              : c
+          )
+        );
+      } else {
+        setComments((prev) => [...prev, { ...data, replies: [] }]);
+      }
       setComment('');
+      setReplyingTo(null);
     } catch {}
     setPosting(false);
   };
@@ -178,7 +269,14 @@ export default function IssueDetailScreen() {
         text: 'Delete', style: 'destructive', onPress: async () => {
           try {
             await issuesApi.deleteComment(id, commentId);
-            setComments((prev) => prev.filter((c) => c.id !== commentId));
+            setComments((prev) => {
+              // Remove top-level or remove from replies
+              const withoutTop = prev.filter((c) => c.id !== commentId);
+              return withoutTop.map((c) => ({
+                ...c,
+                replies: (c.replies || []).filter((r) => r.id !== commentId),
+              }));
+            });
           } catch (err) {
             Alert.alert('Error', err.response?.data?.detail || 'Failed to delete comment.');
           }
@@ -238,7 +336,6 @@ export default function IssueDetailScreen() {
   }
 
   const isReporter = user?.id === issue.reporter_id;
-  const isInvolved = isReporter || user?.role === 'worker' || user?.role?.includes('admin');
 
   return (
     <KeyboardAvoidingView
@@ -437,51 +534,96 @@ export default function IssueDetailScreen() {
         </View>
       )}
 
-      {/* Comments — only visible to involved users (reporter, assigned worker, admin) */}
-      {isInvolved && (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Comments ({comments.length})</Text>
-        {comments.map((c) => (
-          <View key={c.id} style={styles.comment}>
-            <View style={styles.commentAvatar}>
-              <Text style={styles.commentAvatarText}>{c.author?.name?.charAt(0) || '?'}</Text>
-            </View>
-            <View style={styles.commentBody}>
-              <Text style={styles.commentAuthor}>{c.author?.name || 'User'}</Text>
-              <Text style={styles.commentText}>{c.body}</Text>
-              <Text style={styles.commentTime}>
-                {formatDate(c.created_at, 'en-IN')}
-              </Text>
-            </View>
-            {(c.author?.id === user?.id || user?.role?.includes('admin')) && (
-              <TouchableOpacity
-                style={styles.commentDeleteBtn}
-                onPress={() => handleDeleteComment(c.id)}
-              >
-                <Ionicons name="trash-outline" size={14} color="#ef4444" />
-              </TouchableOpacity>
-            )}
+      {/* Comments */}
+      <View style={styles.commentSection}>
+        {/* Header */}
+        <View style={styles.commentHeader}>
+          <Ionicons name="chatbubbles-outline" size={16} color="#374151" />
+          <Text style={styles.commentHeaderText}>
+            {comments.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0)} Comments
+          </Text>
+        </View>
+
+        {/* Comment list */}
+        {comments.length === 0 ? (
+          <View style={styles.commentEmpty}>
+            <Ionicons name="chatbubble-ellipses-outline" size={32} color="#d1d5db" />
+            <Text style={styles.commentEmptyText}>No comments yet. Be the first!</Text>
           </View>
-        ))}
+        ) : (
+          comments.map((c) => (
+            <View key={c.id} style={styles.commentThread}>
+              {/* Top-level comment */}
+              <CommentBubble
+                comment={c}
+                user={user}
+                onReply={() => setReplyingTo({ id: c.id, authorName: c.author?.name || 'User' })}
+                onDelete={() => handleDeleteComment(c.id)}
+              />
+
+              {/* Replies */}
+              {(c.replies || []).length > 0 && (
+                <View style={styles.repliesContainer}>
+                  <View style={styles.replyConnector} />
+                  <View style={styles.repliesList}>
+                    {(c.replies || []).map((r) => (
+                      <CommentBubble
+                        key={r.id}
+                        comment={r}
+                        user={user}
+                        isReply
+                        onDelete={() => handleDeleteComment(r.id)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          ))
+        )}
+
+        {/* Reply-to indicator */}
+        {replyingTo && (
+          <View style={styles.replyingToBar}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="return-down-forward-outline" size={14} color="#1a56db" />
+              <Text style={styles.replyingToText}>Replying to {replyingTo.authorName}</Text>
+            </View>
+            <TouchableOpacity onPress={() => setReplyingTo(null)}>
+              <Ionicons name="close-circle" size={18} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Input */}
         <View style={styles.commentInputRow}>
-          <TextInput
-            style={styles.commentInput}
-            placeholder="Add a comment…"
-            value={comment}
-            onChangeText={setComment}
-            returnKeyType="send"
-            onSubmitEditing={postComment}
-          />
-          <TouchableOpacity
-            style={[styles.commentSend, (!comment.trim() || posting) && { opacity: 0.5 }]}
-            onPress={postComment}
-            disabled={!comment.trim() || posting}
-          >
-            <Ionicons name="send" size={18} color="#fff" />
-          </TouchableOpacity>
+          <View style={styles.commentInputAvatar}>
+            <Text style={styles.commentInputAvatarText}>
+              {user?.name?.charAt(0)?.toUpperCase() || '?'}
+            </Text>
+          </View>
+          <View style={styles.commentInputBox}>
+            <TextInput
+              style={styles.commentInput}
+              placeholder={replyingTo ? `Reply to ${replyingTo.authorName}…` : 'Write a comment…'}
+              placeholderTextColor="#9ca3af"
+              value={comment}
+              onChangeText={setComment}
+              multiline
+              returnKeyType="default"
+            />
+            <TouchableOpacity
+              style={[styles.commentSend, (!comment.trim() || posting) && { opacity: 0.4 }]}
+              onPress={postComment}
+              disabled={!comment.trim() || posting}
+            >
+              {posting
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Ionicons name="send" size={15} color="#fff" />}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-      )}
 
       <View style={{ height: 32 }} />
     </ScrollView>
@@ -524,20 +666,32 @@ const styles = StyleSheet.create({
   timelineEvent: { fontSize: 14, color: '#111827', fontWeight: '600', textTransform: 'capitalize' },
   timelineDate: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
   timelineNote: { fontSize: 13, color: '#6b7280', marginTop: 4 },
-  comment: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  commentAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#dbeafe', justifyContent: 'center', alignItems: 'center' },
-  commentAvatarText: { fontSize: 15, fontWeight: '700', color: '#1a56db' },
-  commentBody: { flex: 1 },
-  commentAuthor: { fontSize: 13, fontWeight: '700', color: '#111827' },
-  commentText: { fontSize: 13, color: '#374151', lineHeight: 18 },
-  commentTime: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
-  commentDeleteBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#fef2f2', justifyContent: 'center', alignItems: 'center', marginLeft: 4, alignSelf: 'center' },
-  commentInputRow: { flexDirection: 'row', gap: 10, marginTop: 12, alignItems: 'flex-end' },
-  commentInput: {
-    flex: 1, minHeight: 44, borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#111827',
+  // Comments section
+  commentSection: { backgroundColor: '#fff', marginTop: 12, paddingTop: 16, paddingHorizontal: 16, paddingBottom: 8 },
+  commentHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+  commentHeaderText: { fontSize: 13, fontWeight: '700', color: '#374151', textTransform: 'uppercase', letterSpacing: 0.5 },
+  commentThread: { marginBottom: 4 },
+  commentEmpty: { alignItems: 'center', paddingVertical: 24, gap: 8 },
+  commentEmptyText: { fontSize: 13, color: '#9ca3af' },
+  repliesContainer: { flexDirection: 'row', marginLeft: 17, marginTop: 2, marginBottom: 6 },
+  replyConnector: { width: 2, backgroundColor: '#e2e8f0', borderRadius: 1, marginRight: 14, marginTop: 4, marginBottom: 4 },
+  repliesList: { flex: 1 },
+  replyingToBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#eff6ff', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    marginBottom: 10, borderLeftWidth: 3, borderLeftColor: '#1a56db',
   },
-  commentSend: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1a56db', justifyContent: 'center', alignItems: 'center' },
+  replyingToText: { fontSize: 12, color: '#1a56db', fontWeight: '600' },
+  commentInputRow: { flexDirection: 'row', gap: 10, paddingTop: 12, paddingBottom: 12, alignItems: 'flex-end', borderTopWidth: 1, borderTopColor: '#f1f5f9', marginTop: 8 },
+  commentInputAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#dbeafe', justifyContent: 'center', alignItems: 'center', flexShrink: 0, marginBottom: 2 },
+  commentInputAvatarText: { fontSize: 14, fontWeight: '700', color: '#1a56db' },
+  commentInputBox: {
+    flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 8,
+    borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 20,
+    paddingLeft: 14, paddingRight: 6, paddingVertical: 6, backgroundColor: '#f8fafc',
+  },
+  commentInput: { flex: 1, fontSize: 14, color: '#111827', maxHeight: 100, paddingTop: 4, paddingBottom: 4 },
+  commentSend: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#1a56db', justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
   // Flag Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modal: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 },

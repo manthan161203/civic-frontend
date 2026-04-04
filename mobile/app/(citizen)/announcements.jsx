@@ -5,8 +5,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { locationsApi } from '../../src/api/locations';
+import { useNotificationStore } from '../../src/store/notificationStore';
 import { formatDate } from '../../src/utils/dateUtils';
 
 const SCOPE_COLORS = {
@@ -18,6 +18,7 @@ const SCOPE_COLORS = {
 
 export default function AnnouncementsScreen() {
   const navigation = useNavigation();
+  const { clearAnnouncementBadge } = useNotificationStore();
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -44,11 +45,12 @@ export default function AnnouncementsScreen() {
     load().finally(() => setLoading(false));
   }, []);
 
-  // Clear badge on focus
+  // Refresh list and clear badge on every focus
   useFocusEffect(
     useCallback(() => {
-      AsyncStorage.setItem('lastSeenAnnouncement', new Date().toISOString()).catch(() => {});
-    }, [])
+      load();
+      clearAnnouncementBadge();
+    }, [load])
   );
 
   const onRefresh = async () => {

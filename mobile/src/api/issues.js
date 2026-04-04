@@ -3,6 +3,7 @@ import api from './client';
 export const issuesApi = {
   create: (data) => api.post('/issues', data),
   list: (params) => api.get('/issues', { params }),
+  following: (params) => api.get('/issues/following', { params }),
   get: (id) => api.get(`/issues/${id}`),
   update: (id, data) => api.patch(`/issues/${id}`, data),
   nearby: (params) => api.get('/issues/nearby', { params }),
@@ -18,8 +19,8 @@ export const issuesApi = {
     api.delete(`/issues/${id}/photos`, { params: { url, photo_type } }),
   // Comments
   getComments: (id) => api.get(`/issues/${id}/comments`),
-  addComment: (id, text) =>
-    api.post(`/issues/${id}/comments`, { body: text }),
+  addComment: (id, text, parentId = null) =>
+    api.post(`/issues/${id}/comments`, { body: text, ...(parentId && { parent_id: parentId }) }),
   deleteComment: (issueId, commentId) =>
     api.delete(`/issues/${issueId}/comments/${commentId}`),
   // Upvotes

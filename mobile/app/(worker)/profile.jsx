@@ -59,11 +59,12 @@ export default function WorkerProfile() {
 
   useEffect(() => { loadStats(); }, []);
 
-  // Reload shifts every time the screen comes into focus (e.g. after editing shifts)
+  // Reload stats + shifts every time the screen comes into focus
   useFocusEffect(
     useCallback(() => {
+      loadStats();
       loadShifts();
-    }, [loadShifts])
+    }, [loadStats, loadShifts])
   );
 
   useEffect(() => {

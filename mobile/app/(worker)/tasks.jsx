@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
 import { formatDate } from '../../src/utils/dateUtils';
 
@@ -20,7 +20,7 @@ export default function TasksScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const [activeRes, histRes] = await Promise.all([
         workersApi.getTasks(),
@@ -31,11 +31,13 @@ export default function TasksScreen() {
     } catch (err) {
       Alert.alert('Error', err.response?.data?.detail || 'Failed to load tasks.');
     }
-  };
+  }, []);
 
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -90,7 +92,7 @@ export default function TasksScreen() {
       ) : (
         <FlatList
           data={data}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => item.id ?? String(index)}
           renderItem={renderItem}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#059669" />}
           ListEmptyComponent={

@@ -125,16 +125,29 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [heatmapPoints, setHeatmapPoints] = useState([]);
 
+  const loadDashboard = useCallback(async (initial = false) => {
+    try {
+      const [s, a] = await Promise.all([
+        adminApi.getDashboard(),
+        adminApi.getAnalytics({ days: 7 }),
+      ]);
+      setStats(s.data);
+      setAnalytics(a.data);
+    } catch {}
+    if (initial) setLoading(false);
+  }, []);
+
   useEffect(() => {
-    Promise.all([adminApi.getDashboard(), adminApi.getAnalytics({ days: 7 })])
-      .then(([s, a]) => { setStats(s.data); setAnalytics(a.data); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    loadDashboard(true);
 
     adminApi.getHeatmap()
       .then(({ data }) => setHeatmapPoints((data || []).filter((p) => p.lat && p.lng)))
       .catch(() => {});
-  }, []);
+
+    // Refresh stats every 60 seconds
+    const interval = setInterval(() => loadDashboard(false), 60_000);
+    return () => clearInterval(interval);
+  }, [loadDashboard]);
 
   if (loading) {
     return (

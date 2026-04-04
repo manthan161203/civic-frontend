@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, TextInput, Modal, Image,
@@ -7,7 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import MapView, { Marker, PROVIDER_GOOGLE } from '../../src/components/PlatformMap';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuthStore } from '../../src/store/authStore';
 import { rewardsApi } from '../../src/api/rewards';
 import { authApi } from '../../src/api/auth';
@@ -89,22 +89,28 @@ export default function ProfileScreen() {
   const mandatoryMapRef = useRef(null);
   const locationMapRef = useRef(null);
 
-  useEffect(() => {
+  const loadRewards = useCallback(() => {
     rewardsApi.getMyRewards()
       .then(({ data }) => setRewards(data))
       .catch(() => {})
       .finally(() => setLoading(false));
-      
+  }, []);
+
+  useEffect(() => {
+    loadRewards();
+
     // Preload districts for modals
     locationsApi.getDistricts()
       .then(({ data }) => setDistricts(data || []))
       .catch(() => {});
-      
+
     // Update profile photo when user changes
     if (user?.profile_photo_url) {
       setProfilePhoto(user.profile_photo_url);
     }
   }, [user?.profile_photo_url]);
+
+  useFocusEffect(useCallback(() => { loadRewards(); }, [loadRewards]));
 
   // Trigger first-login setup modal
   useEffect(() => {
@@ -365,7 +371,6 @@ export default function ProfileScreen() {
           </View>
         </TouchableOpacity>
         <Text style={styles.name}>{user?.name || 'Civic User'}</Text>
-        <Text style={styles.phone}>{user?.phone}</Text>
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>{user?.role || 'citizen'}</Text>
         </View>
@@ -415,7 +420,6 @@ export default function ProfileScreen() {
 
       {/* Menu */}
       <View style={styles.menu}>
-        <MenuItem icon="megaphone-outline" label="Announcements" onPress={() => router.push('/(citizen)/announcements')} />
         <MenuItem icon="trophy-outline" label="Leaderboard & Badges" onPress={() => router.push('/(citizen)/leaderboard')} />
         <MenuItem icon="chatbubble-ellipses-outline" label="AI Assistant" onPress={() => router.push('/(citizen)/chat')} />
         <MenuItem icon="notifications-outline" label="Ward Subscriptions" onPress={() => router.push('/(citizen)/subscriptions')} />
@@ -1023,30 +1027,23 @@ export default function ProfileScreen() {
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>Language Preference</Text>
-                <TouchableOpacity
-                  style={styles.dropdownBtn}
-                  onPress={() => setMandatoryShowLanguageDropdown(!mandatoryShowLanguageDropdown)}
-                >
-                  <Text style={styles.dropdownBtnText}>
-                    {mandatoryLanguage === 'en' ? 'English' : mandatoryLanguage === 'gu' ? 'Gujarati' : 'Hindi'}
-                  </Text>
-                  <Ionicons name={mandatoryShowLanguageDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#374151" />
-                </TouchableOpacity>
-                {mandatoryShowLanguageDropdown && (
-                  <View style={styles.dropdownMenu}>
-                    {['en', 'gu', 'hi'].map((lang) => (
-                      <TouchableOpacity
-                        key={lang}
-                        style={[styles.dropdownItem, mandatoryLanguage === lang && styles.dropdownItemActive]}
-                        onPress={() => { setMandatoryLanguage(lang); setMandatoryShowLanguageDropdown(false); }}
-                      >
-                        <Text style={[styles.dropdownItemText, mandatoryLanguage === lang && styles.dropdownItemTextActive]}>
-                          {lang === 'en' ? 'English' : lang === 'gu' ? 'Gujarati' : 'Hindi'}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+                <View style={styles.langBtnRow}>
+                  {[
+                    { code: 'en', label: 'English' },
+                    { code: 'hi', label: 'हिंदी' },
+                    { code: 'gu', label: 'ગુજરાતી' },
+                  ].map(({ code, label }) => (
+                    <TouchableOpacity
+                      key={code}
+                      style={[styles.langBtn, mandatoryLanguage === code && styles.langBtnActive]}
+                      onPress={() => setMandatoryLanguage(code)}
+                    >
+                      <Text style={[styles.langBtnText, mandatoryLanguage === code && styles.langBtnTextActive]}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
             </ScrollView>
 
@@ -1334,6 +1331,22 @@ const styles = StyleSheet.create({
   menuLabel: { flex: 1, fontSize: 15, color: '#111827' },
   menuLabelDanger: { color: '#ef4444' },
   version: { textAlign: 'center', color: '#9ca3af', fontSize: 12, marginTop: 24, marginBottom: 32 },
+  languageCard: {
+    backgroundColor: '#fff', borderRadius: 12, marginHorizontal: 16, marginBottom: 12,
+    padding: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  },
+  languageCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  languageCardTitle: { fontSize: 14, fontWeight: '600', color: '#374151' },
+  langBtnRow: { flexDirection: 'row', gap: 8 },
+  langBtn: {
+    flex: 1, paddingVertical: 9, borderRadius: 8,
+    borderWidth: 1, borderColor: '#d1d5db', alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  langBtnActive: { backgroundColor: '#1a56db', borderColor: '#1a56db' },
+  langBtnText: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
+  langBtnTextActive: { color: '#fff' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 32 },
   modal: { backgroundColor: '#fff', borderRadius: 16, padding: 20 },
   modalTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 14 },

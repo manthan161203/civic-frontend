@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, RefreshControl, Image, ScrollView,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from 'expo-router';
+import Svg, { Circle, Text as SvgText, Rect } from 'react-native-svg';
+import { useNavigation, useFocusEffect } from 'expo-router';
 import { rewardsApi } from '../../src/api/rewards';
 import { useAuthStore } from '../../src/store/authStore';
 
@@ -17,15 +18,49 @@ const BADGE_COLORS = {
   platinum: '#e5e4e2',
 };
 
+const MEDALS = {
+  1: { circle: '#FFD700', ribbon: '#B8860B', shadow: '#FFF3B0', textColor: '#7A5200' },
+  2: { circle: '#D0D8E4', ribbon: '#8899AA', shadow: '#F0F4F8', textColor: '#3D5066' },
+  3: { circle: '#E8956D', ribbon: '#A0522D', shadow: '#FDDCCC', textColor: '#7A2D00' },
+};
+
 function MedalIcon({ rank }) {
-  if (rank === 1) return <Text style={styles.medal}>1st</Text>;
-  if (rank === 2) return <Text style={styles.medal}>2nd</Text>;
-  if (rank === 3) return <Text style={styles.medal}>3rd</Text>;
-  return <Text style={styles.rankText}>#{rank}</Text>;
+  const m = MEDALS[rank];
+  if (m) {
+    return (
+      <Svg width={38} height={46} viewBox="0 0 38 46">
+        {/* Ribbon left */}
+        <Rect x={11} y={0} width={7} height={16} rx={2} fill={m.ribbon} />
+        {/* Ribbon right */}
+        <Rect x={20} y={0} width={7} height={16} rx={2} fill={m.ribbon} />
+        {/* Shadow circle */}
+        <Circle cx={19} cy={31} r={14} fill={m.shadow} />
+        {/* Medal circle */}
+        <Circle cx={19} cy={30} r={13} fill={m.circle} />
+        {/* Inner ring */}
+        <Circle cx={19} cy={30} r={10} fill="none" stroke={m.ribbon} strokeWidth={1.2} />
+        {/* Rank number */}
+        <SvgText
+          x={19} y={35}
+          textAnchor="middle"
+          fontSize={13}
+          fontWeight="bold"
+          fill={m.textColor}
+        >
+          {rank}
+        </SvgText>
+      </Svg>
+    );
+  }
+  return (
+    <View style={styles.rankCircle}>
+      <Text style={styles.rankText}>#{rank}</Text>
+    </View>
+  );
 }
 
 function CitizenRow({ item, index, myId }) {
-  const isMe = item.id === myId;
+  const isMe = item.user_id === myId;
   return (
     <View style={[styles.row, isMe && styles.rowMe]}>
       <View style={styles.rankCell}>
@@ -38,7 +73,7 @@ function CitizenRow({ item, index, myId }) {
         <Text style={[styles.rowName, isMe && styles.rowNameMe]} numberOfLines={1}>
           {item.name || 'User'} {isMe ? '(You)' : ''}
         </Text>
-        <Text style={styles.rowSub}>{item.issues_reported ?? 0} issues reported</Text>
+        <Text style={styles.rowSub}>{item.badge_count ?? 0} badges · Lv.{item.level ?? 1} {item.level_name || ''}</Text>
       </View>
       <View style={styles.pointsCell}>
         <Text style={[styles.points, isMe && styles.pointsMe]}>{item.total_points ?? 0}</Text>
@@ -126,6 +161,8 @@ export default function LeaderboardScreen() {
     load().finally(() => setLoading(false));
   }, []);
 
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
   const onRefresh = async () => {
     setRefreshing(true);
     await load();
@@ -177,7 +214,7 @@ export default function LeaderboardScreen() {
       {tab === TAB.CITIZENS && (
         <FlatList
           data={citizens}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={(item) => String(item.user_id)}
           renderItem={({ item, index }) => (
             <CitizenRow item={item} index={index} myId={user?.id} />
           )}
@@ -190,7 +227,7 @@ export default function LeaderboardScreen() {
       {tab === TAB.WORKERS && (
         <FlatList
           data={workers}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={(item) => String(item.user_id)}
           renderItem={({ item, index }) => <WorkerRow item={item} index={index} />}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a56db" />}
           ListEmptyComponent={<Text style={styles.empty}>No data yet</Text>}
@@ -241,9 +278,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: '#f9fafb',
   },
   rowMe: { backgroundColor: '#eff6ff' },
-  rankCell: { width: 36, alignItems: 'center' },
-  medal: { fontSize: 20 },
-  rankText: { fontSize: 14, fontWeight: '700', color: '#6b7280' },
+  rankCell: { width: 44, alignItems: 'center' },
+  rankCircle: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  rankText: { fontSize: 12, fontWeight: '700', color: '#6b7280' },
   avatar: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: '#dbeafe', justifyContent: 'center', alignItems: 'center', marginHorizontal: 10,

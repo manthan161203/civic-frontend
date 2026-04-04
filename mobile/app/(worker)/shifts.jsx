@@ -5,7 +5,7 @@ import {
   TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useFocusEffect } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
 
 const DAYS = [
@@ -146,6 +146,8 @@ export default function ShiftsScreen() {
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, []);
+
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const onRefresh = async () => {
     setRefreshing(true);

@@ -7,6 +7,7 @@ import { locationsApi } from '../../../src/api/index';
 import { formatDate } from '../../../src/lib/dateUtils';
 import { useAuthStore } from '../../../src/store/authStore';
 import AdminScopeHeader from '../../../src/components/AdminScopeHeader';
+import LoadingButton from '../../../src/components/ui/LoadingButton';
 
 const DEPT_OPTIONS = ['water', 'roads', 'electricity', 'sanitation', 'parks', 'other'];
 
@@ -144,9 +145,9 @@ function EditWorkerModal({ worker, onClose, onSaved }) {
             <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-bold">
               Cancel
             </button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-md shadow-blue-100">
-              {saving ? 'Saving…' : 'Save Changes'}
-            </button>
+            <LoadingButton type="submit" isLoading={saving} variant="primary" className="flex-1" loadingText="Saving...">
+              Save Changes
+            </LoadingButton>
           </div>
         </form>
       </div>
