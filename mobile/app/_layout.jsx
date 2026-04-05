@@ -3,8 +3,8 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { View, ActivityIndicator } from 'react-native';
-import { useAuthStore } from '../src/store/authStore';
+import { AppState, ActivityIndicator } from 'react-native';
+import { useAuthStore, registerPushToken } from '../src/store/authStore';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -16,6 +16,8 @@ export default function RootLayout() {
   const segments = useSegments();
   const notifListenerRef = useRef(null);
   const notifResponseListenerRef = useRef(null);
+  const pushTokenListenerRef = useRef(null);
+  const appStateRef = useRef(AppState.currentState);
 
   useEffect(() => {
     initSession();
@@ -45,6 +47,11 @@ export default function RootLayout() {
           });
         });
 
+        // Re-register FCM token whenever it is rotated by the OS/Firebase
+        pushTokenListenerRef.current = Notifications.addPushTokenListener(() => {
+          registerPushToken();
+        });
+
         // Listener for when user taps a notification
         notifResponseListenerRef.current = Notifications.addNotificationResponseReceivedListener(
           (response) => {
@@ -63,9 +70,19 @@ export default function RootLayout() {
 
     setupListeners();
 
+    // Re-register FCM token when app comes back to foreground (covers reinstall/token expiry)
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
+        registerPushToken();
+      }
+      appStateRef.current = nextState;
+    });
+
     return () => {
       if (notifListenerRef.current?.remove) notifListenerRef.current.remove();
       if (notifResponseListenerRef.current?.remove) notifResponseListenerRef.current.remove();
+      if (pushTokenListenerRef.current?.remove) pushTokenListenerRef.current.remove();
+      appStateSub.remove();
     };
   }, []);
 

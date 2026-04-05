@@ -2,8 +2,9 @@ import { create } from 'zustand';
 import * as SecureStore from '../utils/secureStoreShim';
 import { authApi } from '../api/auth';
 
-// Attempt to register native FCM device token and save it to the backend (best-effort)
-async function registerPushToken() {
+// Attempt to register native FCM device token and save it to the backend (best-effort).
+// Safe to call repeatedly — getDevicePushTokenAsync returns the same token if unchanged.
+export async function registerPushToken() {
   try {
     const Notifications = await import('expo-notifications');
     const { status: existing } = await Notifications.getPermissionsAsync();
@@ -40,6 +41,8 @@ export const useAuthStore = create((set, get) => ({
       }
       const { data } = await authApi.getMe();
       set({ user: data, isAuthenticated: true, isLoading: false });
+      // Re-register push token on every app start — handles token rotation after reinstall
+      registerPushToken();
     } catch {
       await SecureStore.deleteItemAsync('access_token');
       await SecureStore.deleteItemAsync('refresh_token');
