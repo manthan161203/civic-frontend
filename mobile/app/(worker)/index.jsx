@@ -133,9 +133,9 @@ export default function WorkerDashboard() {
             <Text style={styles.emptyText}>No active tasks</Text>
           </View>
         ) : (
-          tasks.slice(0, 3).map((task) => (
+          tasks.slice(0, 3).map((task, idx) => (
             <TouchableOpacity
-              key={task.id}
+              key={task.id ?? String(idx)}
               style={styles.taskCard}
               onPress={() => router.push(`/task/${task.id}`)}
             >

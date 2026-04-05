@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
 import { useNotificationStore } from '../../src/store/notificationStore';
 import { View, Text } from 'react-native';
+import OfflineBanner from '../../src/components/OfflineBanner';
 
 function BadgeIcon({ name, color, size, count }) {
   return (
@@ -48,7 +49,9 @@ export default function CitizenLayout() {
   }, [user?.id]); // run once per login session
 
   return (
-    <Tabs
+    <>
+      <OfflineBanner />
+      <Tabs
       screenOptions={{
         tabBarActiveTintColor: '#1a56db',
         tabBarInactiveTintColor: '#9ca3af',
@@ -96,16 +99,33 @@ export default function CitizenLayout() {
         }}
       />
       <Tabs.Screen
+        name="performance"
+        options={{
+          title: 'Rewards',
+          tabBarIcon: ({ color, size }) => <Ionicons name="trophy" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          title: 'AI Chat',
+          headerShown: true,
+          headerStyle: { backgroundColor: '#1a56db' },
+          headerTintColor: '#fff',
+          tabBarIcon: ({ color, size }) => <Ionicons name="chatbubble-ellipses" size={size} color={color} />,
+        }}
+      />
       {/* Hidden screens — accessible via router.push but not shown in tab bar */}
-      <Tabs.Screen name="chat" options={{ href: null, title: 'AI Assistant', headerShown: true, headerStyle: { backgroundColor: '#1a56db' }, headerTintColor: '#fff' }} />
       <Tabs.Screen name="leaderboard" options={{ href: null }} />
       <Tabs.Screen name="subscriptions" options={{ href: null }} />
     </Tabs>
+    </>
   );
 }

@@ -19,8 +19,8 @@ export const issuesApi = {
     api.delete(`/issues/${id}/photos`, { params: { url, photo_type } }),
   // Comments
   getComments: (id) => api.get(`/issues/${id}/comments`),
-  addComment: (id, text, parentId = null) =>
-    api.post(`/issues/${id}/comments`, { body: text, ...(parentId && { parent_id: parentId }) }),
+  addComment: (id, text, parentId = null, isInternal = false) =>
+    api.post(`/issues/${id}/comments`, { body: text, ...(parentId && { parent_id: parentId }), is_internal: isInternal }),
   deleteComment: (issueId, commentId) =>
     api.delete(`/issues/${issueId}/comments/${commentId}`),
   // Upvotes

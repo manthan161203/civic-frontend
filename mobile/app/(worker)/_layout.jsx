@@ -6,6 +6,7 @@ import * as Location from 'expo-location';
 import { useAuthStore } from '../../src/store/authStore';
 import { useNotificationStore } from '../../src/store/notificationStore';
 import { workersApi } from '../../src/api/workers';
+import OfflineBanner from '../../src/components/OfflineBanner';
 
 function BadgeIcon({ name, color, size, count }) {
   return (
@@ -72,7 +73,9 @@ export default function WorkerLayout() {
   }, []);
 
   return (
-    <Tabs
+    <>
+      <OfflineBanner />
+      <Tabs
       screenOptions={{
         tabBarActiveTintColor: '#059669',
         tabBarInactiveTintColor: '#9ca3af',
@@ -104,6 +107,13 @@ export default function WorkerLayout() {
         }}
       />
       <Tabs.Screen
+        name="performance"
+        options={{
+          title: 'Performance',
+          tabBarIcon: ({ color, size }) => <Ionicons name="trophy" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="notifications"
         options={{
           title: 'Alerts',
@@ -124,5 +134,6 @@ export default function WorkerLayout() {
       <Tabs.Screen name="shifts" options={{ href: null }} />
       <Tabs.Screen name="leaderboard" options={{ href: null }} />
     </Tabs>
+    </>
   );
 }

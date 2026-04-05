@@ -50,6 +50,24 @@ export default function IssueCard({ issue, onPress }) {
           <Text style={styles.metaText} numberOfLines={1}>{issue.address || issue.ward || 'Unknown location'}</Text>
         </View>
 
+        {issue.assigned_worker_name ? (
+          <View style={styles.workerRow}>
+            <Ionicons name="person-circle-outline" size={13} color="#059669" />
+            <Text style={styles.workerText} numberOfLines={1}>
+              {['assigned', 'in_progress', 'blocked'].includes(issue.status)
+                ? `Assigned to ${issue.assigned_worker_name}`
+                : `Resolved by ${issue.assigned_worker_name}`}
+            </Text>
+          </View>
+        ) : (
+          ['open'].includes(issue.status) && (
+            <View style={styles.workerRow}>
+              <Ionicons name="time-outline" size={13} color="#9ca3af" />
+              <Text style={[styles.workerText, { color: '#9ca3af' }]}>Awaiting assignment</Text>
+            </View>
+          )
+        )}
+
         <View style={styles.footer}>
           <View style={styles.typeChip}>
             <Text style={styles.typeText}>{issue.issue_type?.replace('_', ' ')}</Text>
@@ -80,7 +98,9 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
   priorityDot: { width: 10, height: 10, borderRadius: 5 },
   title: { fontSize: 14, color: '#111827', fontWeight: '500', lineHeight: 20, marginBottom: 6 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 8 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 6 },
+  workerRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
+  workerText: { fontSize: 12, color: '#059669', fontWeight: '500', flex: 1 },
   metaText: { fontSize: 12, color: '#9ca3af', flex: 1 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   typeChip: { backgroundColor: '#f3f4f6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },

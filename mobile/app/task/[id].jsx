@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   Alert, ActivityIndicator, Image, TextInput, Modal, KeyboardAvoidingView, Platform, Linking,
+  RefreshControl,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { workersApi } from '../../src/api/workers';
 import { issuesApi } from '../../src/api/issues';
@@ -25,15 +26,39 @@ export default function TaskDetailScreen() {
   const [reasonText, setReasonText] = useState('');
   const [noteInput, setNoteInput] = useState('');
   const [notesLoading, setNotesLoading] = useState(false);
+  const [notes, setNotes] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    issuesApi.get(id)
-      .then(({ data }) => {
-        setIssue(data);
-        navigation.setOptions({ title: data.issue_type?.replace('_', ' ') || 'Task' });
-      })
-      .finally(() => setLoading(false));
+  const loadAll = useCallback(async () => {
+    try {
+      const [issueRes, commentsRes] = await Promise.all([
+        issuesApi.get(id),
+        issuesApi.getComments(id),
+      ]);
+      const allComments = commentsRes.data.items || commentsRes.data;
+      setIssue(issueRes.data);
+      setNotes(allComments.filter((c) => c.is_internal));
+      navigation.setOptions({ title: issueRes.data.issue_type?.replace('_', ' ') || 'Task' });
+    } catch {}
   }, [id]);
+
+  const loadNotes = useCallback(async () => {
+    try {
+      const { data } = await issuesApi.getComments(id);
+      const all = data.items || data;
+      setNotes(all.filter((c) => c.is_internal));
+    } catch {}
+  }, [id]);
+
+  useEffect(() => { loadAll().finally(() => setLoading(false)); }, [id]);
+
+  useFocusEffect(useCallback(() => { loadAll(); }, [loadAll]));
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAll();
+    setRefreshing(false);
+  };
 
   const accept = async () => {
     setActionLoading(true);
@@ -90,11 +115,9 @@ export default function TaskDetailScreen() {
     if (!noteInput.trim()) return;
     setNotesLoading(true);
     try {
-      await issuesApi.addComment(id, noteInput.trim());
+      await issuesApi.addComment(id, noteInput.trim(), null, true); // is_internal=true
       setNoteInput('');
-      // Reload issue to get updated comments
-      const { data } = await issuesApi.get(id);
-      setIssue(data);
+      await loadNotes();
     } catch (err) {
       Alert.alert('Error', 'Could not add note');
     }
@@ -133,7 +156,10 @@ export default function TaskDetailScreen() {
   const isActive = ['assigned', 'in_progress'].includes(issue.status);
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#059669" />}
+    >
       {photoUri && <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />}
 
       <View style={styles.section}>
@@ -223,20 +249,25 @@ export default function TaskDetailScreen() {
         </View>
       )}
 
-      {/* Task Notes */}
+      {/* Task Notes — internal, visible to workers and admins only */}
       <View style={styles.notesSection}>
-        <Text style={styles.notesTitle}>Task Notes</Text>
+        <View style={styles.notesTitleRow}>
+          <Text style={styles.notesTitle}>Task Notes</Text>
+          <View style={styles.internalBadge}>
+            <Text style={styles.internalBadgeText}>Internal</Text>
+          </View>
+        </View>
 
-        {/* Comments List */}
-        {issue.comments && issue.comments.length > 0 ? (
+        {/* Notes List */}
+        {notes.length > 0 ? (
           <View style={styles.commentsList}>
-            {issue.comments.map((comment) => (
-              <View key={comment.id} style={styles.commentItem}>
+            {notes.map((note) => (
+              <View key={note.id} style={styles.commentItem}>
                 <View style={styles.commentHeader}>
-                  <Text style={styles.commentAuthor}>{comment.author?.name || 'Unknown'}</Text>
-                  <Text style={styles.commentTime}>{formatDateTime(comment.created_at, 'en-IN')}</Text>
+                  <Text style={styles.commentAuthor}>{note.author?.name || 'Unknown'}</Text>
+                  <Text style={styles.commentTime}>{formatDateTime(note.created_at, 'en-IN')}</Text>
                 </View>
-                <Text style={styles.commentBody}>{comment.body}</Text>
+                <Text style={styles.commentBody}>{note.body}</Text>
               </View>
             ))}
           </View>
@@ -340,7 +371,10 @@ const styles = StyleSheet.create({
   },
   resolvedText: { fontSize: 15, color: '#065f46', fontWeight: '600' },
   notesSection: { backgroundColor: '#fff', padding: 16, marginTop: 8 },
-  notesTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  notesTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  notesTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  internalBadge: { backgroundColor: '#FEF3C7', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
+  internalBadgeText: { fontSize: 10, fontWeight: '700', color: '#92400E' },
   commentsList: { marginBottom: 12, borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 8 },
   commentItem: { marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   commentHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },

@@ -95,8 +95,15 @@ function WorkerRow({ item, index }) {
       <View style={styles.rowInfo}>
         <Text style={styles.rowName} numberOfLines={1}>{item.name || 'Worker'}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-          <Text style={styles.rowSub}>{item.tasks_completed ?? 0} tasks ·{item.avg_rating ? ` ${item.avg_rating.toFixed(1)}` : ' No rating'}</Text>
-          {!!item.avg_rating && <Ionicons name="star" size={10} color="#f59e0b" />}
+          <Text style={styles.rowSub}>{item.tasks_completed ?? 0} tasks</Text>
+          {!!item.avg_rating && (
+            <>
+              <Text style={styles.rowSub}> · </Text>
+              <Ionicons name="star" size={10} color="#f59e0b" />
+              <Text style={styles.rowSub}> {item.avg_rating.toFixed(1)}</Text>
+            </>
+          )}
+          {!!item.ward && <Text style={styles.rowSub}> · {item.ward}</Text>}
         </View>
       </View>
       <View style={styles.pointsCell}>

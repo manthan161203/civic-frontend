@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Image, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, FlatList, Modal,
-  KeyboardAvoidingView, Platform, Share,
+  KeyboardAvoidingView, Platform, Share, RefreshControl,
 } from 'react-native';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { issuesApi } from '../../src/api/issues';
 import { BASE_URL } from '../../src/api/client';
@@ -176,10 +176,17 @@ export default function IssueDetailScreen() {
   const [reopening, setReopening] = useState(false);
   const [ratingSubmitting, setRatingSubmitting] = useState(false);
   const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    load();
-  }, [id]);
+  useEffect(() => { load(); }, [id]);
+
+  useFocusEffect(useCallback(() => { load(); }, [id]));
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
   const load = async () => {
     try {
@@ -343,7 +350,10 @@ export default function IssueDetailScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={90}
     >
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a56db" />}
+    >
       {/* Photos */}
       {beforePhoto && (
         <Image source={{ uri: beforePhoto }} style={styles.heroPhoto} resizeMode="cover" />

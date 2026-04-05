@@ -54,6 +54,7 @@ export default function WorkerMapScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator color="#059669" size="large" />
+        <Text style={{ marginTop: 12, color: '#6b7280' }}>Loading your tasks…</Text>
       </View>
     );
   }
@@ -85,6 +86,19 @@ export default function WorkerMapScreen() {
           ) : null
         )}
       </MapView>
+
+      {/* Empty state overlay */}
+      {tasks.length === 0 && (
+        <View style={styles.emptyOverlay}>
+          <View style={styles.emptyCard}>
+            <Ionicons name="map-outline" size={40} color="#d1d5db" />
+            <Text style={styles.emptyTitle}>No active tasks</Text>
+            <Text style={styles.emptySub}>
+              Go online on the Dashboard to start receiving task assignments
+            </Text>
+          </View>
+        </View>
+      )}
 
       <TouchableOpacity
         style={styles.locationBtn}
@@ -126,4 +140,16 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   counterText: { fontSize: 13, fontWeight: '700', color: '#059669' },
+  emptyOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32,
+  },
+  emptyCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 28,
+    alignItems: 'center', gap: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 8, elevation: 4,
+  },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#374151' },
+  emptySub: { fontSize: 13, color: '#9ca3af', textAlign: 'center', lineHeight: 20 },
 });

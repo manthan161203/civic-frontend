@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  View, Text, FlatList, TouchableOpacity, StyleSheet, ScrollView,
   RefreshControl, ActivityIndicator, TextInput, Alert, Vibration,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -13,18 +13,29 @@ import CitizenProfileModal from '../../src/components/CitizenProfileModal';
 import * as Location from 'expo-location';
 import { logger } from '../../src/utils/logger';
 
-const CATEGORIES = ['All', 'open', 'in_progress', 'resolved', 'closed'];
+const STATUS_FILTERS = [
+  { key: 'All',         label: 'All' },
+  { key: 'open',        label: 'Open' },
+  { key: 'in_progress', label: 'In Progress' },
+  { key: 'resolved',    label: 'Resolved' },
+  { key: 'closed',      label: 'Closed' },
+];
 
-function WardHealthBanner({ wardName }) {
-  const [health, setHealth] = useState(null);
+const PRIORITY_FILTERS = [
+  { key: 'all',      label: 'All',      color: null },
+  { key: 'critical', label: 'Critical', color: '#7c3aed' },
+  { key: 'high',     label: 'High',     color: '#ef4444' },
+  { key: 'medium',   label: 'Medium',   color: '#f59e0b' },
+  { key: 'low',      label: 'Low',      color: '#10b981' },
+];
 
-  useEffect(() => {
-    if (!wardName) return;
-    issuesApi.wardHealth(wardName)
-      .then(({ data }) => setHealth(data))
-      .catch(() => {});
-  }, [wardName]);
+const SORT_OPTIONS = [
+  { key: 'newest',       label: 'Newest',     icon: 'arrow-down' },
+  { key: 'oldest',       label: 'Oldest',     icon: 'arrow-up' },
+  { key: 'most_upvoted', label: 'Most Voted',  icon: 'thumbs-up' },
+];
 
+function WardHealthBanner({ health }) {
   if (!health) return null;
 
   const score = health.score ?? 0;
@@ -72,11 +83,22 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('All');
+  const [priority, setPriority] = useState('all');
+  const [sort, setSort] = useState('newest');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [wardHealth, setWardHealth] = useState(null);
+
+  const fetchWardHealth = useCallback(async () => {
+    if (!user?.ward) return;
+    try {
+      const { data } = await issuesApi.wardHealth(user.ward);
+      setWardHealth(data);
+    } catch {}
+  }, [user?.ward]);
 
   const handleProfileComplete = async () => {
     setShowProfileModal(false);
@@ -95,6 +117,8 @@ export default function HomeScreen() {
     try {
       const params = { page: p, size: 20 };
       if (filter !== 'All') params.status = filter;
+      if (priority !== 'all') params.priority = priority;
+      if (sort !== 'newest') params.sort = sort;
       const { data } = await issuesApi.list(params);
       const items = data.items || data;
       if (reset) {
@@ -106,7 +130,7 @@ export default function HomeScreen() {
       }
       setHasMore(items.length === 20);
     } catch {}
-  }, [filter, page]);
+  }, [filter, priority, sort, page]);
 
   const fetchFollowing = useCallback(async () => {
     try {
@@ -117,15 +141,16 @@ export default function HomeScreen() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchIssues(true), fetchFollowing()]).finally(() => setLoading(false));
-  }, [filter]);
+    Promise.all([fetchIssues(true), fetchFollowing(), fetchWardHealth()]).finally(() => setLoading(false));
+  }, [filter, priority, sort]);
 
   // Refresh on every tab focus (catches changes from issue detail, report, etc.)
   useFocusEffect(
     useCallback(() => {
       fetchIssues(true);
       fetchFollowing();
-    }, [filter])
+      fetchWardHealth();
+    }, [filter, fetchWardHealth])
   );
 
   // Show/hide profile modal based on whether profile is complete
@@ -137,7 +162,7 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchIssues(true), fetchFollowing()]);
+    await Promise.all([fetchIssues(true), fetchFollowing(), fetchWardHealth()]);
     setRefreshing(false);
   };
 
@@ -176,7 +201,7 @@ export default function HomeScreen() {
       </View>
 
       {/* Ward Health Banner */}
-      <WardHealthBanner wardName={user?.ward} />
+      <WardHealthBanner health={wardHealth} />
 
       {/* Main Tab Switcher */}
       <View style={styles.mainTabs}>
@@ -197,20 +222,74 @@ export default function HomeScreen() {
       </View>
 
       {mainTab === 'my' && (
-        /* Filter Chips */
-        <View style={styles.filters}>
-          {CATEGORIES.map((cat) => (
-            <TouchableOpacity
-              key={cat}
-              style={[styles.chip, filter === cat && styles.chipActive]}
-              onPress={() => setFilter(cat)}
+        <>
+          {/* Status filter */}
+          <View style={styles.filterRowContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRow}
             >
-              <Text style={[styles.chipText, filter === cat && styles.chipTextActive]}>
-                {cat === 'All' ? 'All' : cat.replace('_', ' ')}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              {STATUS_FILTERS.map(({ key, label }) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.chip, filter === key && styles.chipActive]}
+                  onPress={() => setFilter(key)}
+                >
+                  <Text style={[styles.chipText, filter === key && styles.chipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Priority filter row */}
+          <View style={styles.filterSection}>
+            <Text style={styles.filterSectionLabel}>Priority</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.priorityRow}
+            >
+              {PRIORITY_FILTERS.map(({ key, label, color }) => {
+                const isActive = priority === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[
+                      styles.priorityChip,
+                      isActive && { backgroundColor: color || '#1a56db', borderColor: color || '#1a56db' },
+                    ]}
+                    onPress={() => setPriority(key)}
+                  >
+                    {color && !isActive && <View style={[styles.priorityDot, { backgroundColor: color }]} />}
+                    <Text style={[styles.priorityChipText, isActive && styles.priorityChipTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Sort row */}
+          <View style={styles.sortSection}>
+            <Text style={styles.filterSectionLabel}>Sort by</Text>
+            <View style={styles.sortGroup}>
+              {SORT_OPTIONS.map(({ key, label, icon }) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.sortBtn, sort === key && styles.sortBtnActive]}
+                  onPress={() => setSort(key)}
+                >
+                  <Ionicons name={icon} size={11} color={sort === key ? '#1a56db' : '#9ca3af'} />
+                  <Text style={[styles.sortText, sort === key && styles.sortTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </>
       )}
 
       {loading ? (
@@ -382,11 +461,38 @@ const styles = StyleSheet.create({
     borderRadius: 10, paddingHorizontal: 12, gap: 8, height: 44,
   },
   searchInput: { flex: 1, fontSize: 14, color: '#111827' },
-  filters: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  filterRowContainer: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  filterRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center', flexDirection: 'row' },
   chip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6' },
   chipActive: { backgroundColor: '#1a56db' },
   chipText: { fontSize: 13, fontWeight: '600', color: '#6b7280', textTransform: 'capitalize' },
   chipTextActive: { color: '#fff' },
+
+  filterSection: {
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+    paddingTop: 8, paddingBottom: 4,
+  },
+  sortSection: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+    paddingHorizontal: 16, paddingVertical: 8, gap: 12,
+  },
+  filterSectionLabel: {
+    fontSize: 11, fontWeight: '700', color: '#9ca3af',
+    textTransform: 'uppercase', letterSpacing: 0.5,
+    paddingHorizontal: 16, marginBottom: 4,
+  },
+  priorityRow: { paddingHorizontal: 12, paddingBottom: 8, gap: 6, alignItems: 'center', flexDirection: 'row' },
+  priorityChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  priorityDot: { width: 6, height: 6, borderRadius: 3 },
+  priorityChipText: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
+  priorityChipTextActive: { color: '#fff' },
+
+  sortGroup: { flexDirection: 'row', gap: 6, flex: 1 },
+  sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', flex: 1, justifyContent: 'center' },
+  sortBtnActive: { borderColor: '#1a56db', backgroundColor: '#eff6ff' },
+  sortText: { fontSize: 11, fontWeight: '600', color: '#9ca3af' },
+  sortTextActive: { color: '#1a56db' },
   empty: { alignItems: 'center', marginTop: 80, gap: 12, paddingHorizontal: 32 },
   emptyText: { fontSize: 16, color: '#9ca3af' },
   emptySubText: { fontSize: 13, color: '#d1d5db', textAlign: 'center' },
