@@ -27,7 +27,7 @@ function ProfileInfo() {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
-  const [scope, setScope] = useState('State-wide');
+  const [scope, setScope] = useState(null);
 
   // Fetch location names to display correct scope
   useEffect(() => {
@@ -113,7 +113,7 @@ function ProfileInfo() {
       <div className="space-y-3 mb-6">
         {[
           ['Phone', user?.phone || '—'],
-          ['Scope', scope],
+          ['Scope', scope ?? '—'],
           ['Joined', user?.created_at ? formatDate(user.created_at, 'en-IN') : '—'],
         ].map(([label, value]) => (
           <div key={label} className="flex items-center gap-4 py-2 border-b border-gray-50">
