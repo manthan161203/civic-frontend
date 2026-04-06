@@ -46,7 +46,9 @@ export const reverseGeocode = async (latitude, longitude) => {
 
     return null;
   } catch (error) {
-    console.error('Geocoding error:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Geocoding error:', error);
+    }
     return null;
   }
 };
@@ -70,7 +72,9 @@ export const forwardGeocode = async (address) => {
     }
     return null;
   } catch (error) {
-    console.error('Forward geocoding error:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Forward geocoding error:', error);
+    }
     return null;
   }
 };

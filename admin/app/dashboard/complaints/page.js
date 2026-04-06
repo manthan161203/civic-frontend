@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { adminApi } from '../../../src/api/index';
 import { formatDate } from '../../../src/lib/dateUtils';
+import { useUiStore } from '../../../src/store/uiStore';
+import { getErrorMessage } from '../../../src/lib/apiError';
 
 const STATUS_COLORS = {
   pending: 'bg-yellow-100 text-yellow-700',
@@ -18,6 +20,7 @@ const REASON_LABELS = {
 };
 
 export default function ComplaintsPage() {
+  const { addToast } = useUiStore();
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
@@ -42,7 +45,11 @@ export default function ComplaintsPage() {
       setComplaints((prev) => prev.filter((c) => c.id !== resolveModal.id));
       setResolveModal(null);
       setAdminNotes('');
-    } catch {}
+      addToast(`Complaint ${resolveStatus} successfully!`, 'success');
+    } catch (err) {
+      const errorMsg = getErrorMessage(err, 'Failed to resolve complaint');
+      addToast(errorMsg, 'error');
+    }
     setActionLoading(false);
   };
 

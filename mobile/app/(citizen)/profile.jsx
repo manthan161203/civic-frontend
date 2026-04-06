@@ -525,13 +525,13 @@ export default function ProfileScreen() {
                 <View style={styles.surveyRow}>
                   <Text style={styles.surveyLabel}>Fully Resolved</Text>
                   <Text style={[styles.surveyVal, { color: s.fully_resolved ? '#22c55e' : '#ef4444' }]}>
-                    {s.fully_resolved ? '✓ Yes' : '✗ No'}
+                    {s.fully_resolved ? 'Yes' : 'No'}
                   </Text>
                 </View>
                 <View style={styles.surveyRow}>
                   <Text style={styles.surveyLabel}>Would Report Again</Text>
                   <Text style={[styles.surveyVal, { color: s.would_report_again ? '#22c55e' : '#ef4444' }]}>
-                    {s.would_report_again ? '✓ Yes' : '✗ No'}
+                    {s.would_report_again ? 'Yes' : 'No'}
                   </Text>
                 </View>
                 {s.feedback ? (

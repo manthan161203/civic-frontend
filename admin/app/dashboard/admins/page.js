@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { adminApi, locationsApi } from '../../../src/api/index';
 import { getErrorMessage } from '../../../src/lib/apiError';
 import { useAuthStore } from '../../../src/store/authStore';
+import { useUiStore } from '../../../src/store/uiStore';
 import { formatDate } from '../../../src/lib/dateUtils';
 import LoadingButton from '../../../src/components/ui/LoadingButton';
 
@@ -29,6 +30,7 @@ function RoleBadge({ role }) {
 // ── Edit Admin Modal ───────────────────────────────────────────────────────────
 function EditAdminModal({ admin, onClose, onUpdated }) {
   const { user: currentUser } = useAuthStore();
+  const { addToast } = useUiStore();
   const [form, setForm] = useState({
     name: admin?.name || '',
     phone: admin?.phone ? admin.phone.replace('+91', '') : '',
@@ -72,7 +74,9 @@ function EditAdminModal({ admin, onClose, onUpdated }) {
         talukaList = talukaList.filter(t => t.id === currentUser.taluka_id);
       }
       setTalukas(talukaList);
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error('Failed to load talukas:', err);
+    });
   }, [form.district_id, currentUser]);
 
   useEffect(() => {
@@ -83,7 +87,9 @@ function EditAdminModal({ admin, onClose, onUpdated }) {
         wardList = wardList.filter(w => w.id === currentUser.ward_id);
       }
       setWards(wardList);
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error('Failed to load wards:', err);
+    });
   }, [form.taluka_id, currentUser]);
 
   const handleSubmit = async (e) => {
@@ -115,12 +121,15 @@ function EditAdminModal({ admin, onClose, onUpdated }) {
 
       await adminApi.updateAdmin(admin.id, payload);
       setSuccess('Admin updated successfully');
+      addToast('Admin updated successfully', 'success');
       setTimeout(() => {
         onUpdated();
         onClose();
       }, 1000);
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to update admin.'));
+      const msg = getErrorMessage(err, 'Failed to update admin.');
+      setError(msg);
+      addToast(msg, 'error');
     }
     setSaving(false);
   };
@@ -379,6 +388,7 @@ function AdminList({ refresh, triggerRefresh }) {
 // ── Create Sub-Admin ───────────────────────────────────────────────────────────
 function CreateAdmin({ onCreated }) {
   const { user: currentUser } = useAuthStore();
+  const { addToast } = useUiStore();
   const [form, setForm] = useState({ name: '', phone: '', role: 'ward_admin', language: 'en' });
   const [districts, setDistricts] = useState([]);
   const [talukas, setTalukas] = useState([]);
@@ -417,7 +427,9 @@ function CreateAdmin({ onCreated }) {
       }
       
       setDistricts(districtList);
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error('Failed to load districts:', err);
+    });
   }, [currentUser]);
 
   useEffect(() => {
@@ -437,7 +449,9 @@ function CreateAdmin({ onCreated }) {
       }
       
       setTalukas(talukaList);
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error('Failed to load talukas:', err);
+    });
     setSelectedWard('');
   }, [selectedDistrict, currentUser]);
 
@@ -454,7 +468,9 @@ function CreateAdmin({ onCreated }) {
       }
       
       setWards(wardList);
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error('Failed to load wards:', err);
+    });
   }, [selectedTaluka, currentUser]);
 
   const handleSubmit = async (e) => {
@@ -462,7 +478,11 @@ function CreateAdmin({ onCreated }) {
     setError('');
     setSuccess('');
     const cleaned = form.phone.replace(/\D/g, '');
-    if (cleaned.length !== 10) { setError('Enter a valid 10-digit phone number.'); return; }
+    if (cleaned.length !== 10) { 
+      addToast('Enter a valid 10-digit phone number', 'error');
+      setError('Enter a valid 10-digit phone number.');
+      return; 
+    }
 
     const payload = {
       ...form,
@@ -475,12 +495,16 @@ function CreateAdmin({ onCreated }) {
     setSaving(true);
     try {
       const { data } = await adminApi.createAdmin(payload);
-      setSuccess(`${data.name} created as ${ROLE_LABELS[data.role]?.label}`);
+      const successMsg = `${data.name} created as ${ROLE_LABELS[data.role]?.label}`;
+      setSuccess(successMsg);
+      addToast(successMsg, 'success');
       setForm({ name: '', phone: '', role: 'ward_admin', language: 'en' });
       setSelectedDistrict(''); setSelectedTaluka(''); setSelectedWard('');
       onCreated();
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to create admin.'));
+      const msg = getErrorMessage(err, 'Failed to create admin.');
+      setError(msg);
+      addToast(msg, 'error');
     }
     setSaving(false);
   };

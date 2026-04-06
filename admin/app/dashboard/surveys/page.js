@@ -1,9 +1,293 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { adminApi } from '../../../src/api/index';
+import { getErrorMessage } from '../../../src/lib/apiError';
 
 const SPEED_LABELS = { 1: 'Slow', 2: 'Average', 3: 'Fast' };
 const SPEED_COLORS = { 1: '#ef4444', 2: '#f59e0b', 3: '#22c55e' };
+
+// SVG Icons
+const IconLocation = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:16,height:16}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>;
+const IconDoc = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:16,height:16}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>;
+const IconPerson = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:16,height:16}}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
+const IconCalendar = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:16,height:16}}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
+const IconCamera = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:16,height:16}}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>;
+const IconCheckCircle = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:16,height:16}}><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+const IconForm = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:16,height:16}}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><line x1="6" y1="6" x2="18" y2="6"/><line x1="6" y1="10" x2="18" y2="10"/><line x1="6" y1="14" x2="10" y2="14"/></svg>;
+
+// Issue Detail Modal
+function IssueDetailModal({ issueId, onClose }) {
+  const [issue, setIssue] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!issueId) return;
+    setLoading(true);
+    setError('');
+    adminApi.getIssues({ search: issueId })
+      .then(({ data }) => {
+        const issues = Array.isArray(data) ? data : (data.items || []);
+        const found = issues.find(i => i.id === issueId || String(i.id).includes(issueId));
+        if (found) setIssue(found);
+        else setError('Issue not found');
+      })
+      .catch(err => setError(getErrorMessage(err, 'Failed to load issue')))
+      .finally(() => setLoading(false));
+  }, [issueId]);
+
+  if (!issueId) return null;
+
+  const getPriorityColor = (level) => {
+    if (!level) return 'bg-gray-100 text-gray-700';
+    return level === 'high' ? 'bg-red-100 text-red-700' :
+           level === 'medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700';
+  };
+
+  const getDaysOpen = (createdAt) => {
+    if (!createdAt) return 0;
+    return Math.floor((new Date() - new Date(createdAt)) / (1000 * 60 * 60 * 24));
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 flex items-start justify-between">
+          <div className="flex-1">
+            <h2 className="text-2xl font-bold mb-2">Issue #{String(issueId).slice(0, 8)}</h2>
+            <div className="flex flex-wrap gap-2">
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${getPriorityColor(issue?.priority)}`}>
+                {issue?.priority || 'Medium'}
+              </span>
+              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-400">
+                {issue?.status || 'Unknown'}
+              </span>
+              {issue?.is_escalated && <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-400">Escalated</span>}
+              {issue?.is_sos && <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-500">SOS</span>}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-2xl font-light hover:opacity-80 ml-4">×</button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {loading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            </div>
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">{error}</div>
+          ) : issue ? (
+            <>
+              {/* Grid - Basic Info */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Type</p>
+                  <p className="text-sm font-bold text-gray-900">{issue.issue_type || issue.custom_issue_type_label || 'N/A'}</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Days Open</p>
+                  <p className="text-sm font-bold text-gray-900">{getDaysOpen(issue.created_at)} days</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Ward</p>
+                  <p className="text-sm font-bold text-gray-900">{issue.ward || 'N/A'}</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <p className="text-xs font-semibold text-gray-600 uppercase mb-1">Citizen Rating</p>
+                  <p className="text-sm font-bold text-yellow-600">
+                    {issue.citizen_rating ? `${issue.citizen_rating}/5` : 'Not Rated'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Location */}
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <IconLocation />
+                  <p className="text-xs font-semibold text-gray-600 uppercase">Location</p>
+                </div>
+                <p className="text-sm text-gray-900 font-medium">{issue.address || 'No address provided'}</p>
+                {issue.latitude && issue.longitude && (
+                  <p className="text-xs text-gray-500 mt-1">Coordinates: {issue.latitude.toFixed(4)}, {issue.longitude.toFixed(4)}</p>
+                )}
+              </div>
+
+              {/* Description */}
+              {issue.description && (
+                <div className="border-l-4 border-blue-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <IconDoc />
+                    <p className="text-xs font-semibold text-gray-600 uppercase">Description</p>
+                  </div>
+                  <p className="text-sm text-gray-700 leading-relaxed">{issue.description}</p>
+                </div>
+              )}
+
+              {/* Reporter & Assignment */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <IconPerson />
+                    <p className="text-xs font-semibold text-gray-600 uppercase">Reporter</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-gray-900">{issue.reporter?.name || 'Anonymous'}</p>
+                    <p className="text-xs text-gray-600">{issue.reporter?.phone || issue.reporter_id?.slice(0, 8) || 'N/A'}</p>
+                    <p className="text-xs text-gray-500 mt-2">Reported: {new Date(issue.created_at).toLocaleString()}</p>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <IconPerson />
+                    <p className="text-xs font-semibold text-gray-600 uppercase">Assigned Worker</p>
+                  </div>
+                  {issue.assigned_worker_name ? (
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-gray-900">{issue.assigned_worker_name}</p>
+                      <p className="text-xs text-gray-600">{issue.assigned_worker_id?.toString().slice(0, 8) || 'N/A'}</p>
+                      {issue.updated_at && (
+                        <p className="text-xs text-gray-500 mt-2">Last Updated: {new Date(issue.updated_at).toLocaleDateString()}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">Not assigned yet</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Timeline */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <IconCalendar />
+                  <p className="text-xs font-semibold text-gray-600 uppercase">Timeline</p>
+                </div>
+                <div className="space-y-2 text-xs text-gray-600">
+                  <p><span className="text-gray-900 font-medium">Created:</span> {new Date(issue.created_at).toLocaleString()}</p>
+                  {issue.updated_at && (
+                    <p><span className="text-gray-900 font-medium">Updated:</span> {new Date(issue.updated_at).toLocaleString()}</p>
+                  )}
+                  {issue.resolved_at ? (
+                    <p><span className="text-gray-900 font-medium">Resolved:</span> {new Date(issue.resolved_at).toLocaleString()}</p>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Metadata */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+                <div className="bg-purple-50 rounded-lg p-3">
+                  <p className="text-2xl font-bold text-purple-600">{(issue.before_photos?.length || 0) + (issue.after_photos?.length || 0)}</p>
+                  <p className="text-xs text-gray-600 mt-1">Photos</p>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3">
+                  <p className="text-2xl font-bold text-orange-600">{issue.comment_count || 0}</p>
+                  <p className="text-xs text-gray-600 mt-1">Comments</p>
+                </div>
+                <div className="bg-pink-50 rounded-lg p-3">
+                  <p className="text-2xl font-bold text-pink-600">{issue.reassignment_count || 0}</p>
+                  <p className="text-xs text-gray-600 mt-1">Reassignments</p>
+                </div>
+                <div className="bg-indigo-50 rounded-lg p-3">
+                  <p className="text-2xl font-bold text-indigo-600">{issue.is_escalated ? 'Yes' : 'No'}</p>
+                  <p className="text-xs text-gray-600 mt-1">Escalated</p>
+                </div>
+              </div>
+
+              {/* Photos Gallery */}
+              {((issue.before_photos && issue.before_photos.length > 0) || (issue.after_photos && issue.after_photos.length > 0)) && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <IconCamera />
+                    <p className="text-xs font-semibold text-gray-600 uppercase">
+                      Photos ({(issue.before_photos?.length || 0) + (issue.after_photos?.length || 0)})
+                    </p>
+                  </div>
+                  {issue.before_photos && issue.before_photos.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-xs font-semibold text-gray-500 mb-2">Before Photos ({issue.before_photos.length})</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {issue.before_photos.map((photo, i) => (
+                          <div key={`before-${i}`} className="rounded-lg overflow-hidden">
+                            <img src={photo} alt={`Before photo ${i+1}`} className="w-full h-40 object-cover hover:scale-105 transition-transform cursor-pointer" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {issue.after_photos && issue.after_photos.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-2">After Photos ({issue.after_photos.length})</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {issue.after_photos.map((photo, i) => (
+                          <div key={`after-${i}`} className="rounded-lg overflow-hidden">
+                            <img src={photo} alt={`After photo ${i+1}`} className="w-full h-40 object-cover hover:scale-105 transition-transform cursor-pointer" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Resolution Notes */}
+              {issue.resolution_notes && (
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <IconDoc />
+                    <p className="text-xs font-semibold text-gray-600 uppercase">Resolution Notes</p>
+                  </div>
+                  <p className="text-sm text-gray-700">{issue.resolution_notes}</p>
+                </div>
+              )}
+
+              {/* Blocked Status */}
+              {issue.is_blocked && (
+                <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                  <p className="badge bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-semibold mb-2 inline-block">BLOCKED</p>
+                  {issue.blocked_reason && (
+                    <p className="text-sm text-red-900 mt-2">{issue.blocked_reason}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Escalation Info */}
+              {issue.is_escalated && (
+                <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                  <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Escalation</p>
+                  <div className="space-y-1 text-sm">
+                    <p><span className="text-gray-600">Level:</span> <span className="text-gray-900 font-medium">{issue.escalation_level}</span></p>
+                    {issue.escalated_at && (
+                      <p><span className="text-gray-600">Escalated:</span> <span className="text-gray-900 font-medium">{new Date(issue.escalated_at).toLocaleString()}</span></p>
+                    )}
+                    {issue.is_duplicate && (
+                      <p><span className="text-gray-600">Duplicate Of:</span> <span className="text-gray-900 font-medium">#{issue.parent_issue_id?.toString().slice(0, 8)}</span></p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* AI Analysis */}
+              {issue.ai_issue_type && (
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <p className="text-xs font-semibold text-gray-600 uppercase mb-3">AI Analysis</p>
+                  <div className="space-y-2 text-sm">
+                    {issue.ai_issue_type && <p><span className="text-gray-600">Type:</span> <span className="text-gray-900 font-medium">{issue.ai_issue_type}</span></p>}
+                    {issue.ai_severity && <p><span className="text-gray-600">Severity:</span> <span className="text-gray-900 font-medium">{issue.ai_severity}</span></p>}
+                    {issue.ai_confidence && <p><span className="text-gray-600">Confidence:</span> <span className="text-gray-900 font-medium">{(issue.ai_confidence * 100).toFixed(1)}%</span></p>}
+                    {issue.ai_is_resolved !== null && <p><span className="text-gray-600">Resolved:</span> <span className="text-gray-900 font-medium">{issue.ai_is_resolved ? 'Yes' : 'No'}</span></p>}
+                    {issue.ai_resolution_quality && <p><span className="text-gray-600">Quality:</span> <span className="text-gray-900 font-medium capitalize">{issue.ai_resolution_quality}</span></p>}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function exportCSV(surveys) {
   const header = ['Issue ID', 'Speed Rating', 'Fully Resolved', 'Would Report Again', 'Feedback', 'Date'];
@@ -32,6 +316,7 @@ export default function SurveysPage() {
   const [search, setSearch] = useState('');
   const [filterSpeed, setFilterSpeed] = useState('all');
   const [filterResolved, setFilterResolved] = useState('all');
+  const [selectedIssueId, setSelectedIssueId] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -58,6 +343,10 @@ export default function SurveysPage() {
 
   return (
     <div className="space-y-5">
+      {/* Issue Detail Modal */}
+      {selectedIssueId && (
+        <IssueDetailModal issueId={selectedIssueId} onClose={() => setSelectedIssueId(null)} />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-lg font-bold text-gray-900">Satisfaction Surveys</h1>
@@ -188,12 +477,12 @@ export default function SurveysPage() {
                   {filtered.map((s) => (
                     <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
-                        <a
-                          href={`/dashboard/issues?search=${s.issue_id?.slice(0, 8)}`}
-                          className="font-mono text-blue-600 hover:underline"
+                        <button
+                          onClick={() => setSelectedIssueId(s.issue_id)}
+                          className="font-mono text-blue-600 hover:underline cursor-pointer hover:text-blue-700 font-semibold"
                         >
                           #{s.issue_id?.slice(0, 8)}
-                        </a>
+                        </button>
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -205,16 +494,16 @@ export default function SurveysPage() {
                       </td>
                       <td className="px-4 py-3">
                         {s.fully_resolved ? (
-                          <span className="text-green-600 font-semibold">✓ Yes</span>
+                          <span className="text-green-600 font-semibold flex items-center gap-1"><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" /></svg> Yes</span>
                         ) : (
-                          <span className="text-red-500 font-semibold">✗ No</span>
+                          <span className="text-red-500 font-semibold flex items-center gap-1"><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" /></svg> No</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
                         {s.would_report_again ? (
-                          <span className="text-green-600 font-semibold">✓ Yes</span>
+                          <span className="text-green-600 font-semibold flex items-center gap-1"><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" /></svg> Yes</span>
                         ) : (
-                          <span className="text-red-500 font-semibold">✗ No</span>
+                          <span className="text-red-500 font-semibold flex items-center gap-1"><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" /></svg> No</span>
                         )}
                       </td>
                       <td className="px-4 py-3 max-w-xs">

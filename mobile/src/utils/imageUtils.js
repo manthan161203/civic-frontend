@@ -16,7 +16,9 @@ export const compressImage = async (uri, width = 800, compress = 0.7) => {
     );
     return manipResult.uri;
   } catch (error) {
-    console.error('Image compression failed:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Image compression failed:', error);
+    }
     return uri; // Fallback to original if compression fails
   }
 };

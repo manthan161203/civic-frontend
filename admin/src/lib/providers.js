@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useRouter, usePathname } from 'next/navigation';
+import Toast from '../components/Toast';
 
 function AuthGuard({ children }) {
   const { isAuthenticated, isLoading, init } = useAuthStore();
@@ -48,6 +49,7 @@ export default function Providers({ children }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthGuard>{children}</AuthGuard>
+      <Toast />
     </QueryClientProvider>
   );
 }

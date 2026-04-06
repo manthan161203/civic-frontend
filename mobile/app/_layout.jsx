@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppState, ActivityIndicator } from 'react-native';
 import { useAuthStore, registerPushToken } from '../src/store/authStore';
+import Toast from '../src/components/Toast';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -129,6 +130,7 @@ export default function RootLayout() {
         <Stack.Screen name="issue/[id]" options={{ headerShown: true, title: 'Issue Details', headerBackTitle: 'Back' }} />
         <Stack.Screen name="task/[id]" options={{ headerShown: true, title: 'Task Details', headerBackTitle: 'Back' }} />
       </Stack>
+      <Toast />
     </GestureHandlerRootView>
   );
 }

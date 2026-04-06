@@ -6,6 +6,7 @@ import { getErrorMessage } from '../../../src/lib/apiError';
 import { locationsApi } from '../../../src/api/index';
 import { formatDate } from '../../../src/lib/dateUtils';
 import { useAuthStore } from '../../../src/store/authStore';
+import { useUiStore } from '../../../src/store/uiStore';
 import AdminScopeHeader from '../../../src/components/AdminScopeHeader';
 import LoadingButton from '../../../src/components/ui/LoadingButton';
 
@@ -13,6 +14,7 @@ const DEPT_OPTIONS = ['water', 'roads', 'electricity', 'sanitation', 'parks', 'o
 
 // ── Edit Worker Modal ──────────────────────────────────────────────────────────
 function EditWorkerModal({ worker, onClose, onSaved }) {
+  const { addToast } = useUiStore();
   const [form, setForm] = useState({
     name: worker.name || '',
     phone: worker.phone ? worker.phone.replace('+91', '') : '',
@@ -47,7 +49,11 @@ function EditWorkerModal({ worker, onClose, onSaved }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim()) { setError('Name is required.'); return; }
+    if (!form.name.trim()) { 
+      addToast('Name is required', 'error');
+      setError('Name is required.'); 
+      return; 
+    }
     
     setSaving(true);
     setError('');
@@ -61,6 +67,7 @@ function EditWorkerModal({ worker, onClose, onSaved }) {
       if (form.phone) {
         const cleaned = form.phone.replace(/\D/g, '');
         if (cleaned.length !== 10) {
+          addToast('Enter a valid 10-digit phone number', 'error');
           setError('Enter a valid 10-digit phone number');
           setSaving(false);
           return;
@@ -69,10 +76,13 @@ function EditWorkerModal({ worker, onClose, onSaved }) {
       }
 
       await adminApi.updateWorker(worker.id, payload);
+      addToast('Worker updated successfully', 'success');
       onSaved();
       onClose();
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to update worker.'));
+      const msg = getErrorMessage(err, 'Failed to update worker.');
+      setError(msg);
+      addToast(msg, 'error');
     }
     setSaving(false);
   };

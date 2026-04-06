@@ -6,6 +6,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useUiStore } from '../../src/store/uiStore';
+import { getErrorMessage } from '../../src/lib/errorHandler';
 import { workersApi } from '../../src/api/workers';
 
 const PRIORITY_COLOR = { critical: '#7c3aed', high: '#ef4444', medium: '#f59e0b', low: '#10b981' };
@@ -204,6 +206,7 @@ function SortBar({ sort, onSort }) {
 
 export default function TasksScreen() {
   const router = useRouter();
+  const { addToast } = useUiStore();
   const [tab, setTab]                   = useState('active');
   const [tasks, setTasks]               = useState([]);
   const [history, setHistory]           = useState([]);
@@ -242,8 +245,10 @@ export default function TasksScreen() {
     try {
       await workersApi.acceptTask(taskId);
       setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: 'in_progress' } : t));
+      addToast('Task accepted!', 'success');
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to accept task');
+      const errorMsg = getErrorMessage(err, 'Failed to accept task');
+      addToast(errorMsg, 'error');
     }
     setActionLoading(null);
   };
@@ -261,8 +266,10 @@ export default function TasksScreen() {
     try {
       await workersApi.rejectTask(taskId, rejectReason.trim());
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      addToast('Task rejected successfully', 'success');
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to reject task');
+      const errorMsg = getErrorMessage(err, 'Failed to reject task');
+      addToast(errorMsg, 'error');
     }
     setActionLoading(null);
   };

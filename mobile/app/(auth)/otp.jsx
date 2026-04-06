@@ -6,11 +6,13 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { authApi } from '../../src/api/auth';
 import { useAuthStore } from '../../src/store/authStore';
+import { useUiStore } from '../../src/store/uiStore';
 
 export default function OtpScreen() {
   const router = useRouter();
   const { phone, devOtp } = useLocalSearchParams();
   const { setSession, user } = useAuthStore();
+  const { addToast } = useUiStore();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -55,11 +57,12 @@ export default function OtpScreen() {
     try {
       const { data } = await authApi.verifyOtp(phone, code);
       await setSession(data.access_token, data.refresh_token);
+      addToast('Signed in successfully', 'success');
       // Route based on role after store updates user
       // useAuthStore will trigger _layout re-render which routes to correct tab
     } catch (err) {
       const msg = err.response?.data?.detail || 'Invalid OTP. Please try again.';
-      Alert.alert('Error', msg);
+      addToast(msg, 'error');
       setOtp(['', '', '', '', '', '']);
       inputs.current[0]?.focus();
     } finally {
@@ -71,9 +74,9 @@ export default function OtpScreen() {
     try {
       await authApi.sendOtp(phone);
       setCountdown(60);
-      Alert.alert('Sent', 'A new OTP has been sent to ' + maskPhone(phone));
+      addToast('OTP resent to ' + maskPhone(phone), 'success');
     } catch {
-      Alert.alert('Error', 'Could not resend OTP.');
+      addToast('Could not resend OTP', 'error');
     }
   };
 

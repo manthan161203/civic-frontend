@@ -1,148 +1,409 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { adminApi } from '../../../src/api/index';
+import { getErrorMessage } from '../../../src/lib/apiError';
+import { useUiStore } from '../../../src/store/uiStore';
 import { formatDate } from '../../../src/lib/dateUtils';
+import LoadingButton from '../../../src/components/ui/LoadingButton';
 
-const OUTCOME_COLORS = {
-  upheld: 'bg-green-100 text-green-700',
-  dismissed: 'bg-gray-100 text-gray-600',
-  pending: 'bg-yellow-100 text-yellow-700',
+const STATUS_COLORS = {
+  open: 'bg-red-100 text-red-700',
+  under_review: 'bg-yellow-100 text-yellow-700',
+  accepted: 'bg-green-100 text-green-700',
+  rejected: 'bg-gray-100 text-gray-600',
 };
 
+const STATUS_LABELS = {
+  open: 'Open',
+  under_review: 'Under Review',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+};
+
+// ── Detail Modal ───────────────────────────────────────────────────────────────
+function DisputeDetailModal({ dispute, onClose, onResolved }) {
+  const { addToast } = useUiStore();
+  const [outcome, setOutcome] = useState('');
+  const [notes, setNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!outcome) {
+      setError('Please select an outcome');
+      return;
+    }
+
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      await adminApi.resolveDispute(dispute.id, outcome, notes);
+      addToast('Dispute resolved successfully!', 'success');
+      onResolved();
+      onClose();
+    } catch (err) {
+      const errorMsg = getErrorMessage(err, 'Failed to resolve dispute');
+      setError(errorMsg);
+      addToast(errorMsg, 'error');
+      console.error('Error resolving dispute:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!dispute) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 border-b">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-2xl font-bold mb-1">Dispute Details</h2>
+              <p className="text-blue-100">ID: {String(dispute.id).slice(0, 8)}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-2xl font-light hover:opacity-80 transition"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" /></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Status Badge */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-gray-600">Status:</span>
+            <span className={`px-3 py-1 rounded-full text-sm font-semibold capitalize ${STATUS_COLORS[dispute.status] || 'bg-gray-100'}`}>
+              {STATUS_LABELS[dispute.status] || dispute.status}
+            </span>
+            <span className="text-xs text-gray-400 ml-auto">Filed {formatDate(dispute.created_at, 'en-IN')}</span>
+          </div>
+
+          {/* Issue Context */}
+          <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+            <p className="text-xs text-gray-500 mb-1 uppercase font-semibold">Related Issue</p>
+            <p className="text-sm text-blue-900 font-semibold">Issue ID: {String(dispute.issue_id).slice(0, 12)}...</p>
+          </div>
+
+          {/* Dispute Reason */}
+          <div>
+            <p className="text-xs font-semibold text-gray-600 mb-2 uppercase">Dispute Reason</p>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{dispute.reason}</p>
+            </div>
+          </div>
+
+          {/* Photos */}
+          {dispute.photos && dispute.photos.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-600 mb-3 uppercase">Supporting Photos ({dispute.photos.length})</p>
+              <div className="grid grid-cols-2 gap-3">
+                {dispute.photos.map((photo, idx) => (
+                  <a
+                    key={idx}
+                    href={photo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block rounded-lg overflow-hidden border border-gray-200 hover:shadow-md transition"
+                  >
+                    <img
+                      src={photo}
+                      alt={`Dispute photo ${idx + 1}`}
+                      className="w-full h-40 object-cover hover:scale-105 transition"
+                    />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Admin Notes */}
+          {dispute.admin_notes && (
+            <div>
+              <p className="text-xs font-semibold text-gray-600 mb-2 uppercase">Previous Admin Notes</p>
+              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <p className="text-sm text-gray-700">{dispute.admin_notes}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Decision Form (only if not resolved) */}
+          {dispute.status !== 'accepted' && dispute.status !== 'rejected' && (
+            <form onSubmit={handleSubmit} className="space-y-4 bg-blue-50 p-4 rounded-xl border border-blue-200">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-3 uppercase">Resolution Decision</label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-blue-100 transition">
+                    <input
+                      type="radio"
+                      name="outcome"
+                      value="accepted"
+                      checked={outcome === 'accepted'}
+                      onChange={(e) => setOutcome(e.target.value)}
+                      className="w-4 h-4"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-green-700">Accept Dispute</p>
+                      <p className="text-xs text-green-600">Issue will remain open for reassignment</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-blue-100 transition">
+                    <input
+                      type="radio"
+                      name="outcome"
+                      value="rejected"
+                      checked={outcome === 'rejected'}
+                      onChange={(e) => setOutcome(e.target.value)}
+                      className="w-4 h-4"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">Reject Dispute</p>
+                      <p className="text-xs text-gray-600">Issue resolution will be confirmed as valid</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-2 uppercase">Admin Notes (Optional)</label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Explain your decision to the citizen..."
+                  maxLength={2000}
+                  rows={4}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 resize-none"
+                />
+                <p className="text-xs text-gray-400 mt-1">{notes.length}/2000</p>
+              </div>
+
+              {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <LoadingButton
+                  type="submit"
+                  isLoading={isSubmitting}
+                  variant="primary"
+                  className="flex-1"
+                  loadingText="Submitting..."
+                >
+                  Submit Decision
+                </LoadingButton>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────────────
 export default function DisputesPage() {
   const [disputes, setDisputes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('pending');
-  const [resolveModal, setResolveModal] = useState(null);
-  const [outcome, setOutcome] = useState('upheld');
-  const [adminNotes, setAdminNotes] = useState('');
-  const [actionLoading, setActionLoading] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('open');
+  const [selectedDispute, setSelectedDispute] = useState(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [pagination, setPagination] = useState({ page: 1, size: 20, total: 0 });
+
+  const loadDisputes = async (page = 1) => {
+    setLoading(true);
+    try {
+      const { data } = await adminApi.getDisputes({
+        status: filterStatus || undefined,
+        page,
+        size: pagination.size,
+      });
+      
+      // Debug logging
+      console.log('Disputes API Response:', data);
+      
+      // Handle response structure
+      let disputesList = [];
+      let totalCount = 0;
+      
+      if (Array.isArray(data)) {
+        disputesList = data;
+        totalCount = data.length;
+      } else if (data && typeof data === 'object') {
+        disputesList = data.items || [];
+        totalCount = data.total || 0;
+      }
+      
+      setDisputes(disputesList);
+      if (totalCount !== undefined) {
+        setPagination((p) => ({ ...p, page, total: totalCount }));
+      }
+    } catch (err) {
+      console.error('Failed to load disputes:', err);
+      setDisputes([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    setLoading(true);
-    adminApi.getDisputes({ status: filter })
-      .then(({ data }) => setDisputes(data.items || data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [filter]);
+    loadDisputes(1);
+  }, [filterStatus]);
 
-  const handleResolve = async () => {
-    if (!resolveModal) return;
-    setActionLoading(true);
-    try {
-      await adminApi.resolveDispute(resolveModal.id, outcome, adminNotes);
-      setDisputes((prev) => prev.filter((d) => d.id !== resolveModal.id));
-      setResolveModal(null);
-      setAdminNotes('');
-    } catch {}
-    setActionLoading(false);
+  const handleSelectDispute = (dispute) => {
+    setSelectedDispute(dispute);
+    setShowDetails(true);
   };
+
+  const handleDisputeResolved = () => {
+    loadDisputes(pagination.page);
+  };
+
+  const totalPages = Math.ceil(pagination.total / pagination.size);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold text-gray-900">Disputes</h1>
-      </div>
+      {showDetails && selectedDispute && (
+        <DisputeDetailModal
+          dispute={selectedDispute}
+          onClose={() => setShowDetails(false)}
+          onResolved={handleDisputeResolved}
+        />
+      )}
 
-      {/* Filter */}
-      <div className="bg-white rounded-xl shadow-sm p-4 flex gap-3 items-center">
-        {['pending', 'upheld', 'dismissed'].map((s) => (
+      {/* Toolbar */}
+      <div className="flex flex-wrap gap-2 bg-white rounded-xl shadow-sm p-4">
+        {['open', 'under_review', 'accepted', 'rejected'].map((status) => (
           <button
-            key={s}
-            onClick={() => setFilter(s)}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg capitalize transition-colors ${filter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            key={status}
+            onClick={() => setFilterStatus(status === filterStatus ? '' : status)}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${
+              filterStatus === status
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
           >
-            {s}
+            {STATUS_LABELS[status]}
           </button>
         ))}
+        <button
+          onClick={() => setFilterStatus('')}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ml-auto ${
+            filterStatus === ''
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          All
+        </button>
       </div>
 
       {/* List */}
-      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-50">
-        {loading ? (
-          <div className="text-center py-12 text-gray-400">Loading...</div>
-        ) : disputes.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">No {filter} disputes</div>
-        ) : (
-          disputes.map((d) => (
-            <div key={d.id} className="p-4 flex items-start gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${OUTCOME_COLORS[d.outcome || 'pending']}`}>
-                    {d.outcome || 'pending'}
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    Issue #{d.issue_id?.slice(0, 8)}
-                  </span>
+      {loading ? (
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 animate-pulse">
+              <div className="h-5 w-48 bg-gray-200 rounded mb-3" />
+              <div className="space-y-2">
+                <div className="h-4 w-full bg-gray-100 rounded" />
+                <div className="h-4 w-3/4 bg-gray-100 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : disputes.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
+            className="w-12 h-12 text-gray-300 mx-auto mb-3"
+          >
+            <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2a8 8 0 100-16 8 8 0 000 16zm-1-5h2v2h-2v-2zm0-8h2v6h-2V7z" />
+          </svg>
+          <p className="text-gray-500 font-medium">No disputes found</p>
+          <p className="text-sm text-gray-400 mt-1">All disputes have been resolved or there are no pending disputes</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {disputes.map((dispute) => (
+            <button
+              key={dispute.id}
+              onClick={() => handleSelectDispute(dispute)}
+              className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md hover:border-gray-200 transition text-left w-full"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-2 flex-wrap">
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${STATUS_COLORS[dispute.status]}`}>
+                      {STATUS_LABELS[dispute.status]}
+                    </span>
+                    <span className="text-xs text-gray-500">ID: {String(dispute.id).slice(0, 8)}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-900 line-clamp-2">
+                    {dispute.reason.length > 100 ? dispute.reason.substring(0, 100) + '...' : dispute.reason}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    Issue: {String(dispute.issue_id).slice(0, 12)}... • {formatDate(dispute.created_at, 'en-IN')}
+                  </p>
+                  {dispute.photos && dispute.photos.length > 0 && (
+                    <p className="text-xs text-blue-600 font-medium mt-2 flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" /></svg> {dispute.photos.length} photo{dispute.photos.length > 1 ? 's' : ''}
+                    </p>
+                  )}
                 </div>
-                <p className="text-sm text-gray-700 mb-1">{d.reason}</p>
-                {d.admin_notes && (
-                  <p className="text-xs text-gray-500 italic">Admin: {d.admin_notes}</p>
-                )}
-                <div className="flex gap-3 mt-1 text-xs text-gray-400">
-                  <span>By: {d.citizen_name || d.citizen_id?.slice(0, 8)}</span>
-                  <span>{formatDate(d.created_at, 'en-IN')}</span>
+                <div className="text-right">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    className="w-5 h-5 text-gray-400"
+                  >
+                    <path d="M9 5l7 7-7 7" />
+                  </svg>
                 </div>
               </div>
-              {filter === 'pending' && (
-                <button
-                  onClick={() => setResolveModal(d)}
-                  className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 flex-shrink-0"
-                >
-                  Resolve
-                </button>
-              )}
-            </div>
-          ))
-        )}
-      </div>
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Resolve Modal */}
-      {resolveModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setResolveModal(null)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-base font-bold text-gray-900 mb-4">Resolve Dispute</h3>
-            <p className="text-sm text-gray-600 mb-3">Issue #{resolveModal.issue_id?.slice(0, 8)}</p>
-            <p className="text-sm text-gray-700 mb-4 bg-gray-50 p-3 rounded-lg">{resolveModal.reason}</p>
-
-            <label className="block text-xs font-semibold text-gray-500 mb-2">Outcome</label>
-            <div className="flex gap-2 mb-4">
-              {['upheld', 'dismissed'].map((o) => (
-                <button
-                  key={o}
-                  onClick={() => setOutcome(o)}
-                  className={`px-4 py-2 text-sm font-semibold rounded-lg capitalize transition-colors ${outcome === o ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                >
-                  {o}
-                </button>
-              ))}
-            </div>
-
-            <label className="block text-xs font-semibold text-gray-500 mb-2">Admin Notes</label>
-            <textarea
-              className="w-full border border-gray-200 rounded-lg p-3 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              rows={3}
-              value={adminNotes}
-              onChange={(e) => setAdminNotes(e.target.value)}
-              placeholder="Notes about the resolution..."
-            />
-
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setResolveModal(null)}
-                className="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleResolve}
-                disabled={actionLoading}
-                className="px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {actionLoading ? 'Saving...' : 'Submit'}
-              </button>
-            </div>
-          </div>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-6">
+          <button
+            onClick={() => loadDisputes(pagination.page - 1)}
+            disabled={pagination.page === 1}
+            className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+          >
+            ← Prev
+          </button>
+          <span className="text-sm text-gray-600">
+            Page {pagination.page} of {totalPages}
+          </span>
+          <button
+            onClick={() => loadDisputes(pagination.page + 1)}
+            disabled={pagination.page === totalPages}
+            className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+          >
+            Next →
+          </button>
         </div>
       )}
     </div>

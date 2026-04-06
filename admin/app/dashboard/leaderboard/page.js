@@ -1,159 +1,222 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { publicApi } from '../../../src/api/index';
-
-function ScoreBar({ value, max = 100, color }) {
-  return (
-    <div className="h-2 bg-gray-100 rounded-full overflow-hidden" style={{ width: 80 }}>
-      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, (value / max) * 100)}%`, backgroundColor: color }} />
-    </div>
-  );
-}
+import { adminApi } from '../../../src/api/index';
+import { getErrorMessage } from '../../../src/lib/apiError';
 
 export default function LeaderboardPage() {
-  const [wards, setWards] = useState([]);
+  const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [days, setDays] = useState(30);
+  const [error, setError] = useState('');
+  const [period, setPeriod] = useState('monthly');
+  const [filterType, setFilterType] = useState('points');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     setLoading(true);
-    publicApi.getLeaderboard({ limit: 50, days })
-      .then(({ data }) => setWards(data || []))
-      .catch(() => {})
+    setError('');
+    adminApi
+      .getWorkerLeaderboard()
+      .then(({ data }) => {
+        console.log('Leaderboard API Response:', data);
+        let filtered = Array.isArray(data) ? data : (data.items || []);
+        console.log('Filtered workers:', filtered);
+        
+        if (filterType === 'issues') {
+          filtered = filtered.sort((a, b) => (b.tasks_resolved || 0) - (a.tasks_resolved || 0));
+        } else if (filterType === 'rating') {
+          filtered = filtered.sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
+        } else {
+          filtered = filtered.sort((a, b) => (b.score || 0) - (a.score || 0));
+        }
+
+        setWorkers(filtered);
+        setPage(1);
+      })
+      .catch((err) => setError(getErrorMessage(err, 'Failed to load leaderboard')))
       .finally(() => setLoading(false));
-  }, [days]);
+  }, [period, filterType]);
+
+  const displayWorkers = workers.slice((page - 1) * 10, page * 10);
+  const totalPages = Math.ceil(workers.length / 10);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Ward Health Leaderboard</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Rankings based on resolution rate, speed, and citizen ratings
-          </p>
+      <div>
+        <div className="flex items-center gap-3">
+          <svg className="w-8 h-8 text-yellow-600" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          </svg>
+          <h1 className="text-2xl font-bold text-gray-900">Worker Leaderboard</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-500 font-medium">Period:</label>
-          <select
-            value={days}
-            onChange={(e) => setDays(Number(e.target.value))}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400 bg-white"
+        <p className="text-sm text-gray-500 mt-1">Top performing workers by period and metric</p>
+      </div>
+
+      <div className="flex gap-2">
+        {['weekly', 'monthly', 'alltime'].map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              period === p
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
           >
-            <option value={7}>7 days</option>
-            <option value={14}>14 days</option>
-            <option value={30}>30 days</option>
-            <option value={60}>60 days</option>
-            <option value={90}>90 days</option>
-          </select>
-        </div>
+            {p === 'weekly' ? 'This Week' : p === 'monthly' ? 'This Month' : 'All Time'}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex gap-2 bg-white rounded-lg shadow-sm p-2 border border-gray-100">
+        {[
+          { value: 'points', label: 'Points', icon: 'star' },
+          { value: 'issues', label: 'Issues Resolved', icon: 'check' },
+          { value: 'rating', label: 'Rating', icon: 'trending' },
+        ].map((filter) => (
+          <button
+            key={filter.value}
+            onClick={() => setFilterType(filter.value)}
+            className={`flex-1 px-3 py-2 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${
+              filterType === filter.value
+                ? 'bg-blue-100 text-blue-700'
+                : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            {filter.icon === 'star' && (
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+              </svg>
+            )}
+            {filter.icon === 'check' && (
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+              </svg>
+            )}
+            {filter.icon === 'trending' && (
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M16 6l2.29 2.29-4.58 4.58-4-4L2 16.86 3.41 18.27 9.41 12.27l4 4 6.3-6.29L22 12v-6z" />
+              </svg>
+            )}
+            {filter.label}
+          </button>
+        ))}
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+        <div className="space-y-3">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="bg-white rounded-lg shadow-sm p-4 animate-pulse">
+              <div className="h-12 bg-gray-200 rounded" />
+            </div>
+          ))}
         </div>
-      ) : wards.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">
-          <p className="text-lg font-semibold">No ward data available</p>
-          <p className="text-sm mt-1">Needs at least 3 issues per ward in the selected period</p>
+      ) : displayWorkers.length === 0 ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-12 text-center">
+          <p className="text-gray-500 font-medium">No workers found</p>
         </div>
       ) : (
         <>
-          {/* Top 3 Podium */}
-          <div className="grid grid-cols-3 gap-4">
-            {wards.slice(0, 3).map((w, i) => {
-              const color = i === 0 ? '#f59e0b' : i === 1 ? '#9ca3af' : '#cd7f32';
+          <div className="space-y-2">
+            {displayWorkers.map((worker, idx) => {
+              const rank = (page - 1) * 10 + idx + 1;
+              const isTopThree = rank <= 3;
+              const uniqueKey = worker.id || `worker-${idx}-${page}`;
+
               return (
-                <div key={w.ward} className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm text-center">
-                  <div style={{
-                    width: 48,
-                    height: 48,
-                    margin: '0 auto 8px',
-                    borderRadius: '50%',
-                    backgroundColor: color,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontSize: 24,
-                    fontWeight: 'bold',
-                  }}>
-                    {i + 1}
+                <div
+                  key={uniqueKey}
+                  className={`border rounded-lg p-4 ${
+                    isTopThree ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="flex-shrink-0 w-12 text-center">
+                      <div className={`text-2xl font-bold ${rank <= 3 ? 'text-yellow-600' : 'text-gray-700'}`}>
+                        {rank === 1 ? (
+                          <svg className="w-6 h-6 text-yellow-600" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          </svg>
+                        ) : rank === 2 ? (
+                          <svg className="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          </svg>
+                        ) : rank === 3 ? (
+                          <svg className="w-6 h-6 text-orange-700" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          </svg>
+                        ) : (
+                          rank
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-gray-900 truncate">
+                        {worker.name || `Worker ${worker.id.slice(0, 8)}`}
+                      </h3>
+                      <p className="text-xs text-gray-500 truncate">{worker.phone}</p>
+                      <div className="flex gap-3 mt-1 text-xs text-gray-600">
+                        <span className="flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                          </svg>
+                          {worker.tasks_resolved || 0} issues
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          </svg>
+                          {worker.avg_rating ? worker.avg_rating.toFixed(1) : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex-shrink-0 text-right">
+                      <div className={`text-2xl font-bold ${rank <= 3 ? 'text-yellow-600' : 'text-blue-600'}`}>
+                        {filterType === 'issues'
+                          ? worker.tasks_resolved || 0
+                          : filterType === 'rating'
+                          ? (worker.avg_rating || 0).toFixed(1)
+                          : worker.score || 0}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {filterType === 'issues' ? 'resolved' : filterType === 'rating' ? 'rating' : 'points'}
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="font-bold text-gray-900 mt-2 text-sm truncate">{w.ward}</h3>
-                  <div className="text-3xl font-black mt-1" style={{ color }}>{w.score}</div>
-                  <p className="text-xs text-gray-500 mt-1">{w.total_issues} issues · {w.resolution_rate}% resolved</p>
                 </div>
               );
             })}
           </div>
 
-          {/* Full Table */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-                  <th className="px-4 py-3 text-left font-semibold">#</th>
-                  <th className="px-4 py-3 text-left font-semibold">Ward</th>
-                  <th className="px-4 py-3 text-center font-semibold">Score</th>
-                  <th className="px-4 py-3 text-center font-semibold">Issues</th>
-                  <th className="px-4 py-3 text-center font-semibold">Resolution %</th>
-                  <th className="px-4 py-3 text-center font-semibold">Avg Speed</th>
-                  <th className="px-4 py-3 text-center font-semibold">Speed Score</th>
-                  <th className="px-4 py-3 text-center font-semibold">Avg Rating</th>
-                  <th className="px-4 py-3 text-center font-semibold">Rating Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {wards.map((w) => {
-                  const scoreColor = w.score >= 75 ? '#059669' : w.score >= 50 ? '#f59e0b' : '#ef4444';
-                  return (
-                    <tr key={w.ward} className="border-t border-gray-50 hover:bg-gray-50/50">
-                      <td className="px-4 py-3 font-bold text-gray-400">{w.rank}</td>
-                      <td className="px-4 py-3 font-semibold text-gray-900">{w.ward}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-block font-bold px-2.5 py-0.5 rounded-full text-xs" style={{
-                          backgroundColor: scoreColor + '15', color: scoreColor,
-                        }}>{w.score}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center text-gray-600">{w.total_issues}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <span className="text-gray-700 font-medium">{w.resolution_rate}%</span>
-                          <ScoreBar value={w.resolution_rate} color="#3b82f6" />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center text-gray-600">{w.avg_resolve_hours}h</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <span className="text-gray-700 font-medium">{w.speed_score}</span>
-                          <ScoreBar value={w.speed_score} color="#10b981" />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center text-gray-600">
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {[...Array(Math.round(w.avg_rating))].map((_, i) => (
-                            <svg key={i} viewBox="0 0 24 24" fill="#fbbf24" style={{ width: 14, height: 14 }}>
-                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27z" />
-                            </svg>
-                          ))}
-                          {w.avg_rating}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <span className="text-gray-700 font-medium">{w.rating_score}</span>
-                          <ScoreBar value={w.rating_score} color="#f59e0b" />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between bg-white rounded-lg shadow-sm border border-gray-100 p-4">
+              <p className="text-sm text-gray-600">Page {page} of {totalPages}</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 disabled:opacity-50 hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 disabled:opacity-50 hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </>
+      )}
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
       )}
     </div>
   );

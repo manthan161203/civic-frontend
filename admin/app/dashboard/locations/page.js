@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { locationsApi } from '../../../src/api/index';
+import { getErrorMessage } from '../../../src/lib/apiError';
+import { useUiStore } from '../../../src/store/uiStore';
 import { useAuthStore } from '../../../src/store/authStore';
 import LoadingButton from '../../../src/components/ui/LoadingButton';
 
@@ -73,6 +75,7 @@ function WardMapPicker({ lat, lon, onSetLat, onSetLon, onManualSet, fallbackCent
 
 export default function LocationsPage() {
   const { user } = useAuthStore();
+  const { addToast } = useUiStore();
   const [tree, setTree] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState({});
@@ -264,8 +267,10 @@ export default function LocationsPage() {
       await reloadTree();
       setAdding(null);
       resetWardCoords();
+      addToast(`${adding.type.charAt(0).toUpperCase() + adding.type.slice(1)} created successfully!`, 'success');
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to create');
+      const errorMsg = getErrorMessage(err, 'Failed to create');
+      addToast(errorMsg, 'error');
       setSaving(false);
       return;
     }
@@ -289,8 +294,10 @@ export default function LocationsPage() {
       await reloadTree();
       setEditing(null);
       resetWardCoords();
+      addToast(`${editing.type.charAt(0).toUpperCase() + editing.type.slice(1)} updated successfully!`, 'success');
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to update');
+      const errorMsg = getErrorMessage(err, 'Failed to update');
+      addToast(errorMsg, 'error');
       setSaving(false);
       return;
     }
@@ -304,8 +311,10 @@ export default function LocationsPage() {
       else if (type === 'taluka') await locationsApi.deleteTaluka(id);
       else if (type === 'ward') await locationsApi.deleteWard(id);
       await reloadTree();
+      addToast(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully!`, 'success');
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to delete');
+      const errorMsg = getErrorMessage(err, 'Failed to delete');
+      addToast(errorMsg, 'error');
     }
   };
 

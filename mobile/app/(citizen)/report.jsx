@@ -9,6 +9,7 @@ import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { issuesApi } from '../../src/api/issues';
 import { locationsApi } from '../../src/api/locations';
+import { useUiStore } from '../../src/store/uiStore';
 import { reverseGeocode } from '../../src/utils/geocode';
 import MapView, { Marker } from '../../src/components/PlatformMap';
 import { compressImage } from '../../src/utils/imageUtils';
@@ -31,6 +32,7 @@ const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
 export default function ReportScreen() {
   const router = useRouter();
+  const { addToast } = useUiStore();
   const [description, setDescription] = useState('');
   const [issueType, setIssueType] = useState('roads');
   const [priority, setPriority] = useState('medium');
@@ -202,11 +204,11 @@ export default function ReportScreen() {
 
   const submit = async () => {
     if (!description.trim()) {
-      Alert.alert('Required', 'Please describe the issue.');
+      addToast('Please describe the issue.', 'error');
       return;
     }
     if (!location) {
-      Alert.alert('Location', 'Please allow location access to report an issue.');
+      addToast('Please allow location access to report an issue.', 'error');
       return;
     }
 
@@ -261,6 +263,7 @@ export default function ReportScreen() {
         await issuesApi.uploadPhoto(data.id, form);
       }
 
+      addToast('Issue reported successfully!', 'success');
       Alert.alert('Reported!', 'Your issue has been submitted successfully.', [
         { text: 'View Issue', onPress: () => router.push(`/issue/${data.id}`) },
         { text: 'Report Another', onPress: () => {
@@ -274,7 +277,7 @@ export default function ReportScreen() {
       ]);
     } catch (err) {
       const msg = err.response?.data?.detail || 'Failed to submit. Please try again.';
-      Alert.alert('Error', msg);
+      addToast(msg, 'error');
     } finally {
       setSubmitting(false);
     }

@@ -35,4 +35,7 @@ export const workersApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   getMyComplaints: (params) => api.get('/me/complaints', { params }),
+  // Chat
+  chat: (message, issue_id = null) =>
+    api.post('/chat', { message, issue_id }),
 };

@@ -6,6 +6,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
+import { useUiStore } from '../../src/store/uiStore';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
 import { rewardsApi } from '../../src/api/rewards';
@@ -32,6 +33,7 @@ const DAYS = [
 
 export default function WorkerProfile() {
   const { user, logout, updateUser } = useAuthStore();
+  const { addToast } = useUiStore();
   const router = useRouter();
   const [stats, setStats] = useState(null);
   const [shifts, setShifts] = useState([]);
@@ -109,16 +111,17 @@ export default function WorkerProfile() {
       setProfilePhoto(data.profile_photo_url);
       updateUser(data);
       setSelectedPhotoUri(null);
-      Alert.alert('Success', 'Profile photo updated!');
+      addToast('Profile photo updated!', 'success');
     } catch (error) {
-      Alert.alert('Error', error?.response?.data?.detail || 'Failed to upload photo');
+      const msg = error?.response?.data?.detail || 'Failed to upload photo';
+      addToast(msg, 'error');
     }
     setUploadingPhoto(false);
   };
 
   const handleSaveProfile = async () => {
     if (!editName.trim()) {
-      Alert.alert('Error', 'Name is required.');
+      addToast('Name is required.', 'error');
       return;
     }
     setSaving(true);
@@ -129,9 +132,10 @@ export default function WorkerProfile() {
       });
       updateUser(data);
       setEditModal(false);
-      Alert.alert('Success', 'Profile updated!');
+      addToast('Profile updated!', 'success');
     } catch (error) {
-      Alert.alert('Error', error?.response?.data?.detail || 'Failed to update profile.');
+      const msg = error?.response?.data?.detail || 'Failed to update profile.';
+      addToast(msg, 'error');
     }
     setSaving(false);
   };

@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { adminApi } from '../../../src/api/index';
+import { getErrorMessage } from '../../../src/lib/apiError';
+import { useUiStore } from '../../../src/store/uiStore';
 import { formatDate } from '../../../src/lib/dateUtils';
 
 const REASON_COLORS = {
@@ -12,6 +14,7 @@ const REASON_COLORS = {
 };
 
 export default function FlagsPage() {
+  const { addToast } = useUiStore();
   const [flags, setFlags] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
@@ -20,13 +23,23 @@ export default function FlagsPage() {
     setLoading(true);
     adminApi.getFlags({ status: filter })
       .then(({ data }) => setFlags(data.items || data))
-      .catch(() => {})
+      .catch((err) => {
+        console.error('Failed to load flags:', err);
+        setFlags([]);
+      })
       .finally(() => setLoading(false));
   }, [filter]);
 
   const resolve = async (id, status) => {
-    await adminApi.resolveFlag(id, status).catch(() => {});
-    setFlags((prev) => prev.filter((f) => f.id !== id));
+    try {
+      await adminApi.resolveFlag(id, status);
+      setFlags((prev) => prev.filter((f) => f.id !== id));
+      addToast(`Flag marked as ${status}!`, 'success');
+    } catch (err) {
+      const errorMsg = getErrorMessage(err, 'Failed to resolve flag');
+      addToast(errorMsg, 'error');
+      console.error('Failed to resolve flag:', err);
+    }
   };
 
   return (

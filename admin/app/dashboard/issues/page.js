@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { adminApi, locationsApi } from '../../../src/api/index';
+import { getErrorMessage } from '../../../src/lib/apiError';
+import { useUiStore } from '../../../src/store/uiStore';
 import { formatDate } from '../../../src/lib/dateUtils';
 import { useAuthStore } from '../../../src/store/authStore';
 import AdminScopeHeader from '../../../src/components/AdminScopeHeader';
@@ -89,10 +91,15 @@ function AssignModal({ issue, onClose, onAssigned }) {
     try {
       const fn = issue.assigned_worker_id ? adminApi.reassignIssue : adminApi.assignIssue;
       await fn(issue.id, selected);
+      useUiStore.getState().addToast(
+        issue.assigned_worker_id ? 'Issue reassigned successfully!' : 'Issue assigned successfully!',
+        'success'
+      );
       onAssigned();
       onClose();
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to assign worker');
+      const errorMsg = getErrorMessage(err, 'Failed to assign worker');
+      useUiStore.getState().addToast(errorMsg, 'error');
     }
     setSaving(false);
   };

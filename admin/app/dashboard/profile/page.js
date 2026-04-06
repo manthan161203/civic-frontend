@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../../src/store/authStore';
+import { useUiStore } from '../../../src/store/uiStore';
 import { authApi, locationsApi } from '../../../src/api/index';
 import { getErrorMessage } from '../../../src/lib/apiError';
 import { formatDate } from '../../../src/lib/dateUtils';
@@ -23,6 +24,7 @@ const ROLE_COLORS = {
 // ── Profile Info Section ───────────────────────────────────────────────────────
 function ProfileInfo() {
   const { user, updateUser } = useAuthStore();
+  const { addToast } = useUiStore();
   const [name, setName] = useState(user?.name || '');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
@@ -75,7 +77,12 @@ function ProfileInfo() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!name.trim()) { setError('Name cannot be empty.'); return; }
+    if (!name.trim()) { 
+      const msg = 'Name cannot be empty.';
+      setError(msg);
+      addToast(msg, 'error');
+      return; 
+    }
     setSaving(true);
     setError('');
     setSuccess('');
@@ -83,8 +90,11 @@ function ProfileInfo() {
       const { data } = await authApi.updateProfile({ name: name.trim() });
       updateUser({ name: data.name });
       setSuccess('Profile updated successfully.');
+      addToast('Profile updated successfully!', 'success');
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to update profile.'));
+      const errorMsg = getErrorMessage(err, 'Failed to update profile.');
+      setError(errorMsg);
+      addToast(errorMsg, 'error');
     }
     setSaving(false);
   };
@@ -156,6 +166,7 @@ function ProfileInfo() {
 // ── Change Phone Section ───────────────────────────────────────────────────────
 function ChangePhone() {
   const { user, updateUser } = useAuthStore();
+  const { addToast } = useUiStore();
   const [step, setStep] = useState('input'); // 'input' | 'otp'
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -166,33 +177,49 @@ function ChangePhone() {
   const sendOtp = async (e) => {
     e.preventDefault();
     const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length !== 10) { setError('Enter a valid 10-digit phone number.'); return; }
+    if (cleaned.length !== 10) { 
+      const msg = 'Enter a valid 10-digit phone number.';
+      setError(msg);
+      addToast(msg, 'error');
+      return; 
+    }
     setLoading(true);
     setError('');
     try {
       await authApi.sendChangePhoneOtp(`+91${cleaned}`);
       setPhone(`+91${cleaned}`);
       setStep('otp');
+      addToast('OTP sent successfully!', 'success');
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to send OTP.'));
+      const errorMsg = getErrorMessage(err, 'Failed to send OTP.');
+      setError(errorMsg);
+      addToast(errorMsg, 'error');
     }
     setLoading(false);
   };
 
   const verifyOtp = async (e) => {
     e.preventDefault();
-    if (otp.length !== 6) { setError('Enter the 6-digit OTP.'); return; }
+    if (otp.length !== 6) { 
+      const msg = 'Enter the 6-digit OTP.';
+      setError(msg);
+      addToast(msg, 'error');
+      return; 
+    }
     setLoading(true);
     setError('');
     try {
       const { data } = await authApi.verifyChangePhone(phone, otp);
       updateUser({ phone: data.phone });
       setSuccess(`Phone updated to ${data.phone}`);
+      addToast(`Phone updated to ${data.phone}!`, 'success');
       setStep('input');
       setPhone('');
       setOtp('');
     } catch (err) {
-      setError(getErrorMessage(err, 'Invalid OTP.'));
+      const errorMsg = getErrorMessage(err, 'Invalid OTP.');
+      setError(errorMsg);
+      addToast(errorMsg, 'error');
     }
     setLoading(false);
   };

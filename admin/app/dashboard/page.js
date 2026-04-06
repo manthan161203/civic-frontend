@@ -2,6 +2,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { adminApi } from '../../src/api/index';
+import { DashboardSkeleton } from '../../src/components/ui/SkeletonLoaders';
+import LoadingPage from '../../src/components/ui/LoadingPage';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend,
@@ -150,23 +152,7 @@ export default function DashboardPage() {
   }, [loadDashboard]);
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 animate-pulse">
-              <div className="flex items-start gap-4">
-                <div className="w-11 h-11 rounded-xl bg-gray-100" />
-                <div className="flex-1 space-y-2 pt-1">
-                  <div className="h-7 w-16 bg-gray-100 rounded" />
-                  <div className="h-4 w-28 bg-gray-100 rounded" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const dailyData = analytics?.daily_counts

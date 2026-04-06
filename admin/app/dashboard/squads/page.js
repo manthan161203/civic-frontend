@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { adminApi } from '../../../src/api/index';
+import { getErrorMessage } from '../../../src/lib/apiError';
+import { useUiStore } from '../../../src/store/uiStore';
 
 export default function SquadsPage() {
   const [issueId, setIssueId] = useState('');
@@ -29,12 +31,15 @@ export default function SquadsPage() {
         ...(notes.trim() && { notes: notes.trim() }),
       });
       setResult(data);
+      useUiStore.getState().addToast('Squad created successfully!', 'success');
       setIssueId('');
       setLeadWorkerId('');
       setAssistantIds('');
       setNotes('');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to create squad');
+      const errorMsg = getErrorMessage(err, 'Failed to create squad');
+      setError(errorMsg);
+      useUiStore.getState().addToast(errorMsg, 'error');
     }
     setLoading(false);
   };

@@ -140,7 +140,7 @@ function LbRow({ item, index, isMe }) {
         </Text>
         <Text style={styles.lbSub}>
           {item.tasks_completed ?? 0} tasks
-          {item.avg_rating ? ` · ★ ${item.avg_rating.toFixed(1)}` : ''}
+          {item.avg_rating ? ` · Rating: ${item.avg_rating.toFixed(1)}` : ''}
         </Text>
       </View>
       <Text style={[styles.lbPts, isMe && styles.lbPtsMe]}>{item.total_points ?? 0} pts</Text>

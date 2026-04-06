@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { adminApi } from '../../../src/api/index';
+import { useUiStore } from '../../../src/store/uiStore';
 import { logger } from '../../../src/lib/logger';
 
 const COMPONENT_NAME = 'BulkNotificationsPage';
@@ -63,6 +64,7 @@ function ConfirmModal({ formData, onConfirm, onCancel, loading }) {
 }
 
 export default function BulkNotificationsPage() {
+  const { addToast } = useUiStore();
   const [mapCenter, setMapCenter] = useState({ lat: 22.2587, lng: 71.1924 });
   const [formData, setFormData] = useState({
     latitude: 22.2587,
@@ -128,6 +130,7 @@ export default function BulkNotificationsPage() {
       );
 
       setResult(response.data);
+      addToast(`Notification sent to ${response.data.citizens_notified} citizens!`, 'success');
       logger.info(COMPONENT_NAME, `Notification sent to ${response.data.citizens_notified} citizens`);
 
       setFormData((prev) => ({
@@ -138,6 +141,7 @@ export default function BulkNotificationsPage() {
     } catch (err) {
       const errorMsg = err?.response?.data?.detail || err?.message || 'Failed to send notification';
       setError(errorMsg);
+      addToast(errorMsg, 'error');
       logger.error(COMPONENT_NAME, errorMsg);
     } finally {
       setLoading(false);

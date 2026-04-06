@@ -4,6 +4,7 @@ import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { adminApi, locationsApi } from '../../../src/api/index';
 import { getErrorMessage } from '../../../src/lib/apiError';
 import { formatDate } from '../../../src/lib/dateUtils';
+import { useUiStore } from '../../../src/store/uiStore';
 import LoadingButton from '../../../src/components/ui/LoadingButton';
 
 const SCOPE_COLORS = {
@@ -94,11 +95,14 @@ function CreateModal({ onClose, onCreated }) {
     setSaving(true);
     try {
       await adminApi.createAnnouncement(payload);
+      useUiStore.getState().addToast('Announcement published successfully!', 'success');
       onCreated();
       onClose();
       setForm({ title: '', body: '', scope: 'state' });
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to create announcement.'));
+      const errorMsg = getErrorMessage(err, 'Failed to create announcement.');
+      setError(errorMsg);
+      useUiStore.getState().addToast(errorMsg, 'error');
     }
     setSaving(false);
   };
@@ -299,14 +303,20 @@ function EditModal({ announcement, onClose, onSaved }) {
   useEffect(() => {
     locationsApi.getDistricts()
       .then(({ data }) => setDistricts(data.items || data))
-      .catch(() => {});
+      .catch((err) => {
+        console.error('Failed to load districts:', err);
+        setError('Failed to load districts');
+      });
   }, []);
 
   useEffect(() => {
     if (!selectedDistrict) { setTalukas([]); setSelectedTaluka(''); return; }
     locationsApi.getTalukas(selectedDistrict)
       .then(({ data }) => setTalukas(data.items || data))
-      .catch(() => {});
+      .catch((err) => {
+        console.error('Failed to load talukas:', err);
+        setError('Failed to load talukas');
+      });
     setSelectedTaluka('');
     setSelectedWard('');
   }, [selectedDistrict]);
@@ -315,7 +325,10 @@ function EditModal({ announcement, onClose, onSaved }) {
     if (!selectedTaluka) { setWards([]); setSelectedWard(''); return; }
     locationsApi.getWards(selectedTaluka)
       .then(({ data }) => setWards(data.items || data))
-      .catch(() => {});
+      .catch((err) => {
+        console.error('Failed to load wards:', err);
+        setError('Failed to load wards');
+      });
     setSelectedWard('');
   }, [selectedTaluka]);
 
@@ -334,10 +347,13 @@ function EditModal({ announcement, onClose, onSaved }) {
     setSaving(true);
     try {
       await adminApi.updateAnnouncement(announcement.id, payload);
+      useUiStore.getState().addToast('Announcement updated successfully!', 'success');
       onSaved();
       onClose();
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to update announcement.'));
+      const errorMsg = getErrorMessage(err, 'Failed to update announcement.');
+      setError(errorMsg);
+      useUiStore.getState().addToast(errorMsg, 'error');
     }
     setSaving(false);
   };
@@ -527,7 +543,10 @@ export default function AnnouncementsPage() {
     setLoading(true);
     adminApi.getAnnouncements()
       .then(({ data }) => setAnnouncements(data.items || data))
-      .catch(() => {})
+      .catch((err) => {
+        console.error('Failed to load announcements:', err);
+        setAnnouncements([]);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -535,8 +554,13 @@ export default function AnnouncementsPage() {
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this announcement? This cannot be undone.')) return;
-    await adminApi.deleteAnnouncement(id).catch(() => {});
-    setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+    try {
+      await adminApi.deleteAnnouncement(id);
+      setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+    } catch (err) {
+      console.error('Failed to delete announcement:', err);
+      alert('Failed to delete announcement');
+    }
   };
 
   const visible = filterScope ? announcements.filter((a) => a.scope === filterScope) : announcements;

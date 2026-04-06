@@ -2,11 +2,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { adminApi, locationsApi } from '../../../src/api/index';
 import { useAuthStore } from '../../../src/store/authStore';
+import { useUiStore } from '../../../src/store/uiStore';
+import { getErrorMessage } from '../../../src/lib/apiError';
 import AdminScopeHeader from '../../../src/components/AdminScopeHeader';
 import LoadingButton from '../../../src/components/ui/LoadingButton';
 
 export default function CitizensPage() {
   const { user } = useAuthStore();
+  const { addToast } = useUiStore();
   const [citizens, setCitizens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -41,8 +44,14 @@ export default function CitizensPage() {
 
   const handleToggle = async (id, active) => {
     if (!confirm(`${active ? 'Deactivate' : 'Reactivate'} this citizen?`)) return;
-    await (active ? adminApi.deactivateCitizen(id) : adminApi.reactivateCitizen(id)).catch(() => {});
-    load();
+    try {
+      await (active ? adminApi.deactivateCitizen(id) : adminApi.reactivateCitizen(id));
+      addToast(`Citizen ${active ? 'deactivated' : 'reactivated'} successfully!`, 'success');
+      load();
+    } catch (err) {
+      const errorMsg = getErrorMessage(err, `Failed to ${active ? 'deactivate' : 'reactivate'} citizen`);
+      addToast(errorMsg, 'error');
+    }
   };
 
   const openDetail = async (id) => {
@@ -50,7 +59,10 @@ export default function CitizensPage() {
     try {
       const { data } = await adminApi.getCitizen(id);
       setSelected(data);
-    } catch {}
+    } catch (err) {
+      const errorMsg = getErrorMessage(err, 'Failed to load citizen details');
+      addToast(errorMsg, 'error');
+    }
     setDetailLoading(false);
   };
 

@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { authApi } from '../../src/api/auth';
 import { useAuthStore } from '../../src/store/authStore';
+import { useUiStore } from '../../src/store/uiStore';
 import CivicLogo from '../../src/components/CivicLogo';
 import LoadingButton from '../../src/components/LoadingButton';
 import SvgIcon from '../../src/components/SvgIcon';
@@ -16,6 +17,7 @@ const { width } = Dimensions.get('window');
 export default function LoginScreen() {
   const router = useRouter();
   const { setSession } = useAuthStore();
+  const { addToast } = useUiStore();
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -36,18 +38,20 @@ export default function LoginScreen() {
   const handleSendOtp = async () => {
     const cleaned = phone.replace(/\D/g, '');
     if (cleaned.length !== 10) {
-      Alert.alert('Invalid Number', 'Please enter a 10-digit mobile number.');
+      addToast('Please enter a 10-digit mobile number', 'error');
       return;
     }
     setLoading(true);
     try {
       const { data } = await authApi.sendOtp(`+91${cleaned}`);
+      addToast('OTP sent successfully', 'success');
       router.push({
         pathname: '/(auth)/otp',
         params: { phone: `+91${cleaned}`, devOtp: data?.dev_otp ?? '' },
       });
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to send OTP. Try again.');
+      const errorMsg = err.response?.data?.detail || 'Failed to send OTP. Try again.';
+      addToast(errorMsg, 'error');
     } finally {
       setLoading(false);
     }

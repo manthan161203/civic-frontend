@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi } from '../../src/api/index';
 import { useAuthStore } from '../../src/store/authStore';
+import { useUiStore } from '../../src/store/uiStore';
 import { getErrorMessage } from '../../src/lib/apiError';
 import CivicLogo from '../../src/components/ui/CivicLogo';
 import LoadingButton from '../../src/components/ui/LoadingButton';
@@ -11,6 +12,7 @@ import SvgIcon from '../../src/components/ui/SvgIcon';
 export default function LoginPage() {
   const router = useRouter();
   const { setSession } = useAuthStore();
+  const { addToast } = useUiStore();
   const [step, setStep] = useState('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -41,9 +43,12 @@ export default function LoginPage() {
       await authApi.login(`+91${cleaned}`);
       setPhone(`+91${cleaned}`);
       setStep('otp');
+      addToast('OTP sent successfully', 'success');
       startCountdown();
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to send OTP.'));
+      const msg = getErrorMessage(err, 'Failed to send OTP.');
+      setError(msg);
+      addToast(msg, 'error');
     }
     setLoading(false);
   };
@@ -67,9 +72,12 @@ export default function LoginPage() {
         return;
       }
       setSession(data.access_token, data.refresh_token, user);
+      addToast('Signed in successfully', 'success');
       router.push('/dashboard');
     } catch (err) {
-      setError(getErrorMessage(err, 'Invalid OTP.'));
+      const msg = getErrorMessage(err, 'Invalid OTP.');
+      setError(msg);
+      addToast(msg, 'error');
     }
     setLoading(false);
   };
