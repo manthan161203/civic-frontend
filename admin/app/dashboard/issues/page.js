@@ -198,7 +198,7 @@ function IssueDetailModal({ issue, workerMap, onClose }) {
               <Map
                 defaultCenter={{ lat: issue.latitude, lng: issue.longitude }}
                 defaultZoom={15}
-                mapId="civic-issue-detail"
+                mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_ID}
                 gestureHandling="cooperative"
                 disableDefaultUI
                 zoomControl

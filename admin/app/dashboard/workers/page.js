@@ -815,7 +815,7 @@ function WorkerMapTab() {
         <Map
           defaultCenter={{ lat: 22.2587, lng: 71.1924 }}
           defaultZoom={7}
-          mapId="civic-workers-map"
+          mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_ID}
           gestureHandling="greedy"
           disableDefaultUI={false}
           style={{ width: '100%', height: '100%' }}

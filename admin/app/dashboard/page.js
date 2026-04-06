@@ -92,7 +92,7 @@ function DashboardMap({ points }) {
         <Map
           defaultCenter={{ lat: 22.2587, lng: 71.1924 }}
           defaultZoom={7}
-          mapId="civic-dashboard-mini"
+          mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_ID}
           gestureHandling="cooperative"
           disableDefaultUI
           zoomControl

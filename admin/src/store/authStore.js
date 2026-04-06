@@ -26,7 +26,7 @@ export const useAuthStore = create((set, get) => ({
   setSession: (access_token, refresh_token, user) => {
     localStorage.setItem('access_token', access_token);
     localStorage.setItem('refresh_token', refresh_token);
-    set({ user, isAuthenticated: true });
+    set({ user, isAuthenticated: true, isLoading: false });
   },
 
   updateUser: (data) => set((state) => ({ user: { ...state.user, ...data } })),
@@ -36,6 +36,6 @@ export const useAuthStore = create((set, get) => ({
     if (refresh) await authApi.logout(refresh).catch(() => {});
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false, isLoading: false });
   },
 }));

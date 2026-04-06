@@ -50,6 +50,7 @@
         "backgroundColor": "#1a56db"
       },
       "package": "com.civic.app",
+      "usesCleartextTraffic": true,
       "googleServicesFile": "../credentials/google-services.json",
       "config": {
         "googleMaps": {

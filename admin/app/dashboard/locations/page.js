@@ -53,7 +53,7 @@ function WardMapPicker({ lat, lon, onSetLat, onSetLon, onManualSet, fallbackCent
       <Map
         defaultCenter={defaultC}
         defaultZoom={defaultZ}
-        mapId="civic-ward-picker"
+        mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_ID}
         gestureHandling="greedy"
         disableDefaultUI
         zoomControl
