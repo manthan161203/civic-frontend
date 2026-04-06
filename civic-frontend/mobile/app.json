@@ -1,0 +1,113 @@
+{
+  "expo": {
+    "name": "Civic",
+    "slug": "civic",
+    "platforms": [
+      "android",
+      "ios",
+      "web"
+    ],
+    "version": "1.0.0",
+    "scheme": "civic",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a56db"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.civic.app",
+      "googleServicesFile": "../credentials/GoogleService-Info.plist",
+      "config": {
+        "googleMapsApiKey": "$GOOGLE_MAPS_API_KEY"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Civic needs your location to show nearby issues.",
+        "NSCameraUsageDescription": "Civic needs camera access to photograph issues.",
+        "NSPhotoLibraryUsageDescription": "Civic needs photo library access to attach photos.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.$GOOGLE_iOS_CLIENT_ID"
+            ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.$GOOGLE_iOS_CLIENT_ID"
+            ]
+          }
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a56db"
+      },
+      "package": "com.civic.app",
+      "usesCleartextTraffic": true,
+      "googleServicesFile": "../credentials/google-services.json",
+      "config": {
+        "googleMaps": {
+          "apiKey": "$GOOGLE_MAPS_API_KEY"
+        }
+      },
+      "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Civic to access your camera to photograph issues."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Civic to access your photo library to attach photos.",
+          "cameraPermission": "Allow Civic to access your camera to photograph issues."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Civic to use your location."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1a56db"
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9332e1d8-b6d4-469e-ae01-dda9806aa467"
+      },
+      "cli": {
+        "appVersionSource": "local"
+      }
+    }
+  }
+}

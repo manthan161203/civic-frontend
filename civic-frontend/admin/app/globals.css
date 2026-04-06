@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+/* Admin panel is always light mode — no dark mode */
+:root {
+  --background: #f9fafb;
+  --foreground: #111827;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Ensure inputs always show dark text regardless of OS dark mode */
+input, textarea, select {
+  color: #111827;
+}
