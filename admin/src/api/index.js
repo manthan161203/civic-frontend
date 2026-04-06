@@ -84,6 +84,24 @@ export const adminApi = {
     api.post('/admin/notifications/geofence', null, {
       params: { latitude, longitude, radius_km, title, body },
     }),
+
+  // Disputes
+  getDisputes: (params) => api.get('/admin/disputes', { params }),
+  resolveDispute: (id, outcome, admin_notes) =>
+    api.post(`/admin/disputes/${id}/resolve`, { outcome, admin_notes }),
+
+  // Worker Complaints
+  getComplaints: (params) => api.get('/admin/complaints', { params }),
+  resolveComplaint: (id, status, admin_notes) =>
+    api.post(`/admin/complaints/${id}/resolve`, { status, admin_notes }),
+  getWorkerComplaintSummary: (workerId) => api.get(`/admin/workers/${workerId}/complaints`),
+
+  // Satisfaction Surveys
+  getSurveyStats: (days = 30) => api.get('/admin/surveys/stats', { params: { days } }),
+
+  // Custom Issue Types
+  getCustomIssueTypes: (params) => api.get('/admin/custom-issue-types', { params }),
+  approveCustomIssueType: (id) => api.post(`/admin/custom-issue-types/${id}/approve`),
 };
 
 // Public (unauthenticated)

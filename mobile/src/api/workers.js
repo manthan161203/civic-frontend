@@ -28,4 +28,11 @@ export const workersApi = {
   setShift: (day_of_week, start_time, end_time) =>
     api.post('/workers/shifts', { day_of_week, start_time, end_time }),
   deleteShift: (day_of_week) => api.delete(`/workers/shifts/${day_of_week}`),
+  // Complaints (filed by citizens against workers)
+  fileComplaint: (data) => api.post('/workers/complaints', data),
+  uploadComplaintPhotos: (id, formData) =>
+    api.post(`/workers/complaints/${id}/photos`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  getMyComplaints: (params) => api.get('/me/complaints', { params }),
 };

@@ -11,6 +11,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuthStore } from '../../src/store/authStore';
 import { rewardsApi } from '../../src/api/rewards';
 import { authApi } from '../../src/api/auth';
+import { issuesApi } from '../../src/api/issues';
 import { locationsApi } from '../../src/api/locations';
 import { compressImage } from '../../src/utils/imageUtils';
 import { reverseGeocode, forwardGeocode } from '../../src/utils/geocode';
@@ -27,8 +28,13 @@ const getImageUrl = (profilePhotoUrl) => {
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout, updateUser } = useAuthStore();
+  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'complaints' | 'surveys'
   const [rewards, setRewards] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [complaints, setComplaints] = useState([]);
+  const [complaintsLoading, setComplaintsLoading] = useState(false);
+  const [surveys, setSurveys] = useState([]);
+  const [surveysLoading, setSurveysLoading] = useState(false);
   const [editModal, setEditModal] = useState(false);
   const [editName, setEditName] = useState(user?.name || '');
   const [editPhone, setEditPhone] = useState(user?.phone || '');
@@ -96,6 +102,22 @@ export default function ProfileScreen() {
       .finally(() => setLoading(false));
   }, []);
 
+  const loadComplaints = useCallback(() => {
+    setComplaintsLoading(true);
+    issuesApi.getMyComplaints()
+      .then(({ data }) => setComplaints(data || []))
+      .catch(() => {})
+      .finally(() => setComplaintsLoading(false));
+  }, []);
+
+  const loadSurveys = useCallback(() => {
+    setSurveysLoading(true);
+    issuesApi.getMySurveys()
+      .then(({ data }) => setSurveys(data || []))
+      .catch(() => {})
+      .finally(() => setSurveysLoading(false));
+  }, []);
+
   useEffect(() => {
     loadRewards();
 
@@ -111,6 +133,11 @@ export default function ProfileScreen() {
   }, [user?.profile_photo_url]);
 
   useFocusEffect(useCallback(() => { loadRewards(); }, [loadRewards]));
+
+  useEffect(() => {
+    if (activeTab === 'complaints') loadComplaints();
+    else if (activeTab === 'surveys') loadSurveys();
+  }, [activeTab]);
 
   // Trigger first-login setup modal
   useEffect(() => {
@@ -418,7 +445,110 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Menu */}
+      {/* Tabs */}
+      <View style={styles.tabBar}>
+        {[
+          { key: 'profile', label: 'Profile' },
+          { key: 'complaints', label: 'Complaints' },
+          { key: 'surveys', label: 'Surveys' },
+        ].map((t) => (
+          <TouchableOpacity
+            key={t.key}
+            style={[styles.tabBtn, activeTab === t.key && styles.tabBtnActive]}
+            onPress={() => setActiveTab(t.key)}
+          >
+            <Text style={[styles.tabBtnText, activeTab === t.key && styles.tabBtnTextActive]}>
+              {t.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Complaints Tab */}
+      {activeTab === 'complaints' && (
+        <View style={styles.tabContent}>
+          {complaintsLoading ? (
+            <ActivityIndicator color="#1a56db" style={{ marginTop: 24 }} />
+          ) : complaints.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="shield-checkmark-outline" size={40} color="#d1d5db" />
+              <Text style={styles.emptyStateText}>No complaints filed yet</Text>
+            </View>
+          ) : (
+            complaints.map((c) => (
+              <View key={c.id} style={styles.complaintCard}>
+                <View style={styles.complaintHeader}>
+                  <View style={[styles.reasonBadge, { backgroundColor: COMPLAINT_COLORS[c.reason] || '#f3f4f6' }]}>
+                    <Text style={styles.reasonBadgeText}>{COMPLAINT_REASON_LABELS[c.reason] || c.reason}</Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: COMPLAINT_STATUS_BG[c.status] || '#f3f4f6' }]}>
+                    <Text style={[styles.statusBadgeText, { color: COMPLAINT_STATUS_COLOR[c.status] || '#6b7280' }]}>
+                      {c.status}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.complaintDesc} numberOfLines={3}>{c.description}</Text>
+                {c.admin_notes ? (
+                  <View style={styles.adminNoteBox}>
+                    <Text style={styles.adminNoteLabel}>Admin note:</Text>
+                    <Text style={styles.adminNoteText}>{c.admin_notes}</Text>
+                  </View>
+                ) : null}
+                <Text style={styles.complaintDate}>
+                  {c.created_at ? new Date(c.created_at).toLocaleDateString() : ''}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+      )}
+
+      {/* Surveys Tab */}
+      {activeTab === 'surveys' && (
+        <View style={styles.tabContent}>
+          {surveysLoading ? (
+            <ActivityIndicator color="#1a56db" style={{ marginTop: 24 }} />
+          ) : surveys.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="star-outline" size={40} color="#d1d5db" />
+              <Text style={styles.emptyStateText}>No surveys submitted yet</Text>
+            </View>
+          ) : (
+            surveys.map((s) => (
+              <View key={s.id} style={styles.surveyCard}>
+                <View style={styles.surveyRow}>
+                  <Text style={styles.surveyLabel}>Speed</Text>
+                  <View style={[styles.speedBadge, { backgroundColor: SPEED_COLORS[s.speed_rating] }]}>
+                    <Text style={styles.speedBadgeText}>{SPEED_LABELS[s.speed_rating]}</Text>
+                  </View>
+                </View>
+                <View style={styles.surveyRow}>
+                  <Text style={styles.surveyLabel}>Fully Resolved</Text>
+                  <Text style={[styles.surveyVal, { color: s.fully_resolved ? '#22c55e' : '#ef4444' }]}>
+                    {s.fully_resolved ? '✓ Yes' : '✗ No'}
+                  </Text>
+                </View>
+                <View style={styles.surveyRow}>
+                  <Text style={styles.surveyLabel}>Would Report Again</Text>
+                  <Text style={[styles.surveyVal, { color: s.would_report_again ? '#22c55e' : '#ef4444' }]}>
+                    {s.would_report_again ? '✓ Yes' : '✗ No'}
+                  </Text>
+                </View>
+                {s.feedback ? (
+                  <Text style={styles.surveyFeedback}>"{s.feedback}"</Text>
+                ) : null}
+                <Text style={styles.complaintDate}>
+                  {s.created_at ? new Date(s.created_at).toLocaleDateString() : ''}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+      )}
+
+      {/* Profile Tab: menu + actions */}
+      {activeTab === 'profile' && (
+      <View>
       <View style={styles.menu}>
         <MenuItem icon="trophy-outline" label="Leaderboard & Badges" onPress={() => router.push('/(citizen)/leaderboard')} />
         <MenuItem icon="chatbubble-ellipses-outline" label="AI Assistant" onPress={() => router.push('/(citizen)/chat')} />
@@ -525,6 +655,8 @@ export default function ProfileScreen() {
       </View>
 
       <Text style={styles.version}>Civic v1.0.0</Text>
+      </View>
+      )}
 
       {/* Edit Profile Modal */}
       <Modal visible={editModal} transparent animationType="slide" onRequestClose={() => setEditModal(false)}>
@@ -1294,6 +1426,35 @@ function MenuItem({ icon, label, onPress, danger }) {
   );
 }
 
+const COMPLAINT_REASON_LABELS = {
+  rude_behavior: 'Rude Behavior',
+  poor_work: 'Poor Work',
+  delayed: 'Delayed',
+  no_show: 'No Show',
+  other: 'Other',
+};
+const COMPLAINT_COLORS = {
+  rude_behavior: '#fee2e2',
+  poor_work: '#fef3c7',
+  delayed: '#dbeafe',
+  no_show: '#f3e8ff',
+  other: '#f3f4f6',
+};
+const COMPLAINT_STATUS_BG = {
+  pending: '#fef9c3',
+  investigating: '#dbeafe',
+  resolved: '#dcfce7',
+  dismissed: '#f3f4f6',
+};
+const COMPLAINT_STATUS_COLOR = {
+  pending: '#854d0e',
+  investigating: '#1d4ed8',
+  resolved: '#15803d',
+  dismissed: '#6b7280',
+};
+const SPEED_LABELS = { 1: 'Slow', 2: 'Average', 3: 'Fast' };
+const SPEED_COLORS = { 1: '#ef4444', 2: '#f59e0b', 3: '#22c55e' };
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f9fafb' },
   header: {
@@ -1428,4 +1589,34 @@ const styles = StyleSheet.create({
   locationCardEmpty: { fontSize: 13, color: '#9ca3af', fontStyle: 'italic' },
   locationEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#eff6ff', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   locationEditBtnText: { fontSize: 13, color: '#1a56db', fontWeight: '600' },
+  // Tabs
+  tabBar: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 12, backgroundColor: '#f3f4f6', borderRadius: 12, padding: 4 },
+  tabBtn: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
+  tabBtnActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, elevation: 2 },
+  tabBtnText: { fontSize: 13, fontWeight: '600', color: '#9ca3af' },
+  tabBtnTextActive: { color: '#1a56db' },
+  tabContent: { paddingHorizontal: 16, paddingBottom: 24 },
+  // Complaint cards
+  complaintCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  complaintHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  reasonBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  reasonBadgeText: { fontSize: 12, fontWeight: '600', color: '#374151' },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  statusBadgeText: { fontSize: 12, fontWeight: '700' },
+  complaintDesc: { fontSize: 13, color: '#4b5563', lineHeight: 20, marginBottom: 8 },
+  adminNoteBox: { backgroundColor: '#eff6ff', borderRadius: 8, padding: 10, marginBottom: 8 },
+  adminNoteLabel: { fontSize: 11, fontWeight: '700', color: '#1d4ed8', marginBottom: 2 },
+  adminNoteText: { fontSize: 12, color: '#1e40af' },
+  complaintDate: { fontSize: 11, color: '#9ca3af' },
+  // Survey cards
+  surveyCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  surveyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  surveyLabel: { fontSize: 13, color: '#6b7280' },
+  surveyVal: { fontSize: 13, fontWeight: '700' },
+  speedBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
+  speedBadgeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+  surveyFeedback: { fontSize: 13, color: '#374151', fontStyle: 'italic', marginTop: 6, marginBottom: 6, lineHeight: 20 },
+  // Empty state
+  emptyState: { alignItems: 'center', paddingVertical: 40, gap: 12 },
+  emptyStateText: { fontSize: 14, color: '#9ca3af' },
 });

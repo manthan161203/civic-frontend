@@ -33,4 +33,23 @@ export const issuesApi = {
     api.post(`/issues/${issueId}/flag`, { reason, details, comment_id: commentId }),
   // Ward health
   wardHealth: (ward) => api.get('/issues/ward-health', { params: { ward } }),
+  // Bookmarks
+  bookmark: (id) => api.post(`/issues/${id}/bookmark`),
+  removeBookmark: (id) => api.delete(`/issues/${id}/bookmark`),
+  getBookmarks: (params) => api.get('/me/bookmarks', { params }),
+  // Disputes
+  createDispute: (id, reason) => api.post(`/issues/${id}/dispute`, { reason }),
+  uploadDisputePhotos: (id, formData) =>
+    api.post(`/issues/${id}/dispute/photos`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  getDisputes: (id) => api.get(`/issues/${id}/disputes`),
+  // Satisfaction Survey
+  submitSurvey: (id, data) => api.post(`/issues/${id}/survey`, data),
+  getSurvey: (id) => api.get(`/issues/${id}/survey`),
+  // Custom Issue Types
+  getApprovedCustomTypes: () => api.get('/issues/custom-types'),
+  // My complaints & surveys
+  getMyComplaints: (params) => api.get('/me/complaints', { params }),
+  getMySurveys: (params) => api.get('/me/surveys', { params }),
 };

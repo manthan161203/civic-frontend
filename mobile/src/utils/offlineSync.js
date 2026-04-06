@@ -12,6 +12,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { logger } from './logger';
+import { syncApi } from '../api/sync';
 
 const OFFLINE_QUEUE_KEY = 'offline_task_queue';
 const OFFLINE_PHOTOS_KEY = 'offline_photos';
@@ -179,6 +180,60 @@ export const OfflineSync = {
       logger.info(COMPONENT_NAME, 'All offline data cleared');
     } catch (error) {
       logger.error(COMPONENT_NAME, 'Failed to clear offline data', error);
+    }
+  },
+
+  /**
+   * Sync all queued operations to the server via POST /sync.
+   * Maps local queue entries to the backend SyncAction format and processes results.
+   * Successfully synced operations are removed from the queue.
+   * @returns {Promise<{synced: number, failed: number}>}
+   */
+  syncToServer: async () => {
+    try {
+      const online = await OfflineSync.isOnline();
+      if (!online) {
+        logger.info(COMPONENT_NAME, 'Skipping sync — device is offline');
+        return { synced: 0, failed: 0 };
+      }
+
+      const operations = await OfflineSync.getQueuedOperations();
+      if (operations.length === 0) {
+        return { synced: 0, failed: 0 };
+      }
+
+      // Map local queue format → backend SyncAction format
+      const TYPE_TO_ACTION = {
+        status_update: 'start_task',
+        task_resolution: 'accept_task',
+      };
+      const actions = operations.map((op) => ({
+        action: TYPE_TO_ACTION[op.type] || op.type,
+        issue_id: op.taskId || null,
+        payload: op.data || {},
+        timestamp: op.timestamp,
+        client_id: op.id,
+      }));
+
+      const { data } = await syncApi.syncOfflineActions(actions);
+      let synced = 0;
+      let failed = 0;
+
+      for (const result of data.results || []) {
+        if (result.success) {
+          await OfflineSync.removeQueuedOperation(result.client_id);
+          synced++;
+        } else {
+          logger.warn(COMPONENT_NAME, `Sync failed for ${result.client_id}: ${result.error}`);
+          failed++;
+        }
+      }
+
+      logger.info(COMPONENT_NAME, `Sync complete: ${synced} synced, ${failed} failed`);
+      return { synced, failed };
+    } catch (error) {
+      logger.error(COMPONENT_NAME, 'Sync to server failed', error);
+      return { synced: 0, failed: 0 };
     }
   },
 

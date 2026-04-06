@@ -13,7 +13,7 @@ import { reverseGeocode } from '../../src/utils/geocode';
 import MapView, { Marker } from '../../src/components/PlatformMap';
 import { compressImage } from '../../src/utils/imageUtils';
 
-const ISSUE_TYPES = [
+const BUILT_IN_TYPES = [
   'roads', 'water', 'electricity', 'sanitation', 'parks', 'garbage', 'other',
 ];
 
@@ -48,6 +48,8 @@ export default function ReportScreen() {
   const [showMapPin, setShowMapPin] = useState(false);
   const [fetchingWard, setFetchingWard] = useState(false);
   const [locationDenied, setLocationDenied] = useState(false);
+  const [customTypes, setCustomTypes] = useState([]);
+  const [customLabel, setCustomLabel] = useState('');
   // Structured address fields
   const [addrLine1, setAddrLine1] = useState('');
   const [addrLine2, setAddrLine2] = useState('');
@@ -57,7 +59,12 @@ export default function ReportScreen() {
 
   useEffect(() => {
     getLocation();
-    
+
+    // Load approved custom issue types
+    issuesApi.getApprovedCustomTypes()
+      .then(({ data }) => setCustomTypes(data || []))
+      .catch(() => {});
+
     // Load all wards on component mount
     locationsApi.getTree()
       .then(({ data }) => {
@@ -231,9 +238,11 @@ export default function ReportScreen() {
     const fullAddress = [addrLine1, addrLine2, landmark, locality, addrCity]
       .filter(Boolean).join(', ') || address;
     try {
+      // Send approved custom types directly as their slug; send "other" with label for new suggestions
       const { data } = await issuesApi.create({
         description: description.trim(),
-        issue_type: issueType,
+        issue_type: issueType,  // Send custom slug directly OR built-in type OR "other"
+        ...(issueType === 'other' && customLabel ? { custom_issue_type_label: customLabel.trim() } : {}),
         priority,
         latitude: location.latitude,
         longitude: location.longitude,
@@ -331,18 +340,38 @@ export default function ReportScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Issue Type</Text>
         <View style={styles.grid}>
-          {ISSUE_TYPES.map((t) => (
+          {BUILT_IN_TYPES.map((t) => (
             <TouchableOpacity
               key={t}
               style={[styles.typeBtn, issueType === t && styles.typeBtnActive]}
-              onPress={() => setIssueType(t)}
+              onPress={() => { setIssueType(t); if (t !== 'other') setCustomLabel(''); }}
             >
               <Text style={[styles.typeBtnText, issueType === t && styles.typeBtnTextActive]}>
-                {t.replace('_', ' ')}
+                {TYPE_LABELS[t] || t.replace('_', ' ')}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          {customTypes.map((ct) => (
+            <TouchableOpacity
+              key={ct.slug}
+              style={[styles.typeBtn, issueType === ct.slug && styles.typeBtnCustomActive]}
+              onPress={() => { setIssueType(ct.slug); setCustomLabel(ct.label); }}
+            >
+              <Text style={[styles.typeBtnText, issueType === ct.slug && styles.typeBtnTextActive]}>
+                {ct.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
+        {issueType === 'other' && (
+          <TextInput
+            style={[styles.addrInput, { marginTop: 10 }]}
+            placeholder="Describe the issue type (e.g. Broken bench)"
+            value={customLabel}
+            onChangeText={setCustomLabel}
+            maxLength={100}
+          />
+        )}
       </View>
 
       <View style={styles.section}>
@@ -648,6 +677,7 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   typeBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1.5, borderColor: '#e5e7eb' },
   typeBtnActive: { backgroundColor: '#1a56db', borderColor: '#1a56db' },
+  typeBtnCustomActive: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
   typeBtnText: { fontSize: 13, color: '#374151', textTransform: 'capitalize' },
   typeBtnTextActive: { color: '#fff', fontWeight: '600' },
   row: { flexDirection: 'row', gap: 8 },

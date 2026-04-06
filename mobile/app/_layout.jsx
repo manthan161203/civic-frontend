@@ -16,7 +16,6 @@ export default function RootLayout() {
   const segments = useSegments();
   const notifListenerRef = useRef(null);
   const notifResponseListenerRef = useRef(null);
-  const pushTokenListenerRef = useRef(null);
   const appStateRef = useRef(AppState.currentState);
 
   useEffect(() => {
@@ -47,17 +46,17 @@ export default function RootLayout() {
           });
         });
 
-        // Re-register FCM token whenever it is rotated by the OS/Firebase
-        pushTokenListenerRef.current = Notifications.addPushTokenListener(() => {
-          registerPushToken();
-        });
-
         // Listener for when user taps a notification
         notifResponseListenerRef.current = Notifications.addNotificationResponseReceivedListener(
           (response) => {
             const data = response.notification.request.content.data;
             if (data?.issue_id) {
-              router.push(`/issue/${data.issue_id}`);
+              // Navigate to issue detail, optionally with action to open modal
+              const action = data?.action_type; // e.g., 'dispute', 'survey', 'complaint'
+              const url = action
+                ? `/issue/${data.issue_id}?action=${encodeURIComponent(action)}`
+                : `/issue/${data.issue_id}`;
+              router.push(url);
             } else if (data?.task_id) {
               router.push(`/task/${data.task_id}`);
             }
@@ -81,7 +80,6 @@ export default function RootLayout() {
     return () => {
       if (notifListenerRef.current?.remove) notifListenerRef.current.remove();
       if (notifResponseListenerRef.current?.remove) notifResponseListenerRef.current.remove();
-      if (pushTokenListenerRef.current?.remove) pushTokenListenerRef.current.remove();
       appStateSub.remove();
     };
   }, []);
