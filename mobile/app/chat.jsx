@@ -12,7 +12,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { workersApi } from '../src/api';
+import { workersApi } from '../src/api/workers';
 
 const COLORS = {
   primary: '#006AFF',

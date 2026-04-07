@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { workersApi } from '../api';
+import { workersApi } from '../../src/api/workers';
 
 const COLORS = {
   primary: '#006AFF',
