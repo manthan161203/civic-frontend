@@ -20,6 +20,17 @@ function IssueDetailModal({ issueId, onClose }) {
   const [issue, setIssue] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // Blocked task modals
+  const [blockedIssueForUnblock, setBlockedIssueForUnblock] = useState(null);
+  const [blockedIssueForRespond, setBlockedIssueForRespond] = useState(null);
+  const [showUnblockModal, setShowUnblockModal] = useState(false);
+  const [showRespondModal, setShowRespondModal] = useState(false);
+  const [unblockNotes, setUnblockNotes] = useState('');
+  const [respondMessage, setRespondMessage] = useState('');
+  const [respondResources, setRespondResources] = useState('');
+  const [respondCanProceed, setRespondCanProceed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!issueId) return;
@@ -47,6 +58,50 @@ function IssueDetailModal({ issueId, onClose }) {
   const getDaysOpen = (createdAt) => {
     if (!createdAt) return 0;
     return Math.floor((new Date() - new Date(createdAt)) / (1000 * 60 * 60 * 24));
+  };
+
+  const handleUnblock = async () => {
+    if (!blockedIssueForUnblock || !unblockNotes.trim()) {
+      setError('Please provide a reason for unblocking');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await adminApi.unblockTask(blockedIssueForUnblock.id, unblockNotes.trim());
+      setShowUnblockModal(false);
+      setUnblockNotes('');
+      setBlockedIssueForUnblock(null);
+      setIssue({ ...issue, is_blocked: false });
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to unblock task'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRespond = async () => {
+    if (!blockedIssueForRespond || !respondMessage.trim()) {
+      setError('Please provide a message');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await adminApi.respondToBlock(
+        blockedIssueForRespond.id,
+        respondMessage.trim(),
+        respondResources.trim(),
+        respondCanProceed
+      );
+      setShowRespondModal(false);
+      setRespondMessage('');
+      setRespondResources('');
+      setRespondCanProceed(false);
+      setBlockedIssueForRespond(null);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to send response'));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -245,10 +300,37 @@ function IssueDetailModal({ issueId, onClose }) {
               {/* Blocked Status */}
               {issue.is_blocked && (
                 <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                  <p className="badge bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-semibold mb-2 inline-block">BLOCKED</p>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="badge bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-semibold inline-block">BLOCKED</p>
+                    <div className="text-xs text-gray-600">
+                      {issue.blocked_duration_hours && (
+                        <span>Blocked: {issue.blocked_duration_hours.toFixed(1)}h</span>
+                      )}
+                    </div>
+                  </div>
                   {issue.blocked_reason && (
-                    <p className="text-sm text-red-900 mt-2">{issue.blocked_reason}</p>
+                    <p className="text-sm text-red-900 mb-3">{issue.blocked_reason}</p>
                   )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setBlockedIssueForRespond(issue); setShowRespondModal(true); }}
+                      className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                    >
+                      📨 Respond
+                    </button>
+                    <button
+                      onClick={() => { setBlockedIssueForUnblock(issue); setShowUnblockModal(true); }}
+                      className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                    >
+                      🔓 Unblock
+                    </button>
+                    <a
+                      href="/dashboard/blocked-tasks"
+                      className="text-xs bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700"
+                    >
+                      📋 All Blocked
+                    </a>
+                  </div>
                 </div>
               )}
 
@@ -284,6 +366,89 @@ function IssueDetailModal({ issueId, onClose }) {
             </>
           ) : null}
         </div>
+
+        {/* Unblock Modal */}
+        {showUnblockModal && blockedIssueForUnblock && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full">
+              <h3 className="text-lg font-bold mb-2">🔓 Unblock Task</h3>
+              <div className="bg-gray-100 p-3 rounded mb-4 text-sm">
+                <p><strong>Issue:</strong> {blockedIssueForUnblock.issue_type}</p>
+                <p><strong>Reason:</strong> {blockedIssueForUnblock.blocked_reason || 'N/A'}</p>
+              </div>
+              <textarea
+                value={unblockNotes}
+                onChange={(e) => setUnblockNotes(e.target.value)}
+                placeholder="Why are you unblocking this task?"
+                className="w-full p-2 border rounded mb-4 text-sm"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowUnblockModal(false); setUnblockNotes(''); }}
+                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUnblock}
+                  disabled={submitting || !unblockNotes.trim()}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded disabled:opacity-50"
+                >
+                  {submitting ? 'Unblocking...' : 'Unblock'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Respond Modal */}
+        {showRespondModal && blockedIssueForRespond && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full">
+              <h3 className="text-lg font-bold mb-2">📨 Respond to Block</h3>
+              <div className="bg-gray-100 p-3 rounded mb-4 text-sm">
+                <p><strong>Issue:</strong> {blockedIssueForRespond.issue_type}</p>
+                <p><strong>Worker:</strong> {blockedIssueForRespond.assigned_worker_name || 'Unassigned'}</p>
+              </div>
+              <textarea
+                value={respondMessage}
+                onChange={(e) => setRespondMessage(e.target.value)}
+                placeholder="Message to worker..."
+                className="w-full p-2 border rounded mb-3 text-sm"
+              />
+              <input
+                type="text"
+                value={respondResources}
+                onChange={(e) => setRespondResources(e.target.value)}
+                placeholder="Resources provided (optional)"
+                className="w-full p-2 border rounded mb-3 text-sm"
+              />
+              <label className="flex items-center gap-2 mb-4 text-sm">
+                <input
+                  type="checkbox"
+                  checked={respondCanProceed}
+                  onChange={(e) => setRespondCanProceed(e.target.checked)}
+                />
+                Worker can proceed
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowRespondModal(false); setRespondMessage(''); setRespondResources(''); setRespondCanProceed(false); }}
+                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRespond}
+                  disabled={submitting || !respondMessage.trim()}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+                >
+                  {submitting ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

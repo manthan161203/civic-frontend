@@ -29,6 +29,17 @@ export const adminApi = {
   exportIssues: () => api.get('/admin/issues/export', { responseType: 'blob' }),
   autoAssignOpen: (limit = 50) => api.post('/admin/issues/auto-assign-open', null, { params: { limit } }),
 
+  // Blocked Tasks Management
+  getBlockedTasks: (params) => api.get('/admin/blocked-tasks', { params }),
+  unblockTask: (id, admin_notes) =>
+    api.post(`/admin/issues/${id}/unblock`, null, { params: { admin_notes } }),
+  respondToBlock: (id, message, resources_provided = '', can_proceed = false) =>
+    api.post(`/admin/issues/${id}/respond-to-block`, null, {
+      params: { message, resources_provided, can_proceed },
+    }),
+  bulkUnblockTasks: (issue_ids, admin_notes) =>
+    api.post('/admin/blocked-tasks/bulk-unblock', null, { params: { issue_ids: issue_ids.join(','), admin_notes } }),
+
   // Workers
   getWorkers: (params) => api.get('/admin/workers', { params }),
   getWorker: (id) => api.get(`/admin/workers/${id}`),

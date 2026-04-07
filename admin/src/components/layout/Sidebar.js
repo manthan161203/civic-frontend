@@ -172,6 +172,18 @@ const NAV = [
     ),
   },
   {
+    href: '/dashboard/blocked-tasks',
+    label: 'Blocked Tasks',
+    roles: ['admin', 'district_admin', 'taluka_admin'],
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:18,height:18}}>
+        <circle cx="12" cy="12" r="10" />
+        <line x1="15" y1="9" x2="9" y2="15" />
+        <line x1="9" y1="9" x2="15" y2="15" />
+      </svg>
+    ),
+  },
+  {
     href: '/dashboard/custom-types',
     label: 'Custom Types',
     roles: ['admin', 'district_admin'],
