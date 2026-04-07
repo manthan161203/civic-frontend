@@ -187,7 +187,7 @@ export default function RewardsPage() {
           </Text>
           <View style={styles.leaderboardContainer}>
             {leaderboard.slice(0, 10).map((entry, idx) => (
-              <View key={entry.id} style={styles.leaderboardRow}>
+              <View key={`${idx}-${entry.id || entry.phone}`} style={styles.leaderboardRow}>
                 <Text style={[styles.rankNumber, getRankColor(idx)]}>
                   {idx + 1}
                 </Text>
