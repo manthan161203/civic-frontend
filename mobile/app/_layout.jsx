@@ -3,11 +3,33 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { AppState, ActivityIndicator } from 'react-native';
+import { AppState, ActivityIndicator, Alert } from 'react-native';
 import { useAuthStore, registerPushToken } from '../src/store/authStore';
 import Toast from '../src/components/Toast';
 
 SplashScreen.preventAutoHideAsync();
+
+// Validate essential environment variables
+const validateEnvironment = () => {
+  const requiredEnvVars = ['EXPO_PUBLIC_API_URL'];
+  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+  
+  if (missingVars.length > 0) {
+    console.error('Missing required environment variables:', missingVars.join(', '));
+    if (!__DEV__) {
+      // In production, this would prevent app from running
+      setTimeout(() => {
+        Alert.alert(
+          'Configuration Error',
+          'Required API configuration is missing. Please contact support.',
+          [{ text: 'Exit' }]
+        );
+      }, 500);
+    }
+  }
+};
+
+validateEnvironment();
 
 const ADMIN_ROLES = ['ward_admin', 'taluka_admin', 'district_admin', 'admin'];
 

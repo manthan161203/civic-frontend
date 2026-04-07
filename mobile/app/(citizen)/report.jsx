@@ -546,7 +546,9 @@ export default function ReportScreen() {
                           setAddrCity(geo.city);
                           setAddress(geo.address);
                         }
-                      } catch (_) {}
+                      } catch (err) {
+                        console.warn('Reverse geocoding failed:', err.message);
+                      }
                       // Dynamically update ward suggestion based on new pin position
                       try {
                         const { data: wardData } = await locationsApi.getNearbyWard(latitude, longitude);
@@ -554,7 +556,9 @@ export default function ReportScreen() {
                           setCurrentWardId(wardData.id);
                           setSelectedWard(wardData.id);
                         }
-                      } catch (_) {}
+                      } catch (err) {
+                        console.warn('Ward lookup failed:', err.message);
+                      }
                     }}
                   />
                 </MapView>

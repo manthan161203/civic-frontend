@@ -31,12 +31,10 @@ export default function TaskDetailScreen() {
 
   const loadAll = useCallback(async () => {
     try {
-      console.log('Loading task:', id);
       const [issueRes, commentsRes] = await Promise.all([
         issuesApi.get(id),
         issuesApi.getComments(id),
       ]);
-      console.log('Task loaded:', issueRes.data);
       const allComments = commentsRes.data.items || commentsRes.data;
       setIssue(issueRes.data);
       setNotes(allComments.filter((c) => c.is_internal));

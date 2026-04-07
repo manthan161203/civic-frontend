@@ -5,6 +5,13 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Simple logger to reduce noise in production
+const logger = {
+  log: (msg, data) => __DEV__ && console.log(msg, data),
+  warn: (msg, data) => console.warn(msg, data),
+  error: (msg, data) => console.error(msg, data),
+};
+
 class OfflineQueue {
   constructor() {
     this.queue = [];
@@ -19,9 +26,9 @@ class OfflineQueue {
     try {
       const stored = await AsyncStorage.getItem(this.storageKey);
       this.queue = stored ? JSON.parse(stored) : [];
-      console.log(`[OfflineQueue] Initialized with ${this.queue.length} pending operations`);
+      logger.log(`[OfflineQueue] Initialized with ${this.queue.length} pending operations`);
     } catch (err) {
-      console.error('[OfflineQueue] Failed to initialize:', err);
+      logger.error('[OfflineQueue] Failed to initialize:', err);
     }
   }
 
@@ -40,7 +47,7 @@ class OfflineQueue {
     this.queue.push(queueItem);
     await this._persistQueue();
 
-    console.log(`[OfflineQueue] Enqueued: ${operation.type}`, queueItem.id);
+    logger.log(`[OfflineQueue] Enqueued: ${operation.type}`, queueItem.id);
     return queueItem.id;
   }
 
@@ -51,7 +58,7 @@ class OfflineQueue {
     try {
       await AsyncStorage.setItem(this.storageKey, JSON.stringify(this.queue));
     } catch (err) {
-      console.error('[OfflineQueue] Failed to persist:', err);
+      logger.error('[OfflineQueue] Failed to persist:', err);
     }
   }
 
@@ -69,7 +76,7 @@ class OfflineQueue {
 
     for (const item of this.queue) {
       try {
-        console.log(`[OfflineQueue] Processing: ${item.operation.type}`);
+        logger.log(`[OfflineQueue] Processing: ${item.operation.type}`);
 
         await apiCall(item.operation);
 
@@ -79,12 +86,12 @@ class OfflineQueue {
 
         if (item.retryCount < item.maxRetries) {
           failedItems.push(item);
-          console.warn(
+          logger.warn(
             `[OfflineQueue] Retry ${item.retryCount}/${item.maxRetries}: ${item.operation.type}`,
           );
         } else {
           failed++;
-          console.error(
+          logger.error(
             `[OfflineQueue] Max retries exceeded for: ${item.operation.type}`,
           );
         }
@@ -102,7 +109,7 @@ class OfflineQueue {
    */
   setOnlineStatus(isOnline) {
     this.isOnline = isOnline;
-    console.log(`[OfflineQueue] Status: ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
+    logger.log(`[OfflineQueue] Status: ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
   }
 
   /**
@@ -126,7 +133,7 @@ class OfflineQueue {
   async clear() {
     this.queue = [];
     await AsyncStorage.removeItem(this.storageKey);
-    console.log('[OfflineQueue] Cleared');
+    logger.log('[OfflineQueue] Cleared');
   }
 }
 

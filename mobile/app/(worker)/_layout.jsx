@@ -48,14 +48,22 @@ export default function WorkerLayout() {
     const sendLocation = async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return;
+        if (status !== 'granted') {
+          console.warn('Location permission not granted');
+          return;
+        }
         const pos = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
         if (!cancelled) {
-          workersApi.updateLocation(pos.coords.latitude, pos.coords.longitude).catch(() => {});
+          workersApi.updateLocation(pos.coords.latitude, pos.coords.longitude)
+            .catch(err => {
+              console.error('Failed to update location:', err.message);
+            });
         }
-      } catch {}
+      } catch (err) {
+        console.error('Location tracking error:', err.message);
+      }
     };
 
     sendLocation();
