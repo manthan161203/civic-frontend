@@ -129,10 +129,18 @@ export default function WorkerLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="rewards"
+        options={{
+          title: 'Rewards',
+          tabBarIcon: ({ color, size }) => <Ionicons name="trophy" size={size} color={color} />,
+        }}
+      />
       {/* Hidden screens */}
       <Tabs.Screen name="history" options={{ href: null }} />
       <Tabs.Screen name="shifts" options={{ href: null }} />
       <Tabs.Screen name="leaderboard" options={{ href: null }} />
+      <Tabs.Screen name="task-detail" options={{ href: null }} />
     </Tabs>
     </>
   );

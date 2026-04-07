@@ -31,15 +31,20 @@ export default function TaskDetailScreen() {
 
   const loadAll = useCallback(async () => {
     try {
+      console.log('Loading task:', id);
       const [issueRes, commentsRes] = await Promise.all([
         issuesApi.get(id),
         issuesApi.getComments(id),
       ]);
+      console.log('Task loaded:', issueRes.data);
       const allComments = commentsRes.data.items || commentsRes.data;
       setIssue(issueRes.data);
       setNotes(allComments.filter((c) => c.is_internal));
       navigation.setOptions({ title: issueRes.data.issue_type?.replace('_', ' ') || 'Task' });
-    } catch {}
+    } catch (err) {
+      console.error('Failed to load task:', err);
+      Alert.alert('Error', 'Failed to load task details: ' + (err.response?.data?.detail || err.message));
+    }
   }, [id]);
 
   const loadNotes = useCallback(async () => {

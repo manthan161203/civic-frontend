@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Svg, { Circle, Path, Polyline, Polygon } from 'react-native-svg';
 import { workersApi } from '../../src/api/workers';
+import { authApi } from '../../src/api/auth';
 
 const COLORS = {
   primary: '#006AFF',
@@ -27,12 +29,60 @@ const COLORS = {
 };
 
 const BADGE_ICONS = {
-  super_active: 'star',
-  issue_solver: 'trophy',
-  team_player: 'people',
-  prompt_responder: 'lightning',
-  perfect_attendance: 'calendar',
+  super_active: '⭐',
+  issue_solver: '🏆',
+  team_player: '👥',
+  prompt_responder: '⚡',
+  perfect_attendance: '📅',
 };
+
+// SVG Icon Components
+const CheckIcon = ({ size = 24, color = COLORS.green }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2}>
+    <Polyline points="20 6 9 17 4 12" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const ScaleIcon = ({ size = 24, color = COLORS.blue }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2}>
+    <Path d="M12 2L22 8V12L12 22L2 12V8L12 2Z" strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M12 12V22" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const StarIcon = ({ size = 24, color = COLORS.gold }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <Polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+  </Svg>
+);
+
+const RatingStarSmall = ({ size = 14, color = COLORS.gold }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <Polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+  </Svg>
+);
+
+const BREAKDOWN_ICONS = {
+  check: 'check',
+  scale: 'scale',
+  star: 'star',
+};
+
+// Helper to render icon
+const renderBreakdownIcon = (iconType) => {
+  switch(iconType) {
+    case 'check':
+      return <CheckIcon />;
+    case 'scale':
+      return <ScaleIcon />;
+    case 'star':
+      return <StarIcon />;
+    default:
+      return <StarIcon />;
+  }
+};
+
+const renderRatingIcon = () => <RatingStarSmall />;
 
 export default function RewardsPage() {
   const router = useRouter();
@@ -52,28 +102,29 @@ export default function RewardsPage() {
     setError('');
     try {
       const [meRes, leaderRes, statsRes] = await Promise.all([
-        workersApi.getProfile?.() || { data: { points: 0, badges: [] } },
-        workersApi.getLeaderboard?.({ period: timePeriod }) || { data: [] },
-        workersApi.getStats?.() || { data: { issues_resolved: 0, status: 'available' } },
+        authApi.getMe(),
+        workersApi.getLeaderboard({ period: timePeriod }),
+        workersApi.getStats(),
       ]);
 
       setProfile(meRes.data || {});
-      setLeaderboard(Array.isArray(leaderRes.data) ? leaderRes.data : leaderRes.data?.items || []);
+      const leaderArray = Array.isArray(leaderRes.data) ? leaderRes.data : leaderRes.data?.items || [];
+      setLeaderboard(leaderArray);
       setStats(statsRes.data || {});
     } catch (err) {
       console.error('Failed to load rewards:', err);
-      setError('Failed to load rewards data');
+      setError('Failed to load rewards data: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
   const getPointBreakdown = () => {
-    // Simulated breakdown - would come from backend in future
+    // Use actual stats from backend
     return [
-      { label: 'Issues Resolved', points: Math.floor((profile?.points || 0) * 0.5), icon: 'check' },
-      { label: 'Disputes Won', points: Math.floor((profile?.points || 0) * 0.3), icon: 'scale' },
-      { label: 'Ratings', points: Math.floor((profile?.points || 0) * 0.2), icon: '⭐' },
+      { label: 'Tasks Completed Today', points: stats?.tasks_completed_today || 0, icon: 'check' },
+      { label: 'Tasks Pending', points: stats?.tasks_pending || 0, icon: 'scale' },
+      { label: 'Rating', points: Math.round((stats?.avg_rating || 0) * 10) / 10, icon: 'star' },
     ];
   };
 
@@ -89,7 +140,11 @@ export default function RewardsPage() {
   }
 
   const breakdown = getPointBreakdown();
-  const userRank = leaderboard.findIndex((u) => u.id === profile?.id) + 1 || '--';
+  
+  // Find current user in leaderboard
+  const userLeaderboardEntry = leaderboard.find((u) => u.is_me) || {};
+  const userPoints = userLeaderboardEntry.total_points || 0;
+  const userRank = userLeaderboardEntry.rank || '--';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -110,7 +165,7 @@ export default function RewardsPage() {
         {/* Points Card */}
         <View style={styles.pointsCard}>
           <Text style={styles.pointsLabel}>Your Points</Text>
-          <Text style={styles.pointsValue}>{profile?.points || 0}</Text>
+          <Text style={styles.pointsValue}>{userPoints}</Text>
           <View style={styles.rankBadge}>
             <Text style={styles.rankText}>Rank #{userRank}</Text>
           </View>
@@ -150,10 +205,12 @@ export default function RewardsPage() {
             {breakdown.map((item, idx) => (
               <View key={idx} style={styles.breakdownItem}>
                 <View style={styles.breakdownLeft}>
-                  <Text style={styles.breakdownIcon}>{item.icon}</Text>
+                  <View style={styles.breakdownIcon}>
+                    {renderBreakdownIcon(item.icon)}
+                  </View>
                   <Text style={styles.breakdownLabel}>{item.label}</Text>
                 </View>
-                <Text style={styles.breakdownPoints}>+{item.points}</Text>
+                <Text style={styles.breakdownPoints}>{item.points}</Text>
               </View>
             ))}
           </View>
@@ -186,20 +243,42 @@ export default function RewardsPage() {
               : 'All-Time Leaderboard'}
           </Text>
           <View style={styles.leaderboardContainer}>
-            {leaderboard.slice(0, 10).map((entry, idx) => (
-              <View key={`${idx}-${entry.id || entry.phone}`} style={styles.leaderboardRow}>
+            {leaderboard.slice(0, 10).map((entry, idx) => {
+              const isTop3 = idx < 3;
+              const backgroundColor = 
+                idx === 0 ? '#FEF3C7' : 
+                idx === 1 ? '#F3F4F6' : 
+                idx === 2 ? '#FED7AA' : 
+                COLORS.white;
+              
+              return (
+              <View key={`${idx}-${entry.id || entry.phone}`} style={[styles.leaderboardRow, { backgroundColor }]}>
                 <Text style={[styles.rankNumber, getRankColor(idx)]}>
                   {idx + 1}
                 </Text>
                 <View style={styles.leaderboardInfo}>
                   <Text style={styles.leaderboardName}>
-                    {entry.name || entry.phone}
+                    {entry.name}
                   </Text>
-                  <Text style={styles.leaderboardPhone}>{entry.phone}</Text>
+                  <View style={styles.leaderboardRatingContainer}>
+                    <Text style={styles.leaderboardSubtext}>{entry.tasks_completed} tasks</Text>
+                    <Text style={styles.leaderboardSubtext}> • </Text>
+                    {entry.avg_rating ? (
+                      <View style={styles.leaderboardRating}>
+                        {renderRatingIcon()}
+                        <Text style={styles.leaderboardRatingText}> {entry.avg_rating}</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.leaderboardSubtext}>No rating</Text>
+                    )}
+                  </View>
                 </View>
-                <Text style={styles.leaderboardPoints}>{entry.points || 0}</Text>
+                <Text style={[styles.leaderboardPoints, isTop3 && { fontSize: 16, fontWeight: '900' }]}>
+                  {entry.total_points || 0}
+                </Text>
               </View>
-            ))}
+              );
+            })}
           </View>
         </View>
 
@@ -223,29 +302,30 @@ function getRankColor(index) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.gray50,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 12,
+    padding: 16,
+    paddingBottom: 100,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 24,
     paddingHorizontal: 4,
   },
   backButton: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: COLORS.primary,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: '800',
     color: COLORS.gray900,
   },
   loadingContainer: {
@@ -260,173 +340,216 @@ const styles = StyleSheet.create({
   },
   pointsCard: {
     backgroundColor: COLORS.primary,
-    borderRadius: 16,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    marginBottom: 20,
+    borderRadius: 20,
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    marginBottom: 24,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
   },
   pointsLabel: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: '500',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '600',
     textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   pointsValue: {
-    fontSize: 48,
-    fontWeight: '700',
+    fontSize: 56,
+    fontWeight: '800',
     color: COLORS.white,
-    marginVertical: 8,
+    marginVertical: 12,
   },
   rankBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 8,
   },
   rankText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: COLORS.white,
   },
   timePeriodContainer: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
+    gap: 10,
+    marginBottom: 24,
   },
   timePeriodButton: {
     flex: 1,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: COLORS.gray200,
-    borderRadius: 8,
-    paddingVertical: 10,
+    borderRadius: 12,
+    paddingVertical: 12,
     alignItems: 'center',
+    backgroundColor: COLORS.white,
   },
   timePeriodButtonActive: {
     borderColor: COLORS.primary,
     backgroundColor: COLORS.primary,
   },
   timePeriodText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: COLORS.gray700,
   },
   timePeriodTextActive: {
     color: COLORS.white,
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
     color: COLORS.gray900,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   breakdownContainer: {
-    backgroundColor: COLORS.gray50,
-    borderRadius: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   breakdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray200,
+    borderBottomColor: COLORS.gray100,
   },
   breakdownLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   breakdownIcon: {
-    fontSize: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 4,
   },
   breakdownLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: COLORS.gray700,
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.gray800,
   },
   breakdownPoints: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.green,
   },
   badgesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
   },
   badgeCard: {
     flex: 1,
     minWidth: '30%',
-    backgroundColor: COLORS.gray50,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 10,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: COLORS.gold,
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 2,
   },
   badgeIcon: {
-    fontSize: 28,
-    marginBottom: 6,
+    fontSize: 32,
+    marginBottom: 8,
   },
   badgeLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: COLORS.gray900,
     textAlign: 'center',
   },
   leaderboardContainer: {
-    backgroundColor: COLORS.gray50,
-    borderRadius: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   leaderboardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray200,
+    borderBottomColor: COLORS.gray100,
   },
   rankNumber: {
-    fontSize: 14,
-    fontWeight: '700',
-    minWidth: 30,
+    fontSize: 16,
+    fontWeight: '800',
+    minWidth: 35,
+    textAlign: 'center',
   },
   leaderboardInfo: {
     flex: 1,
-    marginHorizontal: 12,
+    marginHorizontal: 14,
   },
   leaderboardName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.gray900,
-  },
-  leaderboardPhone: {
-    fontSize: 11,
-    color: COLORS.gray500,
-    marginTop: 2,
-  },
-  leaderboardPoints: {
     fontSize: 14,
     fontWeight: '700',
+    color: COLORS.gray900,
+  },
+  leaderboardRatingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  leaderboardSubtext: {
+    fontSize: 12,
+    color: COLORS.gray500,
+  },
+  leaderboardRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  leaderboardRatingText: {
+    fontSize: 12,
+    color: COLORS.gray600,
+    fontWeight: '600',
+    marginLeft: 2,
+  },
+  leaderboardPoints: {
+    fontSize: 15,
+    fontWeight: '800',
     color: COLORS.primary,
   },
   errorBox: {
     backgroundColor: '#FEE2E2',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#DC2626',
   },
   errorText: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#991B1B',
+    fontWeight: '500',
   },
 });
