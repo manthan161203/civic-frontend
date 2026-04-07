@@ -56,7 +56,12 @@ export default function WorkerProfile() {
   }, []);
 
   const loadShifts = useCallback(() => {
-    workersApi.getShifts().then(({ data }) => setShifts(data.items || data)).catch(() => {});
+    workersApi.getShifts()
+      .then(({ data }) => setShifts(data.items || data))
+      .catch((err) => {
+        console.warn('Failed to load shifts in profile:', err.message);
+        setShifts([]);
+      });
   }, []);
 
   useEffect(() => { loadStats(); }, []);

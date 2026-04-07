@@ -36,6 +36,16 @@ function validateTime(t) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
 }
 
+function calculateDuration(start, end) {
+  const startMin = timeToMinutes(start);
+  let endMin = timeToMinutes(end);
+  // Handle shifts crossing midnight
+  if (endMin <= startMin && endMin >= 0) {
+    endMin += 24 * 60;
+  }
+  return (endMin - startMin) / 60;
+}
+
 function ShiftModal({ day, existing, onClose, onSaved }) {
   const [startTime, setStartTime] = useState(existing?.start_time || '09:00');
   const [endTime, setEndTime] = useState(existing?.end_time || '17:00');
@@ -48,14 +58,24 @@ function ShiftModal({ day, existing, onClose, onSaved }) {
     if (timeToMinutes(endTime) <= timeToMinutes(startTime)) {
       setError('End time must be after start time'); return;
     }
+    
+    // Validate maximum 12-hour shift duration
+    const duration = calculateDuration(startTime, endTime);
+    if (duration > 12) {
+      setError(`Shift duration (${duration.toFixed(1)}h) exceeds maximum of 12 hours`);
+      return;
+    }
+    
     setSaving(true);
     setError('');
     try {
       await workersApi.setShift(day.num, startTime, endTime);
       onSaved({ day_of_week: day.num, start_time: startTime, end_time: endTime });
       onClose();
-    } catch {
-      setError('Failed to save shift. Please try again.');
+    } catch (err) {
+      // Show backend error message if available
+      const backendError = err.response?.data?.detail || err.message;
+      setError(backendError || 'Failed to save shift. Please try again.');
     }
     setSaving(false);
   };
@@ -100,8 +120,8 @@ function ShiftModal({ day, existing, onClose, onSaved }) {
 
           <Text style={styles.timeHint}>
             {validateTime(startTime) && validateTime(endTime)
-              ? `${formatTime(startTime)} → ${formatTime(endTime)}`
-              : 'Use 24-hour format, e.g. 09:00 or 17:30'}
+              ? `${formatTime(startTime)} → ${formatTime(endTime)} (${calculateDuration(startTime, endTime).toFixed(1)}h) • Max 12h`
+              : 'Use 24-hour format, e.g. 09:00 or 17:30 (max 12 hours)'}
           </Text>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -142,6 +162,7 @@ export default function ShiftsScreen() {
       setShifts(data.items || data);
     } catch (err) {
       console.warn('Failed to load shifts:', err.message);
+      Alert.alert('Error', 'Could not load your shifts. Pull to refresh.');
     }
   }, []);
 
@@ -184,8 +205,9 @@ export default function ShiftsScreen() {
             try {
               await workersApi.deleteShift(dayNum);
               setShifts((prev) => prev.filter((s) => s.day_of_week !== dayNum));
-            } catch {
-              Alert.alert('Error', 'Failed to remove shift.');
+            } catch (err) {
+              const backendError = err.response?.data?.detail || 'Failed to remove shift.';
+              Alert.alert('Error', backendError);
             }
           },
         },
