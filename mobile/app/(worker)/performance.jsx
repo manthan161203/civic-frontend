@@ -165,7 +165,9 @@ export default function PerformanceScreen() {
       ]);
       setRewards(rRes.data);
       setLeaderboard(lRes.data.items || lRes.data);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to load performance data:', err.message);
+    }
   }, []);
 
   useFocusEffect(useCallback(() => {

@@ -84,7 +84,7 @@
 
 @keyframes slideIn {
   from {
-    transform: translateX(-100%);
+    transform: translateX(100%);
     opacity: 0;
   }
   to {
@@ -96,12 +96,12 @@
 /* Toast Container (for positioning toasts) */
 .toast-container {
   position: fixed;
-  bottom: 20px;
+  top: 20px;
   right: 20px;
   z-index: 9999;
   max-height: 100vh;
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   gap: 8px;
   pointer-events: none;
 }
@@ -121,7 +121,7 @@
   .toast-container {
     left: 10px;
     right: 10px;
-    bottom: 10px;
+    top: 10px;
   }
 
   .toast-container .toast {

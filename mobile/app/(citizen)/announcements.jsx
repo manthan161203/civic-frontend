@@ -38,7 +38,9 @@ export default function AnnouncementsScreen() {
     try {
       const { data } = await locationsApi.getAnnouncements({ page: 1, size: 50 });
       setAnnouncements(data.items || data);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to load announcements:', err.message);
+    }
   }, []);
 
   useEffect(() => {

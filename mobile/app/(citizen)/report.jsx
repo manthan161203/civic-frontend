@@ -144,10 +144,12 @@ export default function ReportScreen() {
           setCurrentWardId(data.id);
           setSelectedWard(data.id);
         }
-      } catch {
-        // If endpoint doesn't exist or fails, that's okay
+      } catch (err) {
+        console.warn('Failed to load secondary location data:', err.message);
       }
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to get locating position:', err.message);
+    }
     setLocating(false);
   };
 
@@ -308,7 +310,7 @@ export default function ReportScreen() {
                   onPress={async () => {
                     setShowDuplicateModal(false);
                     // Auto-follow (upvote) so it appears on their dashboard
-                    try { await issuesApi.upvote(issue.id); } catch {}
+                    try { await issuesApi.upvote(issue.id); } catch (err) { console.warn('Failed to upvote issue:', err.message); }
                     router.push(`/issue/${issue.id}`);
                   }}
                 >

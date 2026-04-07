@@ -97,7 +97,9 @@ export default function HomeScreen() {
     try {
       const { data } = await issuesApi.wardHealth(user.ward);
       setWardHealth(data);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to fetch ward health:', err.message);
+    }
   }, [user?.ward]);
 
   const handleProfileComplete = async () => {
@@ -129,14 +131,18 @@ export default function HomeScreen() {
         setPage(p + 1);
       }
       setHasMore(items.length === 20);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to fetch issues:', err.message);
+    }
   }, [filter, priority, sort, page]);
 
   const fetchFollowing = useCallback(async () => {
     try {
       const { data } = await issuesApi.following({ page: 1, size: 50 });
       setFollowing(data.items || data);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to fetch following issues:', err.message);
+    }
   }, []);
 
   useEffect(() => {
@@ -175,7 +181,9 @@ export default function HomeScreen() {
       const { data } = await issuesApi.search({ q: search, page: 1, size: 20 });
       setIssues(data.items || data);
       setHasMore(false);
-    } catch {}
+    } catch (err) {
+      console.warn('Search failed:', err.message);
+    }
   };
 
   return (

@@ -345,7 +345,9 @@ export default function ProfileScreen() {
               }
             }
           }
-        } catch {}
+        } catch (err) {
+          console.warn('Failed to load profile location:', err.message);
+        }
       }
     }
     setShowLocationModal(true);
@@ -768,7 +770,9 @@ export default function ProfileScreen() {
                             try {
                               const { data } = await locationsApi.getTalukas(d.id);
                               setTalukas(data || []);
-                            } catch {}
+                            } catch (err) {
+                              console.warn('Failed to load talukas:', err.message);
+                            }
                           }}
                         >
                           <Text style={[styles.dropdownItemText, editDistrict?.id === d.id && styles.dropdownItemTextActive]}>
@@ -809,7 +813,9 @@ export default function ProfileScreen() {
                             try {
                               const { data } = await locationsApi.getWards(t.id);
                               setWards(data || []);
-                            } catch {}
+                            } catch (err) {
+                              console.warn('Failed to load wards:', err.message);
+                            }
                           }}
                         >
                           <Text style={[styles.dropdownItemText, editTaluka?.id === t.id && styles.dropdownItemTextActive]}>
@@ -989,7 +995,9 @@ export default function ProfileScreen() {
                             try {
                               const { data } = await locationsApi.getTalukas(d.id);
                               setMandatoryTalukas(data || []);
-                            } catch {}
+                            } catch (err) {
+                              console.warn('Failed to load mandatory talukas:', err.message);
+                            }
                           }}
                         >
                           <Text style={[styles.dropdownItemText, mandatoryDistrict?.id === d.id && styles.dropdownItemTextActive]}>{d.name}</Text>
@@ -1026,7 +1034,9 @@ export default function ProfileScreen() {
                             try {
                               const { data } = await locationsApi.getWards(t.id);
                               setMandatoryWards(data || []);
-                            } catch {}
+                            } catch (err) {
+                              console.warn('Failed to load mandatory wards:', err.message);
+                            }
                           }}
                         >
                           <Text style={[styles.dropdownItemText, mandatoryTaluka?.id === t.id && styles.dropdownItemTextActive]}>{t.name}</Text>
@@ -1314,7 +1324,9 @@ export default function ProfileScreen() {
                             try {
                               const { data } = await locationsApi.getTalukas(d.id);
                               setLocationTalukas(data || []);
-                            } catch {}
+                            } catch (err) {
+                              console.warn('Failed to load location talukas:', err.message);
+                            }
                           }}
                         >
                           <Text style={[styles.dropdownItemText, locationDistrict?.id === d.id && styles.dropdownItemTextActive]}>{d.name}</Text>
@@ -1351,7 +1363,9 @@ export default function ProfileScreen() {
                             try {
                               const { data } = await locationsApi.getWards(t.id);
                               setLocationWards(data || []);
-                            } catch {}
+                            } catch (err) {
+                              console.warn('Failed to load location wards:', err.message);
+                            }
                           }}
                         >
                           <Text style={[styles.dropdownItemText, locationTaluka?.id === t.id && styles.dropdownItemTextActive]}>{t.name}</Text>

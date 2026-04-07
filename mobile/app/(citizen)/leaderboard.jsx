@@ -161,7 +161,9 @@ export default function LeaderboardScreen() {
       setWorkers(wRes.data.items || wRes.data);
       setBadges(bRes.data.items || bRes.data);
       setMyRewards(mRes.data);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to load leaderboard data:', err.message);
+    }
   }, []);
 
   useEffect(() => {

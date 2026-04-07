@@ -172,7 +172,9 @@ export default function CitizenPerformanceScreen() {
       const resolved = resolvedRes.data.total ?? (resolvedRes.data.items || resolvedRes.data).length;
       const closed = closedRes.data.total ?? (closedRes.data.items || closedRes.data).length;
       setIssueStats({ total, resolved: resolved + closed, open: total - resolved - closed });
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to load performance stats:', err.message);
+    }
   }, []);
 
   useFocusEffect(useCallback(() => {

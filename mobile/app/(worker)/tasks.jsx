@@ -227,7 +227,9 @@ export default function TasksScreen() {
       ]);
       setTasks(activeRes.data.items || activeRes.data);
       setHistory(histRes.data.items || histRes.data);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to load worker tasks:', err.message);
+    }
   }, []);
 
   useFocusEffect(useCallback(() => {

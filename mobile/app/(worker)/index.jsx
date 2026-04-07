@@ -40,7 +40,9 @@ export default function WorkerDashboard() {
       const taskList = tasksRes.data.items || tasksRes.data;
       setTasks(taskList);
       setIsOnline(user?.is_online ?? false);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to load worker dashboard:', err.message);
+    }
   }, [user?.is_online]);
 
   useEffect(() => {
@@ -78,7 +80,9 @@ export default function WorkerDashboard() {
       await workersApi.setStatus(val);
       setIsOnline(val);
       updateUser({ is_online: val });
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to set worker status:', err.message);
+    }
     setToggling(false);
   };
 

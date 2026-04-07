@@ -132,7 +132,9 @@ export default function WorkerLeaderboardScreen() {
       ]);
       setWorkers(wRes.data.items || wRes.data);
       setMyRewards(mRes.data);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to load leaderboard data:', err.message);
+    }
   }, []);
 
   useEffect(() => { load().finally(() => setLoading(false)); }, []);

@@ -35,7 +35,9 @@ export default function SubscriptionsScreen() {
       setTree(treeRes.data.districts || treeRes.data);
       const subs = subRes.data.items || subRes.data;
       setSubscriptions(subs.map((s) => s.ward_id ?? s.id));
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to load subscriptions:', err.message);
+    }
   }, []);
 
   useEffect(() => {

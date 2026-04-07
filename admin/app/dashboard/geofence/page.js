@@ -29,28 +29,18 @@ export default function GeofenceAdminPage() {
     setLoading(true);
     setError('');
     try {
-      // In a real implementation, add geofence endpoints to admin API
-      // For now, showing UI structure
-      setZones([
-        {
-          id: '1',
-          name: 'City Center',
-          latitude: 19.0176,
-          longitude: 72.8479,
-          radius_km: 2,
-          active_workers: 12,
-          alerts_today: 3,
-        },
-        {
-          id: '2',
-          name: 'Market District',
-          latitude: 19.0136,
-          longitude: 72.8428,
-          radius_km: 1.5,
-          active_workers: 8,
-          alerts_today: 0,
-        },
-      ]);
+      const response = await adminApi.getGeofences(page, 5); // 5 items per page for display
+      setZones(response.data.items.map(item => ({
+        id: item.id,
+        name: item.name,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        radius_km: item.radius_km,
+        created_by_name: item.created_by_name,
+        created_at: item.created_at,
+        active_workers: 0, // This would be fetched from a separate endpoint in a real app
+        alerts_today: 0,   // This would be fetched from a separate endpoint in a real app
+      })));
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load geofences'));
     } finally {
@@ -68,17 +58,47 @@ export default function GeofenceAdminPage() {
     setSubmitting(true);
 
     try {
-      // In real implementation: await adminApi.createGeofence(formData);
+      // Validate inputs
+      const lat = parseFloat(formData.latitude);
+      const lng = parseFloat(formData.longitude);
+      const radius = parseFloat(formData.radius_km);
+
+      if (isNaN(lat) || lat < -90 || lat > 90) {
+        throw new Error('Latitude must be between -90 and 90');
+      }
+
+      if (isNaN(lng) || lng < -180 || lng > 180) {
+        throw new Error('Longitude must be between -180 and 180');
+      }
+
+      if (isNaN(radius) || radius <= 0) {
+        throw new Error('Radius must be greater than 0 km');
+      }
+
+      if (!formData.name || !formData.name.trim()) {
+        throw new Error('Zone name is required');
+      }
+
+      const response = await adminApi.createGeofence({
+        name: formData.name.trim(),
+        latitude: lat,
+        longitude: lng,
+        radius_km: radius,
+      });
+
       const newZone = {
-        id: Date.now().toString(),
-        ...formData,
-        radius_km: parseFloat(formData.radius_km),
-        latitude: parseFloat(formData.latitude),
-        longitude: parseFloat(formData.longitude),
+        id: response.data.id,
+        name: response.data.name,
+        latitude: response.data.latitude,
+        longitude: response.data.longitude,
+        radius_km: response.data.radius_km,
+        created_by_name: response.data.created_by_name,
+        created_at: response.data.created_at,
         active_workers: 0,
         alerts_today: 0,
       };
-      setZones([...zones, newZone]);
+
+      setZones([newZone, ...zones]);
       setFormData({ name: '', latitude: '', longitude: '', radius_km: '0.5' });
       setShowForm(false);
       addToast('Geofence created successfully!', 'success');
@@ -94,7 +114,7 @@ export default function GeofenceAdminPage() {
   const handleDelete = async (id) => {
     if (!confirm('Delete this geofence?')) return;
     try {
-      // await adminApi.deleteGeofence(id);
+      await adminApi.deleteGeofence(id);
       setZones(zones.filter((z) => z.id !== id));
       addToast('Geofence deleted successfully!', 'success');
     } catch (err) {

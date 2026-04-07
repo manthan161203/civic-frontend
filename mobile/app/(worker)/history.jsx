@@ -124,7 +124,9 @@ export default function TaskHistoryScreen() {
         setPage(p + 1);
       }
       setHasMore(items.length === 20);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to fetch history:', err.message);
+    }
   }, [filter]);
 
   useEffect(() => {

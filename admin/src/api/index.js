@@ -102,6 +102,12 @@ export const adminApi = {
   // Custom Issue Types
   getCustomIssueTypes: (params) => api.get('/admin/custom-issue-types', { params }),
   approveCustomIssueType: (id) => api.post(`/admin/custom-issue-types/${id}/approve`),
+
+  // Geofences
+  getGeofences: (page = 1, size = 20) => api.get('/admin/geofences', { params: { page, size } }),
+  createGeofence: (data) => api.post('/admin/geofences', data),
+  updateGeofence: (id, data) => api.patch(`/admin/geofences/${id}`, data),
+  deleteGeofence: (id) => api.delete(`/admin/geofences/${id}`),
 };
 
 // Public (unauthenticated)

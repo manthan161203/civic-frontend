@@ -140,7 +140,9 @@ export default function ShiftsScreen() {
     try {
       const { data } = await workersApi.getShifts();
       setShifts(data.items || data);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to load shifts:', err.message);
+    }
   }, []);
 
   useEffect(() => {
