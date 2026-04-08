@@ -40,14 +40,6 @@ export default function CitizenLayout() {
     fetchAnnouncementBadge();
   }, []);
 
-  // On first login (missing name or home location), send user to profile tab
-  // so the mandatory setup modal fires immediately.
-  useEffect(() => {
-    if (user && (!user.name || !user.latitude)) {
-      router.replace('/(citizen)/profile');
-    }
-  }, [user?.id]); // run once per login session
-
   return (
     <>
       <OfflineBanner />
@@ -125,6 +117,7 @@ export default function CitizenLayout() {
       {/* Hidden screens — accessible via router.push but not shown in tab bar */}
       <Tabs.Screen name="leaderboard" options={{ href: null }} />
       <Tabs.Screen name="subscriptions" options={{ href: null }} />
+      <Tabs.Screen name="setup" options={{ href: null, tabBarStyle: { display: 'none' } }} />
     </Tabs>
     </>
   );

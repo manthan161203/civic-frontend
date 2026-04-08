@@ -42,6 +42,7 @@ export const useAuthStore = create((set, get) => ({
   user: null,
   isLoading: true,
   isAuthenticated: false,
+  mustChangePassword: false,
 
   // Called on app start — restore session from secure storage
   initSession: async () => {
@@ -52,13 +53,18 @@ export const useAuthStore = create((set, get) => ({
         return;
       }
       const { data } = await authApi.getMe();
-      set({ user: data, isAuthenticated: true, isLoading: false });
+      set({
+        user: data,
+        isAuthenticated: true,
+        mustChangePassword: data.must_change_password || false,
+        isLoading: false,
+      });
       // Re-register push token on every app start — handles token rotation after reinstall
       registerPushToken();
     } catch {
       await SecureStore.deleteItemAsync('access_token');
       await SecureStore.deleteItemAsync('refresh_token');
-      set({ isLoading: false, isAuthenticated: false, user: null });
+      set({ isLoading: false, isAuthenticated: false, user: null, mustChangePassword: false });
     }
   },
 
@@ -68,7 +74,11 @@ export const useAuthStore = create((set, get) => ({
     await SecureStore.setItemAsync('refresh_token', refresh_token);
     try {
       const { data } = await authApi.getMe();
-      set({ user: data, isAuthenticated: true });
+      set({
+        user: data,
+        isAuthenticated: true,
+        mustChangePassword: data.must_change_password || false,
+      });
       // Register push token after successful login (best-effort)
       registerPushToken();
     } catch {
@@ -79,10 +89,12 @@ export const useAuthStore = create((set, get) => ({
   updateUser: (updates) =>
     set((state) => ({ user: { ...state.user, ...updates } })),
 
+  setMustChangePassword: (val) => set({ mustChangePassword: val }),
+
   clearSession: async () => {
     await SecureStore.deleteItemAsync('access_token');
     await SecureStore.deleteItemAsync('refresh_token');
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false, mustChangePassword: false });
   },
 
   logout: async () => {

@@ -34,7 +34,7 @@ validateEnvironment();
 const ADMIN_ROLES = ['ward_admin', 'taluka_admin', 'district_admin', 'admin'];
 
 export default function RootLayout() {
-  const { isLoading, isAuthenticated, initSession } = useAuthStore();
+  const { isLoading, isAuthenticated, mustChangePassword, initSession } = useAuthStore();
   const router = useRouter();
   const segments = useSegments();
   const notifListenerRef = useRef(null);
@@ -113,11 +113,47 @@ export default function RootLayout() {
 
     const inAuth = segments[0] === '(auth)';
     const inAdminBlocked = segments[0] === 'admin-blocked';
+    const inChangePassword = segments.join('/').includes('change-password');
+    const inSetup = segments.join('/').includes('setup');
+    const { user } = useAuthStore.getState();
+    const isCitizen = !user?.role || user?.role === 'citizen';
 
+    // Not authenticated → send to login
     if (!isAuthenticated && !inAuth) {
       router.replace('/(auth)/login');
-    } else if (isAuthenticated && inAuth) {
-      const { user } = useAuthStore.getState();
+      return;
+    }
+
+    // Not authenticated but already in auth screens → do nothing
+    if (!isAuthenticated) return;
+
+    // Authenticated below this point ─────────────────────────────────────────
+
+    // Force password change gate — workers on first login must change password
+    if (mustChangePassword && !inChangePassword) {
+      router.replace('/(auth)/change-password');
+      return;
+    }
+
+    // Citizen-only: require complete profile before accessing app
+    // (Workers are set up by admins; admins use web dashboard)
+    if (isCitizen && !inSetup && !inChangePassword && !inAuth) {
+      const isProfileIncomplete = !user?.name
+        || !user?.email
+        || !user?.ward_id
+        || !user?.latitude
+        || !user?.longitude
+        || !user?.language;
+
+      if (isProfileIncomplete) {
+        router.replace('/(citizen)/setup');
+        return;
+      }
+    }
+
+    // Route authenticated user out of auth screens to the right home
+    // Skip if on change-password (auth screen that requires being authenticated)
+    if (inAuth && !inChangePassword) {
       if (ADMIN_ROLES.includes(user?.role)) {
         router.replace('/admin-blocked');
       } else if (user?.role === 'worker') {
@@ -125,13 +161,14 @@ export default function RootLayout() {
       } else {
         router.replace('/(citizen)/');
       }
-    } else if (isAuthenticated && !inAuth && !inAdminBlocked) {
-      const { user } = useAuthStore.getState();
-      if (ADMIN_ROLES.includes(user?.role) && segments[0] !== 'admin-blocked') {
-        router.replace('/admin-blocked');
-      }
+      return;
     }
-  }, [isLoading, isAuthenticated]);
+
+    // Block admin users from citizen/worker screens
+    if (ADMIN_ROLES.includes(user?.role) && !inAdminBlocked) {
+      router.replace('/admin-blocked');
+    }
+  }, [isLoading, isAuthenticated, mustChangePassword, segments]);
 
   if (isLoading) {
     return (

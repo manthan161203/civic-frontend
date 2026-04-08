@@ -19,4 +19,14 @@ export const authApi = {
     api.post('/auth/profile/photo', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  // Citizen registration (phone + name + email + password)
+  register: (data) => api.post('/auth/register', data),
+  loginWithPassword: (identifier, password) =>
+    api.post('/auth/login', { identifier, password }),
+  forgotPassword: (identifier) =>
+    api.post('/auth/forgot-password', { identifier }),
+  resetPassword: (phone, code, new_password, confirm_password) =>
+    api.post('/auth/reset-password', { phone, code, new_password, confirm_password }),
+  changePassword: (current_password, new_password, confirm_password) =>
+    api.post('/auth/change-password', { current_password, new_password, confirm_password }),
 };

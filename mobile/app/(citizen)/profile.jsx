@@ -139,12 +139,8 @@ export default function ProfileScreen() {
     else if (activeTab === 'surveys') loadSurveys();
   }, [activeTab]);
 
-  // Trigger first-login setup modal
-  useEffect(() => {
-    if (user && (!user.name || !user.latitude)) {
-      setShowMandatoryModal(true);
-    }
-  }, []);
+  // Setup is now handled by dedicated setup screen, not modal
+  // If user reaches profile without completing setup, they're redirected by root layout
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [

@@ -422,7 +422,7 @@ function Leaderboard() {
 }
 
 // ── Worker List ────────────────────────────────────────────────────────────────
-function WorkerList() {
+function WorkerList({ showInactive = false }) {
   const { user } = useAuthStore();
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -433,7 +433,7 @@ function WorkerList() {
   const [showCreate, setShowCreate] = useState(false);
   const [editWorker, setEditWorker] = useState(null);
   const [reportWorker, setReportWorker] = useState(null);
-  const [form, setForm] = useState({ name: '', phone: '', ward_id: '', department: '' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', ward_id: '', department: '' });
   const [wards, setWards] = useState([]);
   const [wardNames, setWardNames] = useState({});
   const [creating, setCreating] = useState(false);
@@ -448,6 +448,7 @@ function WorkerList() {
       const params = { page, size: PAGE_SIZE };
       if (search) params.search = search;
       if (onlineOnly) params.is_online = true;
+      if (showInactive) params.is_active = false;
       const { data } = await adminApi.getWorkers(params);
       setWorkers(data.items || data);
       setTotal(data.total || 0);
@@ -525,17 +526,19 @@ function WorkerList() {
     setCreateError('');
     const cleaned = form.phone.replace(/\D/g, '');
     if (cleaned.length !== 10) { setCreateError('Enter a valid 10-digit phone number.'); return; }
+    if (!form.email.trim() || !form.email.includes('@')) { setCreateError('A valid email is required to send the worker invitation.'); return; }
     setCreating(true);
     try {
       await adminApi.createWorker({
         name: form.name,
         phone: `+91${cleaned}`,
+        email: form.email.trim(),
         ward_id: form.ward_id || undefined,
         department: form.department || undefined,
         role: 'worker',
       });
       setShowCreate(false);
-      setForm({ name: '', phone: '', ward_id: '', department: '' });
+      setForm({ name: '', phone: '', email: '', ward_id: '', department: '' });
       load();
     } catch (err) {
       setCreateError(getErrorMessage(err, 'Failed to create worker.'));
@@ -611,6 +614,19 @@ function WorkerList() {
                   </div>
                   {form.phone && <p className="text-xs text-blue-600 font-semibold mt-1">Complete number: +91{form.phone}</p>}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Email <span className="text-red-500">*</span></label>
+                <input
+                  required
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="worker@example.com"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
+                />
+                <p className="text-xs text-gray-400 mt-1">Invitation email will be sent to this address.</p>
               </div>
 
               <div>
@@ -884,6 +900,7 @@ export default function WorkersPage() {
 
   const TABS = [
     { id: 'list', label: 'All Workers' },
+    { id: 'pending', label: 'Invited Workers' },
     { id: 'map', label: 'Live Map' },
     { id: 'leaderboard', label: 'Leaderboard' },
   ];
@@ -906,6 +923,7 @@ export default function WorkersPage() {
       </div>
 
       {tab === 'list' && <WorkerList />}
+      {tab === 'pending' && <WorkerList showInactive />}
       {tab === 'map' && <WorkerMapTab />}
       {tab === 'leaderboard' && <Leaderboard />}
     </div>
