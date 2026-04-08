@@ -251,7 +251,7 @@ export default function AdminMessagesPage() {
       const res = await adminApi.getUnreadCount();
       setUnreadCount(res.data?.unread_count || 0);
     } catch (err) {
-      console.error('Failed to load unread count:', err);
+      // Silently fail — unread count is non-critical
     }
   }, [currentUser]);
 
