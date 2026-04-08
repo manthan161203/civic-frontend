@@ -106,7 +106,7 @@ function AssignModal({ issue, onClose, onAssigned }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-base font-bold text-gray-900 mb-1">
           {issue.assigned_worker_id ? 'Reassign Worker' : 'Assign Worker'}
         </h2>
@@ -177,7 +177,7 @@ function IssueDetailModal({ issue, workerMap, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4 flex-shrink-0">
           <h2 className="text-base font-bold text-gray-900 pr-4">{issue.description}</h2>
           <button onClick={onClose} className="text-gray-300 hover:text-gray-500 flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">

@@ -58,7 +58,7 @@ function ApprovalModal({ customType, onClose, onApproved }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+      <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-2">{customType.label}</h3>
         <p className="text-sm text-gray-600 mb-4">Category: <span className="font-medium">{customType.slug}</span></p>
 

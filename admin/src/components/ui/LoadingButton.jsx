@@ -4,6 +4,7 @@ import React from 'react';
 const LoadingButton = ({
   children,
   isLoading = false,
+  loading = false,
   disabled = false,
   onClick,
   className = '',
@@ -13,6 +14,7 @@ const LoadingButton = ({
   type = 'button',
   ...props
 }) => {
+  isLoading = isLoading || loading;
   const baseStyles = 'font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-2 relative';
 
   const variantStyles = {

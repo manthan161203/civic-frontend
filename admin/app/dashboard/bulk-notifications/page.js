@@ -16,7 +16,7 @@ const COMPONENT_NAME = 'BulkNotificationsPage';
 function ConfirmModal({ formData, onConfirm, onCancel, loading }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onCancel}>
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-gray-900 mb-4">Confirm Notification</h2>
 
         <div className="space-y-4 mb-6">

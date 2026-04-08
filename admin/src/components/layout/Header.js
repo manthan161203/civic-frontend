@@ -13,6 +13,8 @@ const TITLES = {
   '/dashboard/flags': { title: 'Flags & Moderation', sub: 'Reported content review queue' },
   '/dashboard/announcements': { title: 'Announcements', sub: 'Broadcast messages to citizens' },
   '/dashboard/locations': { title: 'Locations', sub: 'District → Taluka → Ward hierarchy' },
+  '/dashboard/admin-messages': { title: 'Messages', sub: 'Inter-admin communication and coordination' },
+  '/dashboard/admin-overrides': { title: 'Override Management', sub: 'Manage cross-scope emergency access' },
   '/dashboard/info': { title: 'System Info', sub: 'Guide to the Civic admin panel' },
   '/dashboard/map': { title: 'Live Map', sub: 'Issue heatmap and worker locations' },
   '/dashboard/profile': { title: 'My Profile', sub: 'Update your name and phone number' },

@@ -119,6 +119,21 @@ export const adminApi = {
   createGeofence: (data) => api.post('/admin/geofences', data),
   updateGeofence: (id, data) => api.patch(`/admin/geofences/${id}`, data),
   deleteGeofence: (id) => api.delete(`/admin/geofences/${id}`),
+
+  // Admin Overrides (Gap #3)
+  grantOverride: (data) => api.post('/admin/overrides/grant', data),
+  getActiveOverrides: (page = 1, size = 20) => api.get('/admin/overrides/active', { params: { page, size } }),
+  revokeOverride: (override_id) => api.post(`/admin/overrides/${override_id}/revoke`),
+  getOverrideAuditLog: (page = 1, size = 50) => api.get('/admin/overrides/audit-log', { params: { page, size } }),
+
+  // Admin Messaging (Gap #1)
+  sendMessage: (data) => api.post('/admin/messages', data),
+  getInbox: (unread_only = false, page = 1, size = 20) => 
+    api.get('/admin/messages/inbox', { params: { unread_only, page, size } }),
+  getSentMessages: (page = 1, size = 20) => 
+    api.get('/admin/messages/sent', { params: { page, size } }),
+  getMessage: (message_id) => api.get(`/admin/messages/${message_id}`),
+  getUnreadCount: () => api.get('/admin/messages/unread/count'),
 };
 
 // Public (unauthenticated)

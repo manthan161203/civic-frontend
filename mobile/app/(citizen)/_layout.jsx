@@ -5,6 +5,7 @@ import { useAuthStore } from '../../src/store/authStore';
 import { useNotificationStore } from '../../src/store/notificationStore';
 import { View, Text } from 'react-native';
 import OfflineBanner from '../../src/components/OfflineBanner';
+import { Colors } from '../../src/theme';
 
 function BadgeIcon({ name, color, size, count }) {
   return (
@@ -13,10 +14,10 @@ function BadgeIcon({ name, color, size, count }) {
       {count > 0 && (
         <View style={{
           position: 'absolute', top: -4, right: -6,
-          backgroundColor: '#ef4444', borderRadius: 8,
+          backgroundColor: Colors.danger, borderRadius: 8,
           minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center',
         }}>
-          <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
+          <Text style={{ color: Colors.white, fontSize: 10, fontWeight: '700' }}>
             {count > 99 ? '99+' : count}
           </Text>
         </View>
@@ -45,11 +46,11 @@ export default function CitizenLayout() {
       <OfflineBanner />
       <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#1a56db',
-        tabBarInactiveTintColor: '#9ca3af',
-        tabBarStyle: { borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingBottom: 4 },
-        headerStyle: { backgroundColor: '#1a56db' },
-        headerTintColor: '#fff',
+        tabBarActiveTintColor: Colors.citizen,
+        tabBarInactiveTintColor: Colors.textLight,
+        tabBarStyle: { borderTopWidth: 1, borderTopColor: Colors.divider, paddingBottom: 4 },
+        headerStyle: { backgroundColor: Colors.citizen },
+        headerTintColor: Colors.white,
         headerTitleStyle: { fontWeight: '700' },
       }}
     >

@@ -9,17 +9,28 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useUiStore } from '../../src/store/uiStore';
 import { getErrorMessage } from '../../src/lib/errorHandler';
 import { workersApi } from '../../src/api/workers';
+import { Colors, PriorityColors, StatusColors, Typography, Radius, Spacing, Shadow } from '../../src/theme';
 
-const PRIORITY_COLOR = { critical: '#7c3aed', high: '#ef4444', medium: '#f59e0b', low: '#10b981' };
-const PRIORITY_BG    = { critical: '#f5f3ff', high: '#fef2f2', medium: '#fffbeb', low: '#f0fdf4' };
+const PRIORITY_COLOR = {
+  critical: PriorityColors.critical.dot,
+  high:     PriorityColors.high.dot,
+  medium:   PriorityColors.medium.dot,
+  low:      PriorityColors.low.dot,
+};
+const PRIORITY_BG = {
+  critical: PriorityColors.critical.bg,
+  high:     PriorityColors.high.bg,
+  medium:   PriorityColors.medium.bg,
+  low:      PriorityColors.low.bg,
+};
 
 const STATUS_META = {
-  assigned:    { label: 'Assigned',    bg: '#dbeafe', text: '#1e40af', icon: 'person-outline' },
-  in_progress: { label: 'In Progress', bg: '#fef3c7', text: '#92400e', icon: 'construct-outline' },
-  resolved:    { label: 'Resolved',    bg: '#d1fae5', text: '#065f46', icon: 'checkmark-circle-outline' },
-  closed:      { label: 'Closed',      bg: '#f3f4f6', text: '#6b7280', icon: 'lock-closed-outline' },
-  blocked:     { label: 'Blocked',     bg: '#fee2e2', text: '#991b1b', icon: 'warning-outline' },
-  rejected:    { label: 'Rejected',    bg: '#fce7f3', text: '#9d174d', icon: 'close-circle-outline' },
+  assigned:    { label: 'Assigned',    bg: StatusColors.assigned.bg,    text: StatusColors.assigned.text,    icon: 'person-outline' },
+  in_progress: { label: 'In Progress', bg: StatusColors.in_progress.bg, text: StatusColors.in_progress.text, icon: 'construct-outline' },
+  resolved:    { label: 'Resolved',    bg: StatusColors.resolved.bg,    text: StatusColors.resolved.text,    icon: 'checkmark-circle-outline' },
+  closed:      { label: 'Closed',      bg: StatusColors.closed.bg,      text: StatusColors.closed.text,      icon: 'lock-closed-outline' },
+  blocked:     { label: 'Blocked',     bg: StatusColors.blocked.bg,     text: StatusColors.blocked.text,     icon: 'warning-outline' },
+  rejected:    { label: 'Rejected',    bg: StatusColors.rejected.bg,    text: StatusColors.rejected.text,    icon: 'close-circle-outline' },
 };
 
 function daysSince(dateStr) {
@@ -440,115 +451,114 @@ export default function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
+  container: { flex: 1, backgroundColor: Colors.bg },
 
   banner: {
-    flexDirection: 'row', backgroundColor: '#059669',
-    paddingVertical: 14, paddingHorizontal: 8,
+    flexDirection: 'row', backgroundColor: Colors.worker,
+    paddingVertical: Spacing.md, paddingHorizontal: Spacing.sm,
   },
   bannerItem:    { flex: 1, alignItems: 'center' },
-  bannerNum:     { fontSize: 20, fontWeight: '800' },
-  bannerLabel:   { fontSize: 10, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
+  bannerNum:     { fontSize: Typography['2xl'], fontWeight: Typography.extrabold },
+  bannerLabel:   { fontSize: Typography.xs, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
   bannerDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginVertical: 4 },
 
   tabs: {
-    flexDirection: 'row', backgroundColor: '#fff',
-    borderBottomWidth: 1, borderBottomColor: '#f3f4f6', paddingHorizontal: 16,
+    flexDirection: 'row', backgroundColor: Colors.white,
+    borderBottomWidth: 1, borderBottomColor: Colors.divider, paddingHorizontal: Spacing.lg,
   },
   tab: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingVertical: 13, gap: 6, borderBottomWidth: 2, borderBottomColor: 'transparent',
   },
-  tabActive:          { borderBottomColor: '#059669' },
-  tabText:            { fontSize: 14, color: '#9ca3af', fontWeight: '600' },
-  tabTextActive:      { color: '#059669' },
-  tabBadge:           { backgroundColor: '#f3f4f6', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1 },
-  tabBadgeActive:     { backgroundColor: '#d1fae5' },
-  tabBadgeText:       { fontSize: 11, fontWeight: '700', color: '#9ca3af' },
-  tabBadgeTextActive: { color: '#059669' },
+  tabActive:          { borderBottomColor: Colors.worker },
+  tabText:            { fontSize: Typography.base, color: Colors.textLight, fontWeight: Typography.semibold },
+  tabTextActive:      { color: Colors.worker },
+  tabBadge:           { backgroundColor: Colors.bgLight, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 1 },
+  tabBadgeActive:     { backgroundColor: StatusColors.resolved.bg },
+  tabBadgeText:       { fontSize: Typography.xs + 1, fontWeight: Typography.bold, color: Colors.textLight },
+  tabBadgeTextActive: { color: Colors.worker },
 
   // Section headers
   sectionHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8,
+    paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, paddingBottom: Spacing.sm,
   },
   sectionDot:       { width: 8, height: 8, borderRadius: 4 },
-  sectionTitle:     { fontSize: 13, fontWeight: '700', color: '#374151', flex: 1 },
-  sectionCount:     { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  sectionCountText: { fontSize: 11, fontWeight: '800' },
+  sectionTitle:     { fontSize: Typography.sm + 1, fontWeight: Typography.bold, color: Colors.textSecondary, flex: 1 },
+  sectionCount:     { paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: 10 },
+  sectionCountText: { fontSize: Typography.xs + 1, fontWeight: Typography.extrabold },
 
   // Card
   card: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
-    marginHorizontal: 16, borderRadius: 14, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white,
+    marginHorizontal: Spacing.lg, borderRadius: Radius.md, overflow: 'hidden',
+    ...Shadow.sm,
   },
   stripe:   { width: 5, alignSelf: 'stretch' },
   cardBody: { flex: 1, padding: 13 },
 
   cardTop: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 8,
+    alignItems: 'center', marginBottom: Spacing.sm,
   },
   priorityChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1,
+    paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.sm, borderWidth: 1,
   },
   priorityDot:   { width: 6, height: 6, borderRadius: 3 },
-  priorityLabel: { fontSize: 11, fontWeight: '700' },
+  priorityLabel: { fontSize: Typography.xs + 1, fontWeight: Typography.bold },
 
   statusBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+    paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: 10,
   },
-  statusText: { fontSize: 11, fontWeight: '700' },
+  statusText: { fontSize: Typography.xs + 1, fontWeight: Typography.bold },
 
-  issueType:  { fontSize: 11, color: '#9ca3af', textTransform: 'capitalize', fontWeight: '600', marginBottom: 4 },
-  desc:       { fontSize: 14, color: '#111827', fontWeight: '500', lineHeight: 20, marginBottom: 8 },
+  issueType:  { fontSize: Typography.xs + 1, color: Colors.textLight, textTransform: 'capitalize', fontWeight: Typography.semibold, marginBottom: 4 },
+  desc:       { fontSize: Typography.base, color: Colors.textPrimary, fontWeight: Typography.medium, lineHeight: 20, marginBottom: Spacing.sm },
 
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 3, flex: 1 },
-  footerText: { fontSize: 12, color: '#9ca3af', flex: 1 },
-  age:        { fontSize: 11, color: '#d1d5db', fontWeight: '500', marginLeft: 8 },
+  footerText: { fontSize: Typography.sm, color: Colors.textLight, flex: 1 },
+  age:        { fontSize: Typography.xs + 1, color: Colors.textDisabled, fontWeight: Typography.medium, marginLeft: Spacing.sm },
 
   empty:         { alignItems: 'center', marginTop: 80, paddingHorizontal: 32, gap: 12 },
-  emptyIcon:     { width: 88, height: 88, borderRadius: 44, backgroundColor: '#f3f4f6', justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
-  emptyTitle:    { fontSize: 17, fontWeight: '700', color: '#374151' },
-  emptySubtitle: { fontSize: 13, color: '#9ca3af', textAlign: 'center', lineHeight: 20 },
+  emptyIcon:     { width: 88, height: 88, borderRadius: 44, backgroundColor: Colors.bgLight, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
+  emptyTitle:    { fontSize: Typography.lg + 1, fontWeight: Typography.bold, color: Colors.textSecondary },
+  emptySubtitle: { fontSize: Typography.sm + 1, color: Colors.textLight, textAlign: 'center', lineHeight: 20 },
 
   // Filter pills
-  pillsContainer: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  pills:        { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center', flexDirection: 'row' },
-  pill:         { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  pillsContainer: { backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.divider },
+  pills:        { paddingHorizontal: Spacing.lg, paddingVertical: 10, gap: 8, alignItems: 'center', flexDirection: 'row' },
+  pill:         { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.xl, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
   pillDot:      { width: 7, height: 7, borderRadius: 4 },
-  pillText:     { fontSize: 13, fontWeight: '600', color: '#6b7280' },
-  pillTextActive: { color: '#fff' },
+  pillText:     { fontSize: Typography.sm + 1, fontWeight: Typography.semibold, color: Colors.textMuted },
+  pillTextActive: { color: Colors.white },
 
   // Quick actions on assigned cards
-  quickActions:     { flexDirection: 'row', gap: 8, marginTop: 10 },
-  quickAccept:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#059669', borderRadius: 8, paddingVertical: 7 },
-  quickAcceptText:  { color: '#fff', fontSize: 12, fontWeight: '700' },
-  quickReject:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, borderWidth: 1.5, borderColor: '#ef4444', borderRadius: 8, paddingVertical: 7 },
-  quickRejectText:  { color: '#ef4444', fontSize: 12, fontWeight: '700' },
+  quickActions:     { flexDirection: 'row', gap: Spacing.sm, marginTop: 10 },
+  quickAccept:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: Colors.worker, borderRadius: Radius.sm, paddingVertical: 7 },
+  quickAcceptText:  { color: Colors.white, fontSize: Typography.sm, fontWeight: Typography.bold },
+  quickReject:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, borderWidth: 1.5, borderColor: Colors.danger, borderRadius: Radius.sm, paddingVertical: 7 },
+  quickRejectText:  { color: Colors.danger, fontSize: Typography.sm, fontWeight: Typography.bold },
 
   // Reject modal
   modalOverlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', paddingHorizontal: 24 },
-  modalBox:         { backgroundColor: '#fff', borderRadius: 16, padding: 20 },
-  modalTitle:       { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 4 },
-  modalSub:         { fontSize: 14, color: '#6b7280', marginBottom: 12 },
-  modalInput:       { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 12, fontSize: 14, color: '#111827', minHeight: 80, textAlignVertical: 'top' },
+  modalBox:         { backgroundColor: Colors.white, borderRadius: Radius.lg, padding: Spacing.xl },
+  modalTitle:       { fontSize: Typography.xl - 1, fontWeight: Typography.bold, color: Colors.textPrimary, marginBottom: 4 },
+  modalSub:         { fontSize: Typography.base, color: Colors.textMuted, marginBottom: 12 },
+  modalInput:       { borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 12, fontSize: Typography.base, color: Colors.textPrimary, minHeight: 80, textAlignVertical: 'top' },
   modalBtns:        { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 14 },
-  modalCancel:      { paddingHorizontal: 16, paddingVertical: 10 },
-  modalCancelText:  { color: '#6b7280', fontWeight: '600' },
-  modalSubmit:      { backgroundColor: '#ef4444', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8 },
-  modalSubmitText:  { color: '#fff', fontWeight: '700' },
+  modalCancel:      { paddingHorizontal: Spacing.lg, paddingVertical: 10 },
+  modalCancelText:  { color: Colors.textMuted, fontWeight: Typography.semibold },
+  modalSubmit:      { backgroundColor: Colors.danger, paddingHorizontal: 18, paddingVertical: 10, borderRadius: Radius.sm },
+  modalSubmitText:  { color: Colors.white, fontWeight: Typography.bold },
 
   // Sort bar
-  sortBar:      { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  sortLabel:    { fontSize: 12, color: '#9ca3af', fontWeight: '600', marginRight: 4 },
-  sortBtn:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1, borderColor: '#e5e7eb' },
-  sortBtnActive:{ borderColor: '#059669', backgroundColor: '#f0fdf4' },
-  sortText:     { fontSize: 12, fontWeight: '600', color: '#9ca3af' },
-  sortTextActive: { color: '#059669' },
+  sortBar:      { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.divider },
+  sortLabel:    { fontSize: Typography.sm, color: Colors.textLight, fontWeight: Typography.semibold, marginRight: 4 },
+  sortBtn:      { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1, borderColor: Colors.border },
+  sortBtnActive:{ borderColor: Colors.worker, backgroundColor: PriorityColors.low.bg },
+  sortText:     { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.textLight },
+  sortTextActive: { color: Colors.worker },
 });

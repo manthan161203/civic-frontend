@@ -4,6 +4,26 @@
 :root {
   --background: #f9fafb;
   --foreground: #111827;
+
+  /* Brand */
+  --color-primary:       #1a56db;
+  --color-primary-dark:  #1447b2;
+  --color-success:       #059669;
+  --color-warning:       #f59e0b;
+  --color-danger:        #ef4444;
+
+  /* Neutrals */
+  --color-border:        #e5e7eb;
+  --color-divider:       #f3f4f6;
+  --color-text:          #111827;
+  --color-text-muted:    #6b7280;
+  --color-text-light:    #9ca3af;
+  --color-bg:            #f9fafb;
+
+  /* Radii */
+  --radius-sm:  6px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
 }
 
 body {
@@ -15,4 +35,41 @@ body {
 /* Ensure inputs always show dark text regardless of OS dark mode */
 input, textarea, select {
   color: #111827;
+}
+
+/* ── Shared card style ─────────────────────────────────────────────────────── */
+.card {
+  @apply bg-white rounded-lg border border-gray-200;
+}
+
+/* ── Shared modal style ────────────────────────────────────────────────────── */
+.modal-container {
+  @apply bg-white rounded-lg shadow-lg;
+}
+
+/* ── Shared badge styles ───────────────────────────────────────────────────── */
+.badge {
+  @apply inline-flex px-2 py-0.5 rounded text-xs font-semibold;
+}
+
+/* ── Page header pattern ───────────────────────────────────────────────────── */
+.page-header {
+  @apply bg-white border-b border-gray-200;
+}
+.page-header-inner {
+  @apply max-w-7xl mx-auto px-6 py-6;
+}
+
+/* ── Tab bar pattern ───────────────────────────────────────────────────────── */
+.tab-bar {
+  @apply bg-white border-b border-gray-200 sticky top-0 z-10;
+}
+.tab-bar-inner {
+  @apply max-w-7xl mx-auto px-6 flex gap-8;
+}
+.tab-btn {
+  @apply py-4 text-sm font-medium border-b-2 transition-colors border-transparent text-gray-600 hover:text-gray-900;
+}
+.tab-btn-active {
+  @apply border-blue-600 text-blue-600;
 }

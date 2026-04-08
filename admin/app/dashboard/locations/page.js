@@ -391,7 +391,7 @@ export default function LocationsPage() {
       {/* ── Add Modal ── */}
       {adding && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-gray-900 mb-1">
               Add {adding.type.charAt(0).toUpperCase() + adding.type.slice(1)}
             </h2>
@@ -477,7 +477,7 @@ export default function LocationsPage() {
       {/* ── Edit Modal ── */}
       {editing && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-gray-900 mb-1">
               Edit {editing.type.charAt(0).toUpperCase() + editing.type.slice(1)}
             </h2>
