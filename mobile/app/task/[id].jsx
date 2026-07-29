@@ -187,7 +187,13 @@ export default function TaskDetailScreen() {
         router.back();
       } else {
         await workersApi.blockTask(id, reasonText.trim());
-        setIssue((prev) => ({ ...prev, status: 'blocked' }));
+        /*
+         * `is_blocked`, not `status`. Blocking does not change the status —
+         * it sets a boolean alongside it — so writing `status: 'blocked'`
+         * optimistically put a value in state that the server can never send
+         * back, and the screen reverted the moment it refocused and refetched.
+         */
+        setIssue((prev) => ({ ...prev, is_blocked: true, blocked_reason: reasonText.trim() }));
         notify.success('Reported as blocked. An admin has been notified.');
       }
     } catch (err) {

@@ -754,10 +754,21 @@ export default function IssueDetailScreen() {
         <View style={{ flexDirection: 'row', marginTop: 24, marginBottom: 20, paddingHorizontal: 10 }}>
           {['open', 'assigned', 'in_progress', 'resolved', 'closed'].map((step, index, arr) => {
             const stepLabels = ['Reported', 'Assigned', 'In Progress', 'Resolved', 'Closed'];
+            /*
+             * `escalated` was tested here as a status and never matched — it is
+             * the separate `is_escalated` boolean. The consequence was subtle
+             * rather than visible: an escalated issue simply fell through to
+             * `return 0` if its status was anything unexpected, so the pipeline
+             * showed it as freshly reported.
+             *
+             * Escalation is not a step in this pipeline at all — an escalated
+             * issue is still open, or assigned, or in progress. It is called
+             * out separately above; here the status alone drives the step.
+             */
             const getStepIndex = (st) => {
               if (st === 'open') return 0;
               if (st === 'assigned') return 1;
-              if (st === 'in_progress' || st === 'escalated') return 2;
+              if (st === 'in_progress') return 2;
               if (st === 'resolved') return 3;
               if (st === 'closed') return 4;
               return 0;

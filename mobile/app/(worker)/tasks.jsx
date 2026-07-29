@@ -60,9 +60,11 @@ function daysSince(dateStr) {
 }
 
 function SummaryBanner({ tasks, history }) {
-  const assigned   = tasks.filter((t) => t.status === 'assigned').length;
-  const inProgress = tasks.filter((t) => t.status === 'in_progress').length;
-  const blocked    = tasks.filter((t) => t.status === 'blocked').length;
+  // Mirrors the section predicates above, blocked-first, so the banner totals
+  // and the list below it cannot disagree.
+  const blocked    = tasks.filter((t) => t.is_blocked).length;
+  const assigned   = tasks.filter((t) => !t.is_blocked && t.status === 'assigned').length;
+  const inProgress = tasks.filter((t) => !t.is_blocked && t.status === 'in_progress').length;
   const done       = history.filter((t) => ['resolved', 'closed'].includes(t.status)).length;
 
   return (
@@ -157,10 +159,25 @@ function SectionHeader({ title, count, color = '#059669' }) {
   );
 }
 
+/*
+ * Sections, in the order a worker should deal with them.
+ *
+ * **Blocked is not a status.** `Issue.status` is a Postgres enum of exactly
+ * `open | assigned | in_progress | resolved | closed`; blocking is the separate
+ * `is_blocked` boolean, which is why `match` is a predicate here rather than a
+ * status string. Matching on `t.status === 'blocked'` — which is what this did
+ * — is never true, so the Blocked section never rendered and the counter in the
+ * banner was permanently 0. A worker who blocked a task could not see it listed
+ * as blocked anywhere in the app, while admins have a whole screen for exactly
+ * that state.
+ *
+ * Blocked comes first and is matched first: a blocked task still carries its
+ * underlying status, so without an explicit order it would appear twice.
+ */
 const ACTIVE_SECTIONS = [
-  { key: 'assigned',    title: 'Assigned',    color: '#1e40af' },
-  { key: 'in_progress', title: 'In Progress', color: '#f59e0b' },
-  { key: 'blocked',     title: 'Blocked',     color: '#ef4444' },
+  { key: 'blocked',     title: 'Blocked',     color: '#ef4444', match: (t) => t.is_blocked },
+  { key: 'in_progress', title: 'In Progress', color: '#f59e0b', match: (t) => !t.is_blocked && t.status === 'in_progress' },
+  { key: 'assigned',    title: 'Assigned',    color: '#1e40af', match: (t) => !t.is_blocked && t.status === 'assigned' },
 ];
 
 const PRIORITY_FILTERS = [
@@ -317,9 +334,9 @@ export default function TasksScreen() {
     : tasks.filter((t) => t.priority === priorityFilter);
 
   const sections = ACTIVE_SECTIONS
-    .map(({ key, title, color }) => ({
+    .map(({ key, title, color, match }) => ({
       key, title, color,
-      data: filteredTasks.filter((t) => t.status === key),
+      data: filteredTasks.filter(match),
     }))
     .filter((s) => s.data.length > 0);
 
