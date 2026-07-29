@@ -9,9 +9,11 @@
     "lint": "eslint",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "test:live": "bash scripts/live-test.sh"
   },
   "dependencies": {
+    "@civic/api-types": "file:../packages/api-types",
     "@tanstack/react-query": "^5.95.2",
     "@vis.gl/react-google-maps": "^1.8.2",
     "axios": "^1.14.0",

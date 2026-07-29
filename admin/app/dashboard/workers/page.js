@@ -424,6 +424,7 @@ function Leaderboard() {
 // ── Worker List ────────────────────────────────────────────────────────────────
 function WorkerList({ showInactive = false }) {
   const { user } = useAuthStore();
+  const { addToast } = useUiStore();
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -433,6 +434,7 @@ function WorkerList({ showInactive = false }) {
   const [showCreate, setShowCreate] = useState(false);
   const [editWorker, setEditWorker] = useState(null);
   const [reportWorker, setReportWorker] = useState(null);
+  const [resending, setResending] = useState(null);
   const [form, setForm] = useState({ name: '', phone: '', email: '', ward_id: '', department: '' });
   const [wards, setWards] = useState([]);
   const [wardNames, setWardNames] = useState({});
@@ -519,6 +521,33 @@ function WorkerList({ showInactive = false }) {
     if (!confirm(`${active ? 'Deactivate' : 'Reactivate'} this worker?`)) return;
     await (active ? adminApi.deactivateWorker(id) : adminApi.reactivateWorker(id)).catch(() => {});
     load();
+  };
+
+  /*
+   * Re-send a worker's invitation email.
+   *
+   * `POST /admin/workers/{id}/resend-invitation` has existed on the backend all
+   * along and nothing in the UI called it, so an invitation that bounced or
+   * expired left the account permanently unreachable — the only recovery was to
+   * delete the worker and recreate them.
+   */
+  const handleResendInvitation = async (worker) => {
+    if (!confirm(`Re-send the invitation email to ${worker.email || worker.name}?`)) return;
+    setResending(worker.id);
+    try {
+      const { data } = await adminApi.resendWorkerInvitation(worker.id);
+      addToast(
+        data?.email_sent === false
+          ? 'Invitation recorded, but the email could not be delivered. Check the mail configuration.'
+          : `Invitation re-sent to ${worker.email || worker.name}.`,
+        data?.email_sent === false ? 'warning' : 'success',
+      );
+      load();
+    } catch (err) {
+      addToast(getErrorMessage(err, 'Could not re-send the invitation.'), 'error');
+    } finally {
+      setResending(null);
+    }
   };
 
   const handleCreate = async (e) => {
@@ -759,6 +788,18 @@ function WorkerList({ showInactive = false }) {
                       >
                         Report
                       </button>
+                      {/* Only meaningful while the worker has not signed in
+                          yet — once they have, the invitation is spent. */}
+                      {w.must_change_password && w.is_active && (
+                        <button
+                          onClick={() => handleResendInvitation(w)}
+                          disabled={resending === w.id}
+                          title="Send the invitation email again"
+                          className="px-2 py-1 text-xs font-semibold rounded-md border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 transition-colors disabled:opacity-50"
+                        >
+                          {resending === w.id ? 'Sending…' : 'Resend invite'}
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDeactivate(w.id, w.is_active)}
                         className={`px-2 py-1 text-xs font-semibold rounded-md border transition-colors ${w.is_active ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}

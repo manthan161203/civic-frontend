@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { adminApi, locationsApi } from '../../../src/api/index';
+import { adminApi, locationsApi, can } from '../../../src/api/index';
 import { getErrorMessage } from '../../../src/lib/apiError';
 import { useAuthStore } from '../../../src/store/authStore';
 import { useUiStore } from '../../../src/store/uiStore';
@@ -264,11 +264,18 @@ function EditAdminModal({ admin, onClose, onUpdated }) {
 
 // ── Sub-Admin List ─────────────────────────────────────────────────────────────
 function AdminList({ refresh, triggerRefresh }) {
+  const { user: currentUser } = useAuthStore();
+  const { addToast } = useUiStore();
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [roleFilter, setRoleFilter] = useState('');
   const [locationNames, setLocationNames] = useState({});
   const [editingAdmin, setEditingAdmin] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+
+  // `DELETE /admin/users/{id}` is super-admin only. Ask the shared permission
+  // manifest rather than hard-coding the role, so this tracks the backend.
+  const canDelete = can(currentUser, 'deleteUser');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -298,6 +305,43 @@ function AdminList({ refresh, triggerRefresh }) {
     } catch {}
     setLoading(false);
   }, [roleFilter, refresh]);
+
+  /*
+   * Remove an admin account outright.
+   *
+   * `DELETE /admin/users/{id}` has existed on the backend with no UI behind it,
+   * so the only way to retire a sub-admin was to deactivate them — which leaves
+   * the account, and its jurisdiction grant, in place.
+   *
+   * Deliberately noisy: this is irreversible and the backend cascades.
+   */
+  const handleDelete = async (admin) => {
+    if (admin.id === currentUser?.id) {
+      addToast('You cannot delete your own account.', 'error');
+      return;
+    }
+    const typed = prompt(
+      `This permanently deletes ${admin.name || admin.phone} and cannot be undone.\n\n` +
+        `Type the admin's phone number to confirm:`,
+    );
+    if (typed === null) return;
+    if (typed.trim() !== admin.phone) {
+      addToast('Phone number did not match — nothing was deleted.', 'error');
+      return;
+    }
+
+    setDeleting(admin.id);
+    try {
+      await adminApi.deleteUser(admin.id);
+      addToast(`${admin.name || admin.phone} was deleted.`, 'success');
+      load();
+      triggerRefresh();
+    } catch (err) {
+      addToast(getErrorMessage(err, 'Could not delete this admin.'), 'error');
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -360,12 +404,24 @@ function AdminList({ refresh, triggerRefresh }) {
                     {formatDate(a.created_at, 'en-IN')}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => setEditingAdmin(a)}
-                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setEditingAdmin(a)}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      {canDelete && a.id !== currentUser?.id && (
+                        <button
+                          onClick={() => handleDelete(a)}
+                          disabled={deleting === a.id}
+                          title="Permanently delete this admin account"
+                          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-50"
+                        >
+                          {deleting === a.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))

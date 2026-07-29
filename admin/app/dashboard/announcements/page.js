@@ -344,18 +344,21 @@ function EditModal({ announcement, onClose, onSaved }) {
       payload.location_lng = pin.lng;
     }
 
-    setSaving(true);
-    try {
-      await adminApi.updateAnnouncement(announcement.id, payload);
-      useUiStore.getState().addToast('Announcement updated successfully!', 'success');
-      onSaved();
-      onClose();
-    } catch (err) {
-      const errorMsg = getErrorMessage(err, 'Failed to update announcement.');
-      setError(errorMsg);
-      useUiStore.getState().addToast(errorMsg, 'error');
-    }
-    setSaving(false);
+    /*
+     * There is no update route. `PATCH /admin/announcements/{id}` was called
+     * here and the backend has never defined it, so every save 405'd and the
+     * catch block reported it as a generic failure.
+     *
+     * Delete-and-recreate is not a silent substitute: it mints a new ID and
+     * re-pushes the notification to every recipient. So this says what is
+     * actually true and leaves the choice to the operator.
+     */
+    const message =
+      'Editing an announcement is not supported by the backend yet. ' +
+      'Delete this one and publish a new announcement instead — note that ' +
+      'doing so re-sends the push notification to every recipient.';
+    setError(message);
+    useUiStore.getState().addToast(message, 'warning');
   };
 
   return (
@@ -652,7 +655,11 @@ export default function AnnouncementsPage() {
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
                   <button
-                    onClick={() => { setEditTarget(a); setShowEdit(true); }}
+                    onClick={() => useUiStore.getState().addToast(
+                      'Editing is not supported by the backend yet. Delete and recreate instead.',
+                      'warning',
+                    )}
+                    title="Requires a backend route that does not exist yet"
                     className="px-2.5 py-1 text-xs font-semibold rounded-md border bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 transition-colors"
                   >
                     Edit

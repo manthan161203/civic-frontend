@@ -179,41 +179,66 @@ export default function AIInsightsPage() {
   const [issues, setIssues] = useState([]);
   const [activeTab, setActiveTab] = useState('low-confidence'); // 'low-confidence' | 'poor-quality'
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [page, setPage] = useState(1);
+  // True when the scan hit the server cap, so the figures below are a sample
+  // rather than a total and the UI has to say so.
+  const [truncated, setTruncated] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
+    setError('');
     try {
-      // Get all issues with AI data
-      const { data: allIssues } = await adminApi.getIssues({
-        limit: 1000,
-        skip: 0,
-      });
+      /*
+       * This screen has no backend endpoint — there is no `/admin/ai-insights`,
+       * so the confidence figures are derived here from the issue list.
+       *
+       * It used to ask for `{ limit: 1000, skip: 0 }`. `GET /admin/issues` takes
+       * `page`/`size` and ignores anything else, so the request silently
+       * returned page 1 at the default size of 20 and every "total" on this
+       * screen was computed from 20 rows. The numbers looked plausible and were
+       * wrong by whatever factor the real dataset happened to be.
+       *
+       * `size` is capped at 200 server-side, so we page until we run out or hit
+       * a ceiling, and label the result honestly when we stop early.
+       */
+      const PAGE_SIZE = 200;
+      const MAX_PAGES = 10; // 2,000 issues — enough to be useful, bounded.
 
-      const issueList = Array.isArray(allIssues) ? allIssues : (allIssues.items || []);
+      const collected = [];
+      let pageNo = 1;
+      let total = 0;
 
-      // Calculate stats
-      const withAI = issueList.filter((i) => i.ai_confidence || i.ai_resolution_quality);
+      for (; pageNo <= MAX_PAGES; pageNo += 1) {
+        const { data } = await adminApi.getIssues({ page: pageNo, size: PAGE_SIZE });
+        const batch = data?.items ?? [];
+        total = data?.total ?? total;
+        collected.push(...batch);
+        if (batch.length < PAGE_SIZE) break;
+      }
+
+      const withAI = collected.filter((i) => i.ai_confidence || i.ai_resolution_quality);
       const lowConf = withAI.filter((i) => i.ai_confidence && i.ai_confidence < 0.7);
       const poorRes = withAI.filter((i) => i.ai_resolution_quality === 'poor');
-      const avgConf = withAI.length > 0
-        ? (withAI.reduce((sum, i) => sum + (i.ai_confidence || 0), 0) / withAI.length)
+      const avgConf = withAI.length
+        ? withAI.reduce((sum, i) => sum + (i.ai_confidence || 0), 0) / withAI.length
         : 0;
 
+      setTruncated(total > collected.length);
       setStats({
         total_issues: withAI.length,
         low_confidence: lowConf.length,
         poor_resolutions: poorRes.length,
         avg_confidence: avgConf,
+        scanned: collected.length,
+        total_available: total,
       });
 
-      // Set filtered issues
-      const filtered = activeTab === 'low-confidence' ? lowConf : poorRes;
-      setIssues(filtered);
+      setIssues(activeTab === 'low-confidence' ? lowConf : poorRes);
       setPage(1);
     } catch (err) {
-      console.error('Failed to load AI insights:', err);
+      setError(getErrorMessage(err, 'Failed to load AI insights.'));
     } finally {
       setLoading(false);
     }
@@ -221,6 +246,7 @@ export default function AIInsightsPage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const displayIssues = issues.slice((page - 1) * 10, page * 10);
@@ -242,6 +268,26 @@ export default function AIInsightsPage() {
         </div>
         <p className="text-sm text-gray-500 mt-1">Monitor AI-driven issue analysis and resolution verification</p>
       </div>
+
+      {error && (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {/* These figures are computed in the browser from the issue list — there
+          is no AI-insights endpoint. Say so when the scan did not reach the end
+          of the data, rather than presenting a sample as a total. */}
+      {truncated && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+          <p className="text-sm text-amber-800">
+            Showing the {stats.scanned?.toLocaleString()} most recent of{' '}
+            {stats.total_available?.toLocaleString()} issues. These figures are a sample,
+            not a total — a server-side AI insights endpoint is needed for accurate
+            aggregates.
+          </p>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

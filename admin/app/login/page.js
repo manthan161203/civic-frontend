@@ -1,10 +1,9 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { authApi } from '../../src/api/index';
+import { authApi, isAdminUser, getErrorMessage } from '../../src/api/index';
 import { useAuthStore } from '../../src/store/authStore';
 import { useUiStore } from '../../src/store/uiStore';
-import { getErrorMessage } from '../../src/lib/apiError';
 import CivicLogo from '../../src/components/ui/CivicLogo';
 import LoadingButton from '../../src/components/ui/LoadingButton';
 import SvgIcon from '../../src/components/ui/SvgIcon';
@@ -60,19 +59,31 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { data } = await authApi.verifyOtp(phone, otp);
-      const meRes = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/me`,
-        { headers: { Authorization: `Bearer ${data.access_token}` } }
-      );
-      if (!meRes.ok) throw new Error('Failed to fetch user profile');
-      const user = await meRes.json();
-      if (!user.role?.includes('admin') && user.role !== 'admin') {
-        setError('Access denied. Admin accounts only.');
+
+      // `TokenResponse` already carries the user, so the second round-trip this
+      // used to make — a raw `fetch` to /auth/me with a hand-built base URL and
+      // its own Authorization header — was redundant and bypassed the client.
+      const user = data.user;
+
+      if (!isAdminUser(user)) {
+        setError('Access denied. Administrator accounts only.');
         setLoading(false);
         return;
       }
+
       setSession(data.access_token, data.refresh_token, user);
-      addToast('Signed in successfully', 'success');
+
+      // The backend returns this when an account was bootstrapped or reset and
+      // the password has not been rotated yet. The admin app has no
+      // change-password screen, so say so rather than dropping the flag.
+      if (data.must_change_password) {
+        addToast(
+          'Your password must be changed. Use the mobile app to set a new one.',
+          'warning',
+        );
+      } else {
+        addToast('Signed in successfully', 'success');
+      }
       router.push('/dashboard');
     } catch (err) {
       const msg = getErrorMessage(err, 'Invalid OTP.');

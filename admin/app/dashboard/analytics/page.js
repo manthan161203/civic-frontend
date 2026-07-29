@@ -111,16 +111,33 @@ export default function AnalyticsPage() {
       doc.text('Summary Statistics', 10, yPosition);
       yPosition += 8;
 
+      /*
+       * `GET /admin/analytics` returns period aggregates:
+       *   { period_days, total_in_period, daily_counts, by_type, by_status,
+       *     by_priority, top_wards }
+       *
+       * This block used to read `total_issues`, `open_issues`,
+       * `resolved_issues` and `escalated_issues` — the shape of
+       * `GET /admin/dashboard`, a different endpoint. None of those keys exist
+       * here, so every row exported as 0 and the resolution-rate line, gated on
+       * two undefined values, never rendered at all.
+       */
+      const byStatus = data.by_status || {};
+      const totalInPeriod = data.total_in_period || 0;
+      const resolved = (byStatus.resolved || 0) + (byStatus.closed || 0);
+      const open = byStatus.open || 0;
+      const inProgress = (byStatus.in_progress || 0) + (byStatus.assigned || 0);
+
       const summaryData = [
         ['Metric', 'Value'],
-        ['Total Issues', data.total_issues || 0],
-        ['Open Issues', data.open_issues || 0],
-        ['Resolved Issues', data.resolved_issues || 0],
-        ['Escalated Issues', data.escalated_issues || 0],
+        ['Total Issues', totalInPeriod],
+        ['Open Issues', open],
+        ['In Progress', inProgress],
+        ['Resolved Issues', resolved],
       ];
 
-      if (data.total_issues && data.resolved_issues) {
-        const resolutionRate = ((data.resolved_issues / data.total_issues) * 100).toFixed(1);
+      if (totalInPeriod > 0) {
+        const resolutionRate = ((resolved / totalInPeriod) * 100).toFixed(1);
         summaryData.push(['Resolution Rate', `${resolutionRate}%`]);
       }
 

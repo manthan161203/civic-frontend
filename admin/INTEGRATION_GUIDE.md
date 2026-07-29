@@ -27,7 +27,10 @@ This guide walks you through integrating all the newly created utilities into yo
 - `src/components/DataTable.jsx` - Data table with pagination
 
 ### API Integration
-- `src/api/client-integration.example.js` - API client setup guide
+- `src/api/index.js` - the typed endpoint surface (import from here)
+- `src/api/http.js` - transport: base URL, auth, refresh, retry
+- `src/api/errors.js` - every failure normalized to one `ApiError`
+- `src/api/permissions.js` - role, capability and route checks
 
 ---
 

@@ -24,23 +24,27 @@ export default function GeofenceAdminPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
+  const PAGE_SIZE = 5;
+
+  /*
+   * `GET /admin/geofences` is already paginated, so this only fetches the
+   * current page and trusts `total` for the page count.
+   *
+   * It previously fetched 5 rows and then sliced those same 5 rows again
+   * client-side, gating the pager on `zones.length > 5` — never true. The
+   * effect also had an empty dependency array, so changing the page did not
+   * refetch. Between the two, the list was permanently stuck on page 1 with no
+   * visible controls.
+   */
   const loadZones = async () => {
     setLoading(true);
     setError('');
     try {
-      const response = await adminApi.getGeofences(page, 5); // 5 items per page for display
-      setZones(response.data.items.map(item => ({
-        id: item.id,
-        name: item.name,
-        latitude: item.latitude,
-        longitude: item.longitude,
-        radius_km: item.radius_km,
-        created_by_name: item.created_by_name,
-        created_at: item.created_at,
-        active_workers: 0, // This would be fetched from a separate endpoint in a real app
-        alerts_today: 0,   // This would be fetched from a separate endpoint in a real app
-      })));
+      const { data } = await adminApi.getGeofences(page, PAGE_SIZE);
+      setZones(data.items ?? []);
+      setTotal(data.total ?? 0);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load geofences'));
     } finally {
@@ -50,7 +54,8 @@ export default function GeofenceAdminPage() {
 
   useEffect(() => {
     loadZones();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -86,19 +91,13 @@ export default function GeofenceAdminPage() {
         radius_km: radius,
       });
 
-      const newZone = {
-        id: response.data.id,
-        name: response.data.name,
-        latitude: response.data.latitude,
-        longitude: response.data.longitude,
-        radius_km: response.data.radius_km,
-        created_by_name: response.data.created_by_name,
-        created_at: response.data.created_at,
-        active_workers: 0,
-        alerts_today: 0,
-      };
-
-      setZones([newZone, ...zones]);
+      // Go back to the first page and refetch, rather than splicing a
+      // locally-built row into a server-paginated list.
+      if (page === 1) {
+        await loadZones();
+      } else {
+        setPage(1);
+      }
       setFormData({ name: '', latitude: '', longitude: '', radius_km: '0.5' });
       setShowForm(false);
       addToast('Geofence created successfully!', 'success');
@@ -124,7 +123,7 @@ export default function GeofenceAdminPage() {
     }
   };
 
-  const displayZones = zones.slice((page - 1) * 5, page * 5);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="space-y-6">
@@ -238,14 +237,14 @@ export default function GeofenceAdminPage() {
             </div>
           ))}
         </div>
-      ) : displayZones.length === 0 ? (
+      ) : zones.length === 0 ? (
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-12 text-center">
           <p className="text-gray-500 font-medium">No geofence zones created yet</p>
         </div>
       ) : (
         <>
           <div className="space-y-3">
-            {displayZones.map((zone) => (
+            {zones.map((zone) => (
               <div key={zone.id} className={`border rounded-lg p-4 ${ZONE_COLORS.active}`}>
                 <div className="flex items-start justify-between gap-4 mb-3">
                   <div className="flex-1">
@@ -259,19 +258,19 @@ export default function GeofenceAdminPage() {
                       </div>
                     </p>
                   </div>
+                  {/* "N workers" / "N alerts today" used to render here from
+                      hardcoded zeroes — there is no endpoint behind either
+                      figure. Showing the creator is at least true. */}
                   <div className="text-right">
-                    <p className="text-sm font-semibold text-green-700">{zone.active_workers} workers</p>
-                    <p className="text-xs text-gray-500">{zone.alerts_today} alerts today</p>
+                    {zone.created_by_name && (
+                      <p className="text-xs text-gray-500">by {zone.created_by_name}</p>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex gap-2 pt-2 border-t border-gray-300">
-                  <button className="flex-1 px-3 py-1.5 bg-white border border-gray-300 rounded text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                    View Workers
-                  </button>
-                  <button className="flex-1 px-3 py-1.5 bg-white border border-gray-300 rounded text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                    Alerts
-                  </button>
+                  {/* "View Workers" and "Alerts" were inert — no handler, no
+                      endpoint. Removed rather than left as decoration. */}
                   <button
                     onClick={() => handleDelete(zone.id)}
                     className="flex-1 px-3 py-1.5 bg-red-50 border border-red-200 rounded text-xs font-semibold text-red-700 hover:bg-red-100"
@@ -283,9 +282,11 @@ export default function GeofenceAdminPage() {
             ))}
           </div>
 
-          {zones.length > 5 && (
+          {total > PAGE_SIZE && (
             <div className="flex items-center justify-between bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-              <p className="text-sm text-gray-600">Page {page} of {Math.ceil(zones.length / 5)}</p>
+              <p className="text-sm text-gray-600">
+                Page {page} of {totalPages} · {total} zone{total === 1 ? '' : 's'}
+              </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -295,8 +296,8 @@ export default function GeofenceAdminPage() {
                   Previous
                 </button>
                 <button
-                  onClick={() => setPage((p) => Math.min(Math.ceil(zones.length / 5), p + 1))}
-                  disabled={page === Math.ceil(zones.length / 5)}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
                   className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 disabled:opacity-50 hover:bg-gray-50"
                 >
                   Next

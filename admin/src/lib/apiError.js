@@ -1,12 +1,15 @@
-// Extracts a readable string from any FastAPI error response.
-// FastAPI 422 returns { detail: [ {type, loc, msg, input} ] }
-// FastAPI 400/401/404 returns { detail: "string" }
-export function getErrorMessage(err, fallback = 'Something went wrong.') {
-  const detail = err?.response?.data?.detail;
-  if (!detail) return fallback;
-  if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail)) {
-    return detail.map((e) => e.msg || JSON.stringify(e)).join(', ');
-  }
-  return fallback;
-}
+/**
+ * Historical import path for error formatting.
+ *
+ * The implementation moved to `@/api/errors`, which understands FastAPI's two
+ * error shapes (a `detail` string from `HTTPException`, a `detail` array from
+ * 422 validation) as well as network failures, timeouts and cancellations.
+ * Twenty-one pages import `getErrorMessage` from here, so the path stays and
+ * forwards rather than being rewritten across all of them.
+ *
+ * The `(err, fallback)` signature is unchanged.
+ *
+ * @deprecated Import from `@/api` instead.
+ */
+
+export { getErrorMessage, getFieldErrors, ApiError, toApiError } from '@/api/errors';

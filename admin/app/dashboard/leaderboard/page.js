@@ -7,7 +7,6 @@ export default function LeaderboardPage() {
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [period, setPeriod] = useState('monthly');
   const [filterType, setFilterType] = useState('points');
   const [page, setPage] = useState(1);
 
@@ -15,26 +14,25 @@ export default function LeaderboardPage() {
     setLoading(true);
     setError('');
     adminApi
-      .getWorkerLeaderboard()
+      .getWorkerLeaderboard(50)
       .then(({ data }) => {
-        console.log('Leaderboard API Response:', data);
-        let filtered = Array.isArray(data) ? data : (data.items || []);
-        console.log('Filtered workers:', filtered);
-        
-        if (filterType === 'issues') {
-          filtered = filtered.sort((a, b) => (b.tasks_resolved || 0) - (a.tasks_resolved || 0));
-        } else if (filterType === 'rating') {
-          filtered = filtered.sort((a, b) => (b.avg_rating || 0) - (a.avg_rating || 0));
-        } else {
-          filtered = filtered.sort((a, b) => (b.score || 0) - (a.score || 0));
-        }
+        const rows = Array.isArray(data) ? data : (data.items || []);
 
-        setWorkers(filtered);
+        // Sorting is client-side because the endpoint returns one fixed
+        // ordering. That is fine for a metric switch over a bounded list;
+        // ordering. A period filter would need backend support — see below.
+        const sorted = [...rows].sort((a, b) => {
+          if (filterType === 'issues') return (b.tasks_resolved || 0) - (a.tasks_resolved || 0);
+          if (filterType === 'rating') return (b.avg_rating || 0) - (a.avg_rating || 0);
+          return (b.score || 0) - (a.score || 0);
+        });
+
+        setWorkers(sorted);
         setPage(1);
       })
       .catch((err) => setError(getErrorMessage(err, 'Failed to load leaderboard')))
       .finally(() => setLoading(false));
-  }, [period, filterType]);
+  }, [filterType]);
 
   const displayWorkers = workers.slice((page - 1) * 10, page * 10);
   const totalPages = Math.ceil(workers.length / 10);
@@ -48,24 +46,18 @@ export default function LeaderboardPage() {
           </svg>
           <h1 className="text-2xl font-bold text-gray-900">Worker Leaderboard</h1>
         </div>
-        <p className="text-sm text-gray-500 mt-1">Top performing workers by period and metric</p>
+        <p className="text-sm text-gray-500 mt-1">Top performing workers, all time</p>
       </div>
 
-      <div className="flex gap-2">
-        {['weekly', 'monthly', 'alltime'].map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              period === p
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {p === 'weekly' ? 'This Week' : p === 'monthly' ? 'This Month' : 'All Time'}
-          </button>
-        ))}
-      </div>
+      {/*
+        The weekly / monthly / all-time tabs used to sit here. They set state
+        that was never sent anywhere: `GET /admin/workers/leaderboard` accepts
+        only `limit`, so all three showed identical all-time figures while
+        labelling two of them "This Week" and "This Month".
+
+        Removed rather than left as decoration — a period filter needs a `days`
+        or `period` parameter on the backend first.
+      */}
 
       <div className="flex gap-2 bg-white rounded-lg shadow-sm p-2 border border-gray-100">
         {[

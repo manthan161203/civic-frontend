@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@civic/api-types": ["../packages/api-types/src/index.d.ts"],
+      "@civic/api-types/*": ["../packages/api-types/src/*"]
     }
-  }
+  },
+  "exclude": ["node_modules", ".next"]
 }

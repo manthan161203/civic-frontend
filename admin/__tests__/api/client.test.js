@@ -1,404 +1,288 @@
 /**
- * API Client Tests
- * Tests for admin/src/api/client.js
+ * Tests for the API client layer: src/api/{errors,permissions}.js
+ *
  * @jest-environment jsdom
+ *
+ * This replaces the previous `client.test.js` and `utils/errorHandler.test.js`.
+ * Both asserted the behaviour this refactor set out to fix — that 403 is an
+ * authentication failure, that 400 is a validation error and 422 is not — so
+ * they could not be kept and corrected at the same time. The cases below encode
+ * the contract the backend actually has.
  */
 
+import { ApiError, toApiError, getErrorMessage, getFieldErrors } from '@/api/errors';
+
 import {
-  apiGet,
-  apiPost,
-  apiPut,
-  apiPatch,
-  apiDelete,
-  apiCallWithRetry,
-  getErrorMessage,
-} from '@/api/client';
+  isAdminUser,
+  isSuperAdmin,
+  hasAtLeastRole,
+  canCall,
+  can,
+  canVisit,
+} from '@/api/permissions';
 
-// Mock axios
-jest.mock('axios', () => ({
-  create: jest.fn(() => ({
-    get: jest.fn(),
-    post: jest.fn(),
-    put: jest.fn(),
-    patch: jest.fn(),
-    delete: jest.fn(),
-    interceptors: {
-      request: { use: jest.fn() },
-      response: { use: jest.fn() },
-    },
-  })),
-}));
+/** Build something shaped like an axios error. */
+const axiosError = (status, data, headers = {}) => ({
+  response: { status, data, headers },
+  config: {},
+  isAxiosError: true,
+});
 
-// Mock retry utility
-jest.mock('@/utils/retry', () => ({
-  withRetry: jest.fn((fn, options = {}) => {
-    return fn().catch((error) => {
-      if (options.shouldRetry && !options.shouldRetry(error)) {
-        throw error;
-      }
-      if (error.response?.status === 400 || error.response?.status === 401) {
-        throw error;
-      }
-      // Simple retry logic for tests
-      if ((options.maxRetries || 0) > 0) {
-        return fn();
-      }
-      throw error;
-    });
-  }),
-}));
-
-describe('API Client', () => {
-  
-  // ────────────────────────────────────────────────────────────────
-  // API Wrapper Functions
-  // ────────────────────────────────────────────────────────────────
-
-  describe('API Methods', () => {
-    it('should have apiGet function', () => {
-      expect(typeof apiGet).toBe('function');
+describe('toApiError', () => {
+  describe('transport failures', () => {
+    it('maps a missing response to a network error', () => {
+      const e = toApiError({ message: 'Network Error' });
+      expect(e.kind).toBe('network');
+      expect(e.retryable).toBe(true);
+      expect(e.status).toBeNull();
     });
 
-    it('should have apiPost function', () => {
-      expect(typeof apiPost).toBe('function');
+    it('maps ECONNABORTED to a timeout', () => {
+      const e = toApiError({ code: 'ECONNABORTED' });
+      expect(e.kind).toBe('timeout');
+      expect(e.retryable).toBe(true);
     });
 
-    it('should have apiPut function', () => {
-      expect(typeof apiPut).toBe('function');
-    });
-
-    it('should have apiPatch function', () => {
-      expect(typeof apiPatch).toBe('function');
-    });
-
-    it('should have apiDelete function', () => {
-      expect(typeof apiDelete).toBe('function');
-    });
-
-    it('should have apiCallWithRetry function', () => {
-      expect(typeof apiCallWithRetry).toBe('function');
-    });
-
-    it('should export getErrorMessage', () => {
-      expect(typeof getErrorMessage).toBe('function');
+    it('treats a deliberate abort as canceled, not a failure', () => {
+      const e = toApiError({ code: 'ERR_CANCELED' });
+      expect(e.kind).toBe('canceled');
+      expect(e.retryable).toBe(false);
     });
   });
 
-  // ────────────────────────────────────────────────────────────────
-  // Error Handling
-  // ────────────────────────────────────────────────────────────────
-
-  describe('Error Handling', () => {
-    it('should handle 401 (Unauthorized) errors', async () => {
-      const error = {
-        response: {
-          status: 401,
-          data: { message: 'Unauthorized' },
-        },
-      };
-
-      expect(getErrorMessage(error)).toBe('Unauthorized');
+  describe('the 401 / 403 distinction', () => {
+    // The headline fix. The old `isAuthError` was `401 || 403`, and the axios
+    // interceptor destroyed the session for both — so a scoped admin reading
+    // outside their jurisdiction was logged out instead of told "not allowed".
+    it('401 ends the session', () => {
+      const e = toApiError(axiosError(401, { detail: 'Not authenticated' }));
+      expect(e.kind).toBe('unauthenticated');
+      expect(e.isSessionEnded).toBe(true);
+      expect(e.isForbidden).toBe(false);
     });
 
-    it('should handle 403 (Forbidden) errors', async () => {
-      const error = {
-        response: {
-          status: 403,
-          data: { message: 'Access Denied' },
-        },
-      };
-
-      expect(getErrorMessage(error)).toBe('Access Denied');
-    });
-
-    it('should handle 404 (Not Found) errors', async () => {
-      const error = {
-        response: {
-          status: 404,
-          data: { message: 'Resource not found' },
-        },
-      };
-
-      expect(getErrorMessage(error)).toBe('Resource not found');
-    });
-
-    it('should handle 500 (Server) errors', async () => {
-      const error = {
-        response: {
-          status: 500,
-          data: { message: 'Internal server error' },
-        },
-      };
-
-      expect(getErrorMessage(error)).toBe('Internal server error');
-    });
-
-    it('should handle network errors', async () => {
-      const error = new Error('Network error');
-      const message = getErrorMessage(error, 'Default message');
-      expect(message).toBe('Default message');
+    it('403 does NOT end the session', () => {
+      const e = toApiError(axiosError(403, { detail: 'Out of scope' }));
+      expect(e.kind).toBe('forbidden');
+      expect(e.isForbidden).toBe(true);
+      expect(e.isSessionEnded).toBe(false);
     });
   });
 
-  // ────────────────────────────────────────────────────────────────
-  // Retry Integration
-  // ────────────────────────────────────────────────────────────────
+  describe('FastAPI validation errors', () => {
+    // FastAPI uses 422 for request validation, not 400.
+    const detail = [
+      {
+        type: 'string_too_short',
+        loc: ['body', 'name'],
+        msg: 'String should have at least 2 characters',
+      },
+      { type: 'missing', loc: ['body', 'phone'], msg: 'Field required' },
+      { type: 'int_parsing', loc: ['query', 'page'], msg: 'Input should be a valid integer' },
+    ];
 
-  describe('Retry Integration', () => {
-    it('should accept custom retry options', async () => {
-      // This test verifies that retry options can be passed
-      const options = {
-        maxRetries: 5,
-        baseDelay: 2000,
-        shouldRetry: (error) => error.response?.status !== 400,
-      };
-
-      // API methods should accept options
-      expect(() => apiGet('/url', {}, options)).not.toThrow();
+    it('classifies 422 as validation', () => {
+      expect(toApiError(axiosError(422, { detail })).kind).toBe('validation');
     });
 
-    it('should use default retry settings', async () => {
-      // Default: maxRetries: 3, baseDelay: 1000
-      // Verify that methods work without explicit retry options
-      expect(() => apiGet('/url', {})).not.toThrow();
+    it('does not classify 400 as validation', () => {
+      expect(toApiError(axiosError(400, { detail: 'Bad request' })).kind).not.toBe('validation');
     });
 
-    it('should not retry on validation errors (400)', async () => {
-      // 400 should not trigger retry
-      const shouldNotRetry = (error) => {
-        expect(error.response?.status).not.toBe(400);
-        return false;
-      };
-
-      const options = {
-        maxRetries: 3,
-        baseDelay: 10,
-        shouldRetry: shouldNotRetry,
-      };
-
-      expect(() => apiPost('/url', {}, options)).not.toThrow();
-    });
-
-    it('should retry on transient errors (503, 504, 408, 429)', async () => {
-      const transientStatuses = [503, 504, 408, 429];
-
-      transientStatuses.forEach((status) => {
-        const shouldRetry = (error) => {
-          // Should be true for transient errors
-          return [503, 504, 408, 429].includes(error.response?.status);
-        };
-
-        const options = {
-          maxRetries: 3,
-          baseDelay: 10,
-          shouldRetry,
-        };
-
-        expect(() => apiGet('/url', {}, options)).not.toThrow();
+    it('parses detail entries into per-field messages', () => {
+      expect(getFieldErrors(axiosError(422, { detail }))).toEqual({
+        name: 'String should have at least 2 characters',
+        phone: 'Field required',
+        page: 'Input should be a valid integer',
       });
     });
-  });
 
-  // ────────────────────────────────────────────────────────────────
-  // Method Signature Tests
-  // ────────────────────────────────────────────────────────────────
-
-  describe('Method Signatures', () => {
-    it('apiGet should accept (url, params, options)', () => {
-      const mockCall = jest.fn(() => Promise.resolve({ data: {} }));
-      
-      // Should not throw with all parameters
-      expect(() => apiGet('/issues', { page: 1, status: 'open' }, { maxRetries: 5 })).not.toThrow();
-      
-      // Should not throw with no params
-      expect(() => apiGet('/issues')).not.toThrow();
+    it('joins nested locations with dots so forms can address them', () => {
+      const fields = getFieldErrors(
+        axiosError(422, {
+          detail: [{ loc: ['body', 'shifts', 0, 'start_time'], msg: 'Invalid time' }],
+        }),
+      );
+      expect(fields).toEqual({ 'shifts.0.start_time': 'Invalid time' });
     });
 
-    it('apiPost should accept (url, data, options)', () => {
-      expect(() => 
-        apiPost('/issues', { title: 'Issue' }, { maxRetries: 5 })
-      ).not.toThrow();
-
-      expect(() => 
-        apiPost('/issues', { title: 'Issue' })
-      ).not.toThrow();
+    it('keeps the first message when a field fails twice', () => {
+      const fields = getFieldErrors(
+        axiosError(422, {
+          detail: [
+            { loc: ['body', 'email'], msg: 'Field required' },
+            { loc: ['body', 'email'], msg: 'Value error' },
+          ],
+        }),
+      );
+      expect(fields).toEqual({ email: 'Field required' });
     });
 
-    it('apiPut should accept (url, data, options)', () => {
-      expect(() => 
-        apiPut('/issues/123', { status: 'resolved' }, { maxRetries: 5 })
-      ).not.toThrow();
-
-      expect(() => 
-        apiPut('/issues/123', { status: 'resolved' })
-      ).not.toThrow();
+    it('falls back to the detail string when 422 detail is not an array', () => {
+      const e = toApiError(axiosError(422, { detail: 'unprocessable' }));
+      expect(e.fieldErrors).toBeNull();
+      expect(e.message).toBe('unprocessable');
     });
 
-    it('apiPatch should accept (url, data, options)', () => {
-      expect(() => 
-        apiPatch('/issues/123', { status: 'in_progress' }, { maxRetries: 5 })
-      ).not.toThrow();
-
-      expect(() => 
-        apiPatch('/issues/123', { status: 'in_progress' })
-      ).not.toThrow();
-    });
-
-    it('apiDelete should accept (url, options)', () => {
-      expect(() => 
-        apiDelete('/issues/123', { maxRetries: 5 })
-      ).not.toThrow();
-
-      expect(() => 
-        apiDelete('/issues/123')
-      ).not.toThrow();
-    });
-
-    it('apiCallWithRetry should accept (apiCall, options)', () => {
-      const apiCall = () => Promise.resolve({ data: {} });
-      
-      expect(() => 
-        apiCallWithRetry(apiCall, { maxRetries: 3 })
-      ).not.toThrow();
-
-      expect(() => 
-        apiCallWithRetry(apiCall)
-      ).not.toThrow();
+    it('returns null field errors for non-422 responses', () => {
+      expect(getFieldErrors(axiosError(500, {}))).toBeNull();
     });
   });
 
-  // ────────────────────────────────────────────────────────────────
-  // Export Tests
-  // ────────────────────────────────────────────────────────────────
-
-  describe('Exports', () => {
-    it('should export all required functions', () => {
-      expect(apiGet).toBeDefined();
-      expect(apiPost).toBeDefined();
-      expect(apiPut).toBeDefined();
-      expect(apiPatch).toBeDefined();
-      expect(apiDelete).toBeDefined();
-      expect(apiCallWithRetry).toBeDefined();
-      expect(getErrorMessage).toBeDefined();
+  describe('messages', () => {
+    it("prefers the server's own detail string", () => {
+      // The backend writes these deliberately and they are actionable.
+      const e = toApiError(
+        axiosError(400, { detail: 'After-photo is required to resolve a high-priority issue.' }),
+      );
+      expect(e.message).toBe('After-photo is required to resolve a high-priority issue.');
     });
 
-    it('each function should be callable', () => {
-      expect(typeof apiGet).toBe('function');
-      expect(typeof apiPost).toBe('function');
-      expect(typeof apiPut).toBe('function');
-      expect(typeof apiPatch).toBe('function');
-      expect(typeof apiDelete).toBe('function');
-      expect(typeof apiCallWithRetry).toBe('function');
-      expect(typeof getErrorMessage).toBe('function');
+    it('falls back to generic copy when the server sent none', () => {
+      expect(toApiError(axiosError(500, {})).message).toMatch(/server ran into a problem/i);
+    });
+
+    it('captures X-Request-ID for cross-referencing backend logs', () => {
+      const e = toApiError(axiosError(500, {}, { 'x-request-id': 'admin-abc-1' }));
+      expect(e.requestId).toBe('admin-abc-1');
     });
   });
 
-  // ────────────────────────────────────────────────────────────────
-  // Integration Tests
-  // ────────────────────────────────────────────────────────────────
-
-  describe('API Method Integration', () => {
-    it('should support common API patterns', async () => {
-      // Pattern 1: Fetch list with pagination
-      expect(() => {
-        apiGet('/issues', { page: 1, size: 20 });
-      }).not.toThrow();
-
-      // Pattern 2: Create resource
-      expect(() => {
-        apiPost('/issues', { title: 'New Issue', description: 'Description' });
-      }).not.toThrow();
-
-      // Pattern 3: Update resource
-      expect(() => {
-        apiPut('/issues/123', { title: 'Updated Title' });
-      }).not.toThrow();
-
-      // Pattern 4: Partial update
-      expect(() => {
-        apiPatch('/issues/123', { status: 'resolved' });
-      }).not.toThrow();
-
-      // Pattern 5: Delete resource
-      expect(() => {
-        apiDelete('/issues/123');
-      }).not.toThrow();
+  describe('retryability', () => {
+    it.each([429, 500, 502, 503, 504])('marks %i retryable', (status) => {
+      expect(toApiError(axiosError(status, {})).retryable).toBe(true);
     });
 
-    it('should work with complex nested data', () => {
-      const complexData = {
-        title: 'Complex Issue',
-        metadata: {
-          nested: {
-            deeply: true,
-          },
-        },
-        items: [1, 2, 3],
-        tags: ['important', 'urgent'],
-      };
-
-      expect(() => {
-        apiPost('/issues', complexData);
-      }).not.toThrow();
-    });
-
-    it('should handle empty responses', () => {
-      // Some endpoints return 204 No Content (empty response)
-      expect(() => {
-        apiDelete('/issues/123'); // DELETE often returns empty
-      }).not.toThrow();
-    });
-
-    it('should handle array responses', () => {
-      // Pattern: API returns array directly
-      expect(() => {
-        apiGet('/issues'); // Could return array instead of {items: [...]}
-      }).not.toThrow();
+    it.each([400, 401, 403, 404, 409, 422])('does not retry %i', (status) => {
+      expect(toApiError(axiosError(status, {})).retryable).toBe(false);
     });
   });
 
-  // ────────────────────────────────────────────────────────────────
-  // Error Message Extraction
-  // ────────────────────────────────────────────────────────────────
+  it('is idempotent — normalizing an ApiError returns it unchanged', () => {
+    const first = toApiError(axiosError(404, { detail: 'gone' }));
+    expect(toApiError(first)).toBe(first);
+  });
+});
 
-  describe('Error Message Extraction', () => {
-    it('should extract from response.data.message', () => {
-      const error = {
-        response: {
-          data: {
-            message: 'User not found',
-          },
-        },
-      };
-      expect(getErrorMessage(error)).toBe('User not found');
+describe('getErrorMessage', () => {
+  it('keeps the (err, fallback) signature the pages rely on', () => {
+    expect(getErrorMessage(axiosError(404, { detail: 'Issue not found' }), 'nope')).toBe(
+      'Issue not found',
+    );
+  });
+
+  it('does not let a fallback override a specific server message', () => {
+    expect(getErrorMessage(axiosError(409, { detail: 'Ward already exists' }), 'Failed')).toBe(
+      'Ward already exists',
+    );
+  });
+
+  it('handles null without throwing', () => {
+    expect(typeof getErrorMessage(null, 'Something went wrong.')).toBe('string');
+  });
+
+  it('reads the message straight off an ApiError', () => {
+    expect(getErrorMessage(new ApiError({ kind: 'network', message: 'Offline' }))).toBe('Offline');
+  });
+});
+
+describe('permissions', () => {
+  const superAdmin = { role: 'admin' };
+  const districtAdmin = { role: 'district_admin' };
+  const talukaAdmin = { role: 'taluka_admin' };
+  const wardAdmin = { role: 'ward_admin' };
+  const citizen = { role: 'citizen' };
+
+  describe('isAdminUser', () => {
+    it.each([superAdmin, districtAdmin, talukaAdmin, wardAdmin])('admits %o', (u) => {
+      expect(isAdminUser(u)).toBe(true);
     });
 
-    it('should extract from response.data.detail', () => {
-      const error = {
-        response: {
-          data: {
-            detail: 'Invalid credentials',
-          },
-        },
-      };
-      expect(getErrorMessage(error)).toBe('Invalid credentials');
+    it.each([citizen, { role: 'worker' }, null, undefined, {}])('rejects %o', (u) => {
+      expect(isAdminUser(u)).toBe(false);
     });
 
-    it('should extract from error.message as fallback', () => {
-      const error = new Error('Network timeout');
-      expect(getErrorMessage(error, 'Default')).toEqual('Default');
+    it('is an allowlist, not a substring test', () => {
+      // The old check was `role?.includes('admin')`, which passed anything with
+      // "admin" anywhere in the name.
+      expect(isAdminUser({ role: 'admin_assistant' })).toBe(false);
+      expect(isAdminUser({ role: 'not_an_admin' })).toBe(false);
+    });
+  });
+
+  it('isSuperAdmin is exact', () => {
+    expect(isSuperAdmin(superAdmin)).toBe(true);
+    expect(isSuperAdmin(districtAdmin)).toBe(false);
+  });
+
+  it('hasAtLeastRole compares down the hierarchy', () => {
+    expect(hasAtLeastRole('admin', 'ward_admin')).toBe(true);
+    expect(hasAtLeastRole('district_admin', 'taluka_admin')).toBe(true);
+    expect(hasAtLeastRole('ward_admin', 'district_admin')).toBe(false);
+    expect(hasAtLeastRole('citizen', 'ward_admin')).toBe(false);
+  });
+
+  describe('canCall — driven by the generated route manifest', () => {
+    it('permits any admin tier on a require_any_admin route', () => {
+      expect(canCall(wardAdmin, 'GET /admin/issues')).toBe(true);
+      expect(canCall(superAdmin, 'GET /admin/issues')).toBe(true);
     });
 
-    it('should return fallback when no message found', () => {
-      const error = {};
-      expect(getErrorMessage(error, 'Custom fallback')).toBe('Custom fallback');
+    it('restricts sub-admin management to the tiers the backend allows', () => {
+      expect(canCall(superAdmin, 'POST /admin/admins')).toBe(true);
+      expect(canCall(talukaAdmin, 'POST /admin/admins')).toBe(true);
+      expect(canCall(wardAdmin, 'POST /admin/admins')).toBe(false);
     });
 
-    it('should return generic message when no fallback provided', () => {
-      const error = new Error('Unknown error');
-      const message = getErrorMessage(error);
-      expect(typeof message).toBe('string');
-      expect(message.length).toBeGreaterThan(0);
+    it('restricts overrides to the super admin', () => {
+      expect(canCall(superAdmin, 'POST /admin/overrides/grant')).toBe(true);
+      expect(canCall(districtAdmin, 'POST /admin/overrides/grant')).toBe(false);
+    });
+
+    it('allows public routes to anyone', () => {
+      expect(canCall(null, 'GET /public/leaderboard')).toBe(true);
+    });
+
+    it('defers to the server for endpoints it does not know', () => {
+      // Failing closed would break the app whenever a route is added ahead of a
+      // manifest regeneration.
+      expect(canCall(wardAdmin, 'GET /admin/not-generated-yet')).toBe(true);
+    });
+  });
+
+  describe('capabilities', () => {
+    it('map to the endpoint that enforces them', () => {
+      expect(can(superAdmin, 'grantOverride')).toBe(true);
+      expect(can(wardAdmin, 'grantOverride')).toBe(false);
+      expect(can(wardAdmin, 'manageIssues')).toBe(true);
+    });
+
+    it('deny unknown capabilities', () => {
+      expect(can(superAdmin, 'summonDragons')).toBe(false);
+    });
+  });
+
+  describe('canVisit', () => {
+    it('lets any admin onto unrestricted pages', () => {
+      expect(canVisit(wardAdmin, '/dashboard')).toBe(true);
+      expect(canVisit(wardAdmin, '/dashboard/issues')).toBe(true);
+    });
+
+    it('keeps a ward admin off super-admin pages', () => {
+      // Typing the URL used to render the page anyway; every request on it then
+      // 403'd, which the old interceptor read as a dead session.
+      expect(canVisit(wardAdmin, '/dashboard/admin-overrides')).toBe(false);
+      expect(canVisit(superAdmin, '/dashboard/admin-overrides')).toBe(true);
+    });
+
+    it('applies a prefix rule to nested routes', () => {
+      expect(canVisit(wardAdmin, '/dashboard/locations/districts')).toBe(false);
+      expect(canVisit(districtAdmin, '/dashboard/locations/districts')).toBe(true);
+    });
+
+    it('refuses non-admins outright', () => {
+      expect(canVisit(citizen, '/dashboard')).toBe(false);
+      expect(canVisit(null, '/dashboard')).toBe(false);
     });
   });
 });
