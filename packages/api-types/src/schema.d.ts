@@ -2296,6 +2296,14 @@ export interface paths {
          *     server-side. It previously fetched up to 2,000 issues and filtered them in
          *     the browser, which both truncated the result and made the counts a sample.
          *
+         *     ``is_escalated`` / ``is_blocked`` are separate from ``status`` on purpose,
+         *     because that is how the data is actually shaped. ``Issue.status`` is a
+         *     Postgres enum of exactly five values and escalation and blocking are
+         *     boolean columns alongside it — an issue can be `in_progress` *and*
+         *     escalated. The console offered "escalated" as a status for a long time,
+         *     which produced a 500 rather than an empty list (see the guard below), and
+         *     left no way to list escalated issues at all.
+         *
          *     **Roles**: any admin.
          */
         get: operations["list_all_issues_admin_issues_get"];
@@ -9744,6 +9752,10 @@ export interface operations {
                 priority?: string | null;
                 /** @description Filter by department */
                 department?: string | null;
+                /** @description True lists only escalated issues. */
+                is_escalated?: boolean | null;
+                /** @description True lists only issues a worker has flagged as blocked. */
+                is_blocked?: boolean | null;
                 /** @description Drill-down for the insights screen: low_confidence | poor_resolution */
                 ai_flag?: string | null;
             };

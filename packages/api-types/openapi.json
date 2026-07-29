@@ -6745,7 +6745,7 @@
     },
     "/admin/issues": {
       "get": {
-        "description": "List all issues in the admin's scope with optional filters (paginated).\n\n``ai_flag`` exists so the AI-insights screen can page its drill-down lists\nserver-side. It previously fetched up to 2,000 issues and filtered them in\nthe browser, which both truncated the result and made the counts a sample.\n\n**Roles**: any admin.",
+        "description": "List all issues in the admin's scope with optional filters (paginated).\n\n``ai_flag`` exists so the AI-insights screen can page its drill-down lists\nserver-side. It previously fetched up to 2,000 issues and filtered them in\nthe browser, which both truncated the result and made the counts a sample.\n\n``is_escalated`` / ``is_blocked`` are separate from ``status`` on purpose,\nbecause that is how the data is actually shaped. ``Issue.status`` is a\nPostgres enum of exactly five values and escalation and blocking are\nboolean columns alongside it — an issue can be `in_progress` *and*\nescalated. The console offered \"escalated\" as a status for a long time,\nwhich produced a 500 rather than an empty list (see the guard below), and\nleft no way to list escalated issues at all.\n\n**Roles**: any admin.",
         "operationId": "list_all_issues_admin_issues_get",
         "parameters": [
           {
@@ -6869,6 +6869,42 @@
               ],
               "description": "Filter by department",
               "title": "Department"
+            }
+          },
+          {
+            "description": "True lists only escalated issues.",
+            "in": "query",
+            "name": "is_escalated",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "True lists only escalated issues.",
+              "title": "Is Escalated"
+            }
+          },
+          {
+            "description": "True lists only issues a worker has flagged as blocked.",
+            "in": "query",
+            "name": "is_blocked",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "True lists only issues a worker has flagged as blocked.",
+              "title": "Is Blocked"
             }
           },
           {
