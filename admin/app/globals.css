@@ -1,75 +1,185 @@
 @import "tailwindcss";
 
-/* Admin panel is always light mode — no dark mode */
+/*
+ * Pin the source globs.
+ *
+ * The VCS root is /home/manthan/civic-frontend, which also contains mobile/ and
+ * packages/. Tailwind v4's automatic content detection walks up to that root,
+ * so class names from the React Native app would otherwise be scanned into this
+ * bundle — slower, and occasionally surprising.
+ */
+@source "../app";
+@source "../src";
+
+/*
+ * ── Design tokens ────────────────────────────────────────────────────────────
+ *
+ * These previously lived in a plain `:root` block, which in Tailwind v4
+ * generates no utility classes at all. That is why the declared brand colour
+ * (#1a56db) appeared nowhere in the app and every screen actually rendered
+ * Tailwind's default `blue-600`. Moving them into `@theme` is what makes
+ * `bg-primary`, `text-ink-muted`, `border-border` exist.
+ *
+ * Plain `@theme`, not `@theme inline` or `@theme reference`: plain also emits
+ * the custom properties into `:root`, which the Recharts screens need — they
+ * pass raw colour strings to chart props, so `fill="var(--color-primary)"` has
+ * to resolve at runtime.
+ *
+ * Semantic colours come in triads — solid / soft (background) / strong
+ * (foreground on soft). The real duplication in this codebase was never a
+ * single colour, it was the `bg-X-100 text-X-700` badge *pair*, hardcoded in
+ * twelve separate `*_COLORS` maps. One triad plus src/components/ui/statusTones.js
+ * retires all of them.
+ */
+@theme {
+  /* ── Typography ─────────────────────────────────────────────────────────
+   * Preflight applies --font-sans to <html>, so setting it here is enough;
+   * no `body { font-family }` override is needed (and the old one pinned the
+   * whole console to Arial). --font-app is injected by next/font in layout.js.
+   */
+  --font-sans: var(--font-app), ui-sans-serif, system-ui, -apple-system,
+               "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-app-mono), ui-monospace, SFMono-Regular, Menlo,
+               Consolas, monospace;
+
+  /* ── Brand / signal ──────────────────────────────────────────────────────
+   * One accent, used sparingly. In a triage console, colour that means
+   * "clickable" competes with colour that means "overdue", and overdue has to
+   * win — so the interface is mostly slate and the accent is reserved.
+   */
+  --color-primary:        #1d4ed8;
+  --color-primary-hover:  #1e40af;
+  --color-primary-soft:   #eff6ff;
+  --color-primary-strong: #1e3a8a;
+
+  /* ── Semantic triads ─────────────────────────────────────────────────── */
+  --color-success:        #047857;
+  --color-success-soft:   #d1fae5;
+  --color-success-strong: #065f46;
+
+  --color-warning:        #b45309;
+  --color-warning-soft:   #fef3c7;
+  --color-warning-strong: #92400e;
+
+  --color-danger:         #b91c1c;
+  --color-danger-soft:    #fee2e2;
+  --color-danger-strong:  #991b1b;
+
+  --color-info:           #0e7490;
+  --color-info-soft:      #cffafe;
+  --color-info-strong:    #155e75;
+
+  --color-accent:         #6d28d9;   /* escalated */
+  --color-accent-soft:    #ede9fe;
+  --color-accent-strong:  #5b21b6;
+
+  --color-neutral:        #64748b;
+  --color-neutral-soft:   #f1f5f9;
+  --color-neutral-strong: #334155;
+
+  /* ── Surfaces and ink ────────────────────────────────────────────────────
+   * Slate rather than pure grey. A console is looked at for hours; the slight
+   * blue cast reads as a tool rather than a document.
+   *
+   * Renamed while moving: the old names generated nonsense utilities —
+   * `--color-text` would have produced `text-text` and `bg-text`.
+   */
+  --color-canvas:      #f1f5f9;
+  --color-surface:     #ffffff;
+  --color-surface-alt: #f8fafc;   /* table headers, toolbars, zebra rows */
+  --color-border:      #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-divider:     #f1f5f9;
+  --color-ink:         #0f172a;
+  --color-ink-muted:   #64748b;
+  --color-ink-subtle:  #94a3b8;
+
+  /* Chrome. The sidebar is near-black so the data area is the only bright
+     surface on screen — the eye goes to the table, not the navigation. */
+  --color-chrome:        #0f172a;
+  --color-chrome-hover:  #1e293b;
+  --color-chrome-border: #1e293b;
+  --color-chrome-ink:    #94a3b8;
+
+  /* ── Radii ───────────────────────────────────────────────────────────────
+   * Deliberately NOT named --radius-sm/md/lg. Those are Tailwind's own scale
+   * keys: redefining --radius-lg to 12px would silently restyle 327 existing
+   * `rounded-lg` elements in a commit whose diff is twenty lines of CSS.
+   * Naming them for their role keeps the migration reviewable.
+   */
+  --radius-control: 6px;   /* inputs, buttons, chips */
+  --radius-card:    10px;  /* cards, panels, modals */
+
+  /* ── Density ─────────────────────────────────────────────────────────────
+   * Row heights, exposed as tokens so "make the table denser" is one edit
+   * rather than a search across every screen.
+   */
+  --spacing-row:       2rem;     /* 32px — the dispatch-console default */
+  --spacing-row-loose: 2.75rem;  /* 44px — for rows with two lines of text */
+}
+
+/*
+ * Light-only, deliberately. This is an internal console with a fixed audience,
+ * and every `dark:` utility written now would be permanently unrendered,
+ * unreviewed code.
+ *
+ * `color-scheme` fixes the actual problem the old
+ * `input, textarea, select { color: #111827 }` rule was patching: on a machine
+ * in OS dark mode the browser recolours native controls. Declaring the scheme
+ * fixes that at the source — controls, scrollbars, autofill and all — instead
+ * of overriding one symptom.
+ */
 :root {
-  --background: #f9fafb;
-  --foreground: #111827;
-
-  /* Brand */
-  --color-primary:       #1a56db;
-  --color-primary-dark:  #1447b2;
-  --color-success:       #059669;
-  --color-warning:       #f59e0b;
-  --color-danger:        #ef4444;
-
-  /* Neutrals */
-  --color-border:        #e5e7eb;
-  --color-divider:       #f3f4f6;
-  --color-text:          #111827;
-  --color-text-muted:    #6b7280;
-  --color-text-light:    #9ca3af;
-  --color-bg:            #f9fafb;
-
-  /* Radii */
-  --radius-sm:  6px;
-  --radius-md:  8px;
-  --radius-lg:  12px;
+  color-scheme: light;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/*
+ * Numerals line up in columns.
+ *
+ * Proportional digits make a column of ids, ages and counts ripple, which is
+ * exactly the wrong property for a screen whose job is scanning them.
+ */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
-/* Ensure inputs always show dark text regardless of OS dark mode */
-input, textarea, select {
-  color: #111827;
+/*
+ * Keyframes, hoisted out of components.
+ *
+ * LoadingButton injected a <style> block containing @keyframes on every render,
+ * so the issues table — three buttons across twenty rows — put sixty identical
+ * <style> elements in the document.
+ */
+@keyframes civic-spin {
+  to { transform: rotate(360deg); }
 }
 
-/* ── Shared card style ─────────────────────────────────────────────────────── */
-.card {
-  @apply bg-white rounded-lg border border-gray-200;
+@keyframes civic-shimmer {
+  from { background-position: -800px 0; }
+  to   { background-position:  800px 0; }
 }
 
-/* ── Shared modal style ────────────────────────────────────────────────────── */
-.modal-container {
-  @apply bg-white rounded-lg shadow-lg;
+/*
+ * Respect a user's reduced-motion setting. Skeleton shimmer and spinners are
+ * decoration; for someone with vestibular sensitivity they are not.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
-/* ── Shared badge styles ───────────────────────────────────────────────────── */
-.badge {
-  @apply inline-flex px-2 py-0.5 rounded text-xs font-semibold;
-}
-
-/* ── Page header pattern ───────────────────────────────────────────────────── */
-.page-header {
-  @apply bg-white border-b border-gray-200;
-}
-.page-header-inner {
-  @apply max-w-7xl mx-auto px-6 py-6;
-}
-
-/* ── Tab bar pattern ───────────────────────────────────────────────────────── */
-.tab-bar {
-  @apply bg-white border-b border-gray-200 sticky top-0 z-10;
-}
-.tab-bar-inner {
-  @apply max-w-7xl mx-auto px-6 flex gap-8;
-}
-.tab-btn {
-  @apply py-4 text-sm font-medium border-b-2 transition-colors border-transparent text-gray-600 hover:text-gray-900;
-}
-.tab-btn-active {
-  @apply border-blue-600 text-blue-600;
+/*
+ * A visible focus ring, everywhere, that is not the browser default.
+ *
+ * This console is keyboard-driven for anyone triaging at volume, and the modals
+ * now trap focus — which is only an improvement if you can see where focus is.
+ */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
 }

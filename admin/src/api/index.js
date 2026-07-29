@@ -14,6 +14,22 @@
  *
  * Failures reject with an `ApiError` (see `./errors`), never a raw axios error.
  *
+ * ── Request cancellation ─────────────────────────────────────────────────────
+ *
+ * List methods take a trailing `config` that is spread into the axios call, so
+ * TanStack Query's `signal` can be forwarded:
+ *
+ *   queryFn: ({ signal }) => adminApi.getIssues(params, { signal })
+ *
+ * Without it, Query cannot abort an in-flight request when a component
+ * unmounts or a query key changes — a user typing in the search box leaves a
+ * trail of requests whose responses race, and the last one to *arrive* wins
+ * regardless of which query it answered.
+ *
+ * The methods the migrated screens use take it today; the rest gain it as their
+ * screen converts, so this stays a reviewable change rather than one 583-line
+ * mechanical diff touching every call site at once.
+ *
  * @see ./http.js         transport, auth, retry
  * @see ./errors.js       error normalization
  * @see ./permissions.js  role checks
@@ -153,7 +169,7 @@ export const adminApi = {
    *           ward?: string, severity?: string, priority?: string, department?: string }} [params]
    * @returns {Promise<{ data: IssueListResponse }>}
    */
-  getIssues: (params) => wrap(get('/admin/issues', { params })),
+  getIssues: (params, config) => wrap(get('/admin/issues', { params, ...config })),
 
   /** @param {string} id */
   deleteIssue: (id) => wrap(del(`/admin/issues/${id}`)),
@@ -204,7 +220,7 @@ export const adminApi = {
    * @param {{ limit?: number, offset?: number, sort?: string }} [params]
    * @returns {Promise<{ data: IssueListResponse }>}
    */
-  getBlockedTasks: (params) => wrap(get('/admin/blocked-tasks', { params })),
+  getBlockedTasks: (params, config) => wrap(get('/admin/blocked-tasks', { params, ...config })),
 
   /**
    * @param {string} id
@@ -245,7 +261,7 @@ export const adminApi = {
    * @param {{ page?: number, size?: number, is_online?: boolean, is_active?: boolean,
    *           ward?: string, department?: string, search?: string }} [params]
    */
-  getWorkers: (params) => wrap(get('/admin/workers', { params })),
+  getWorkers: (params, config) => wrap(get('/admin/workers', { params, ...config })),
 
   /** @param {string} id */
   getWorker: (id) => wrap(get(`/admin/workers/${id}`)),
@@ -278,7 +294,8 @@ export const adminApi = {
   resendWorkerInvitation: (id) => wrap(post(`/admin/workers/${id}/resend-invitation`)),
 
   /** @param {{ online_only?: boolean }} [params] */
-  getWorkerLocations: (params) => wrap(get('/admin/workers/locations', { params })),
+  getWorkerLocations: (params, config) =>
+    wrap(get('/admin/workers/locations', { params, ...config })),
 
   /** @param {string} id */
   getWorkerLocation: (id) => wrap(get(`/admin/workers/${id}/location`)),
@@ -290,12 +307,13 @@ export const adminApi = {
    * filter, so weekly/monthly/all-time cannot be answered server-side today.
    * @param {number} [limit]
    */
-  getWorkerLeaderboard: (limit = 50) =>
+  getWorkerLeaderboard: (limit = 50, config) =>
     // `limit` is capped at 50 server-side (422 above that).
-    wrap(get('/admin/workers/leaderboard', { params: { limit: Math.min(limit, 50) } })),
+    wrap(get('/admin/workers/leaderboard', { params: { limit: Math.min(limit, 50) }, ...config })),
 
   /** @param {string} id @param {number} [days] */
-  getWorkerReport: (id, days = 30) => wrap(get(`/admin/workers/${id}/report`, { params: { days } })),
+  getWorkerReport: (id, days = 30, config) =>
+    wrap(get(`/admin/workers/${id}/report`, { params: { days }, ...config })),
 
   /** @param {string} workerId */
   getWorkerComplaintSummary: (workerId) => wrap(get(`/admin/workers/${workerId}/complaints`)),
@@ -303,7 +321,7 @@ export const adminApi = {
   /* ── Citizens ────────────────────────────────────────────────────────── */
 
   /** @param {{ page?: number, size?: number, search?: string, ward?: string }} [params] */
-  getCitizens: (params) => wrap(get('/admin/citizens', { params })),
+  getCitizens: (params, config) => wrap(get('/admin/citizens', { params, ...config })),
 
   /** @param {string} id */
   getCitizen: (id) => wrap(get(`/admin/citizens/${id}`)),
@@ -323,7 +341,7 @@ export const adminApi = {
   /* ── Sub-admins ──────────────────────────────────────────────────────── */
 
   /** @param {{ role?: string, page?: number, size?: number }} [params] */
-  getAdmins: (params) => wrap(get('/admin/admins', { params })),
+  getAdmins: (params, config) => wrap(get('/admin/admins', { params, ...config })),
 
   /**
    * @param {CreateSubAdminRequest} data
@@ -371,11 +389,41 @@ export const adminApi = {
   /** @param {string} id */
   deleteAnnouncement: (id) => wrap(del(`/admin/announcements/${id}`)),
 
-  // There is deliberately no `updateAnnouncement`. The old one called
-  // `PATCH /admin/announcements/{id}`, which the backend has never defined —
-  // the edit flow 405'd every time. Delete-and-recreate is not a substitute:
-  // it mints a new ID and re-pushes the notification to every recipient.
-  // Editing needs a real backend route.
+  /**
+   * Edit an announcement's text, expiry or map pin.
+   *
+   * `PATCH /admin/announcements/{id}` now exists. It did not for a long time —
+   * the console shipped a complete Edit modal wired to a toast explaining the
+   * backend could not do it, and delete-and-recreate was the only option, which
+   * minted a new id and re-pushed to every recipient.
+   *
+   * **Editing never re-notifies.** The server leaves `push_dispatched_at`
+   * untouched, so an edit does not reach anyone who already received the
+   * original — the response carries that field so the UI can say so.
+   * `scope` is not editable: re-scoping a delivered announcement is a new post.
+   *
+   * @param {string} id
+   * @param {{ title?: string, body?: string, expires_at?: string|null,
+   *           location_lat?: number|null, location_lng?: number|null }} data
+   */
+  updateAnnouncement: (id, data) => wrap(patch(`/admin/announcements/${id}`, data)),
+
+  /* ── Insights ────────────────────────────────────────────────────────── */
+
+  /**
+   * Aggregate insights for the caller's jurisdiction, computed in SQL.
+   *
+   * This replaces what the AI-insights screen used to do in the browser: page
+   * `/admin/issues` 200 rows at a time up to a 2,000-row ceiling, aggregate
+   * client-side, and render an amber banner conceding the figures were "a
+   * sample, not a total".
+   *
+   * `narrative` is best-effort — null when no provider is configured or the
+   * call fails, with every number still present.
+   *
+   * @param {{ days?: number, narrative?: boolean }} [params]
+   */
+  getInsights: (params, config) => wrap(get('/admin/insights', { params, ...config })),
 
   /* ── Squads ──────────────────────────────────────────────────────────── */
 
@@ -440,8 +488,9 @@ export const adminApi = {
 
   /* ── Surveys ─────────────────────────────────────────────────────────── */
 
-  /** @param {number} [days] */
-  getSurveyStats: (days = 30) => wrap(get('/admin/surveys/stats', { params: { days } })),
+  /** @param {number} [days] @param {object} [config] */
+  getSurveyStats: (days = 30, config) =>
+    wrap(get('/admin/surveys/stats', { params: { days }, ...config })),
 
   /* ── Custom issue types ──────────────────────────────────────────────── */
 
@@ -473,16 +522,16 @@ export const adminApi = {
   /** @param {GrantOverrideRequest} data */
   grantOverride: (data) => wrap(post('/admin/overrides/grant', data)),
 
-  /** @param {number} [page] @param {number} [size] */
-  getActiveOverrides: (page = 1, size = 20) =>
-    wrap(get('/admin/overrides/active', { params: { page, size } })),
+  /** @param {number} [page] @param {number} [size] @param {object} [config] */
+  getActiveOverrides: (page = 1, size = 20, config) =>
+    wrap(get('/admin/overrides/active', { params: { page, size }, ...config })),
 
   /** @param {string} override_id */
   revokeOverride: (override_id) => wrap(post(`/admin/overrides/${override_id}/revoke`)),
 
-  /** @param {number} [page] @param {number} [size] */
-  getOverrideAuditLog: (page = 1, size = 50) =>
-    wrap(get('/admin/overrides/audit-log', { params: { page, size } })),
+  /** @param {number} [page] @param {number} [size] @param {object} [config] */
+  getOverrideAuditLog: (page = 1, size = 50, config) =>
+    wrap(get('/admin/overrides/audit-log', { params: { page, size }, ...config })),
 
   /* ── Admin messaging ─────────────────────────────────────────────────── */
 
@@ -517,8 +566,8 @@ const defined = (obj) =>
   Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null && v !== undefined && v !== ''));
 
 export const locationsApi = {
-  getTree: () => wrap(get('/locations/tree')),
-  getDistricts: () => wrap(get('/locations/districts')),
+  getTree: (config) => wrap(get('/locations/tree', config)),
+  getDistricts: (config) => wrap(get('/locations/districts', config)),
 
   /**
    * @param {string} q
@@ -544,7 +593,7 @@ export const locationsApi = {
   deleteDistrict: (id) => wrap(del(`/locations/districts/${id}`)),
 
   /** @param {string} district_id */
-  getTalukas: (district_id) => wrap(get(`/locations/districts/${district_id}/talukas`)),
+  getTalukas: (district_id, config) => wrap(get(`/locations/districts/${district_id}/talukas`, config)),
 
   createTaluka: (district_id, name, centroid_lat = null, centroid_lon = null) =>
     wrap(
@@ -560,7 +609,7 @@ export const locationsApi = {
   deleteTaluka: (id) => wrap(del(`/locations/talukas/${id}`)),
 
   /** @param {string} taluka_id */
-  getWards: (taluka_id) => wrap(get(`/locations/talukas/${taluka_id}/wards`)),
+  getWards: (taluka_id, config) => wrap(get(`/locations/talukas/${taluka_id}/wards`, config)),
 
   createWard: (taluka_id, name, ward_number, centroid_lat = null, centroid_lon = null) =>
     wrap(

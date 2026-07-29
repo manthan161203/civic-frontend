@@ -1,5 +1,14 @@
 'use client';
 
+/**
+ * The dashboard's own loading shape.
+ *
+ * `CardSkeleton`, `ListSkeleton` and `FormSkeleton` used to live here too. Their
+ * only consumer was `/dashboard/loading-preview`, a dev gallery that was still
+ * routed in production builds; both it and they are gone. Anything new should
+ * use `Skeleton.jsx`, which is token-driven and honours `prefers-reduced-motion`
+ * — these predate it and hardcode blue.
+ */
 export function DashboardSkeleton() {
   return (
     <div className="space-y-6">
@@ -74,60 +83,6 @@ export function DashboardSkeleton() {
             </div>
           ))}
         </div>
-      </div>
-    </div>
-  );
-}
-
-export function CardSkeleton({ count = 3 }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {[...Array(count)].map((_, i) => (
-        <div key={i} className="bg-white rounded-lg p-4 border border-blue-100 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="w-12 h-12 rounded-lg shimmer bg-blue-50" />
-            <div className="flex-1 space-y-2">
-              <div className="h-5 w-24 rounded shimmer bg-blue-100" />
-              <div className="h-3 w-32 rounded shimmer bg-gray-100" />
-              <div className="h-3 w-20 rounded shimmer bg-gray-100" />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function ListSkeleton({ count = 5 }) {
-  return (
-    <div className="space-y-2">
-      {[...Array(count)].map((_, i) => (
-        <div key={i} className="bg-white rounded-lg p-4 border border-blue-100 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div className="flex-1 space-y-2">
-              <div className="h-4 w-48 rounded shimmer bg-blue-100" />
-              <div className="h-3 w-64 rounded shimmer bg-gray-100" />
-            </div>
-            <div className="h-8 w-20 rounded shimmer bg-blue-50" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function FormSkeleton() {
-  return (
-    <div className="bg-white rounded-lg p-6 border border-blue-100 shadow-sm space-y-5">
-      {[...Array(4)].map((_, i) => (
-        <div key={i} className="space-y-2">
-          <div className="h-4 w-24 rounded shimmer bg-blue-100" />
-          <div className="h-10 w-full rounded shimmer bg-blue-50" />
-        </div>
-      ))}
-      <div className="flex gap-3 pt-2">
-        <div className="h-10 w-24 rounded shimmer bg-blue-100" />
-        <div className="h-10 w-24 rounded shimmer bg-blue-50" />
       </div>
     </div>
   );

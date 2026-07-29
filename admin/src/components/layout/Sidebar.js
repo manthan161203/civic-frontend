@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { adminApi } from '../../api/index';
+import { logger } from '../../lib/logger';
 
 // roles that can see each nav item — undefined means visible to all
 // 'admin' = super admin only, 'district+' = district/super, 'any' = all admin roles
@@ -280,7 +281,7 @@ export default function Sidebar() {
     if (user?.role && user.role !== 'admin') {
       adminApi.getMyScope()
         .then(({ data }) => setScope(data))
-        .catch(() => {});
+        .catch((e) => logger.warn('Sidebar', 'Admin scope failed to load', e));
     }
   }, [user?.role]);
 
