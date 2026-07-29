@@ -21,12 +21,8 @@
 
 | File | Purpose | Time | Reader |
 |------|---------|------|--------|
-| [START_HERE.md](START_HERE.md) | Master index & navigation | 5 min | Everyone |
-| [README_IMPROVEMENTS.md](README_IMPROVEMENTS.md) | Quick overview | 2 min | Managers |
-| [COMPLETION_STATUS.md](COMPLETION_STATUS.md) | Full breakdown | 10 min | Leads |
-| [IMPROVEMENTS_SUMMARY.md](IMPROVEMENTS_SUMMARY.md) | Technical deep-dive | 20 min | Architects |
-| [civic-frontend/FRONTEND_IMPROVEMENTS.md](civic-frontend/FRONTEND_IMPROVEMENTS.md) | Implementation guide | 15 min | Developers |
-| [FILE_REFERENCE.md](FILE_REFERENCE.md) | Quick lookup | 5 min | Everyone |
+| the repository `README.md` | Full breakdown | 10 min | Leads |
+| the repository `README.md` | Quick lookup | 5 min | Everyone |
 
 ---
 
@@ -99,7 +95,6 @@ const notify = useErrorNotification();
 ## ✅ Checklists
 
 ### Before You Start
-- [ ] Read START_HERE.md
 - [ ] Read role-specific guide
 - [ ] Understand your scope
 - [ ] Set up environment
@@ -123,12 +118,10 @@ const notify = useErrorNotification();
 ## 🎓 By Role
 
 ### Backend Developer
-**Read**: IMPROVEMENTS_SUMMARY.md (backend section)
 **Do**: Review utilities → Review exceptions → Review constants
 **Time**: 30 min
 
 ### Frontend Developer
-**Read**: FRONTEND_IMPROVEMENTS.md
 **Do**: Copy files → Update client → Test
 **Time**: 2-3 hours
 
@@ -138,7 +131,6 @@ const notify = useErrorNotification();
 **Time**: 1-2 hours per app
 
 ### Project Manager
-**Read**: README_IMPROVEMENTS.md
 **Do**: Track progress, manage timeline
 **Time**: 2 min (ongoing)
 
@@ -147,22 +139,22 @@ const notify = useErrorNotification();
 ## 🔧 Common Tasks
 
 ### "How do I use the error handler?"
-→ See FRONTEND_IMPROVEMENTS.md, Section 1
+→ See `admin/INTEGRATION_GUIDE.md`, Section 1
 
 ### "How do I validate a form?"
-→ See FRONTEND_IMPROVEMENTS.md, Section 2
+→ See `admin/INTEGRATION_GUIDE.md`, Section 2
 
 ### "How do I retry failed requests?"
-→ See FRONTEND_IMPROVEMENTS.md, Section 3
+→ See `admin/INTEGRATION_GUIDE.md`, Section 3
 
 ### "How do I manage UI state?"
-→ See FRONTEND_IMPROVEMENTS.md, Section 4
+→ See `admin/INTEGRATION_GUIDE.md`, Section 4
 
 ### "Where is file X?"
-→ See FILE_REFERENCE.md
+→ See the repository `README.md`
 
 ### "What's the integration process?"
-→ See FRONTEND_IMPROVEMENTS.md, Section 5
+→ See `admin/INTEGRATION_GUIDE.md`, Section 5
 
 ---
 
@@ -195,7 +187,6 @@ const notify = useErrorNotification();
 
 ## 📞 Quick Help
 
-**"Where do I start?"** → START_HERE.md → Your role guide
 
 **"How long does integration take?"** → 2-3 hours per app
 
@@ -203,7 +194,6 @@ const notify = useErrorNotification();
 
 **"Is this production-ready?"** → Yes, fully tested
 
-**"What's the next step?"** → Read START_HERE.md
 
 ---
 
@@ -216,20 +206,16 @@ const notify = useErrorNotification();
 **Docs**: 5 comprehensive guides
 **Status**: ✅ Complete and ready
 **Time to integrate**: 2-3 hours per app
-**Next**: Read START_HERE.md
 
 ---
 
 ## 📌 Bookmark These
 
-1. **START_HERE.md** - Master navigation
-2. **FILE_REFERENCE.md** - Quick lookup
-3. **FRONTEND_IMPROVEMENTS.md** - Your implementation guide
+2. **the repository `README.md`** - Quick lookup
 4. **This card** - Quick reference
 
 ---
 
-**Ready to get started?** → Open [START_HERE.md](START_HERE.md)
 
 ---
 

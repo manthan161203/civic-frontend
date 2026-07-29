@@ -322,8 +322,6 @@ newman run Civic_API_Postman_Collection.json \
 ## Support & Documentation
 
 For detailed API documentation, see:
-- [API_DOCUMENTATION.md](API_DOCUMENTATION.md) - Complete endpoint reference
-- [INTEGRATION_EXAMPLES.md](INTEGRATION_EXAMPLES.md) - Code examples
 - [Backend README](civic-backend/README.md) - Backend setup
 
 ## API Response Examples
