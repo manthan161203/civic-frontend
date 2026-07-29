@@ -49,7 +49,26 @@ import IssueDetailModal from './IssueDetailModal';
  *    worker names — a hand-rolled query cache, now one `useQuery`.
  */
 
-const STATUSES = ['open', 'assigned', 'in_progress', 'resolved', 'escalated', 'closed'];
+/*
+ * The five values `Issue.status` can actually hold.
+ *
+ * `escalated` used to be in this list, and selecting it returned a **500**, not
+ * an empty table: `status` is a native Postgres enum, so psycopg rejects an
+ * unknown literal outright and the handler's `except Exception` turned that
+ * into "Failed to fetch issues".
+ *
+ * Escalation and blocking are boolean columns *alongside* status — an issue can
+ * be `in_progress` and escalated at once — so they are separate controls below,
+ * backed by the `is_escalated` / `is_blocked` query parameters.
+ */
+const STATUSES = ['open', 'assigned', 'in_progress', 'resolved', 'closed'];
+
+/** The flag filters, as a single-select because "escalated AND blocked" is a
+ *  narrow enough slice that nobody asks for it from a toolbar. */
+const FLAGS = [
+  { value: 'escalated', label: 'Escalated only' },
+  { value: 'blocked', label: 'Blocked only' },
+];
 
 // Matches the backend enum exactly. There is no `critical`.
 const PRIORITIES = ['urgent', 'high', 'medium', 'low'];
@@ -67,7 +86,7 @@ export default function IssuesPage() {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
 
-  const [filters, setFilters] = useState({ status: '', priority: '', search: '' });
+  const [filters, setFilters] = useState({ status: '', priority: '', flag: '', search: '' });
   const [selectedIds, setSelectedIds] = useState([]);
   const [assignIssue, setAssignIssue] = useState(null);
   const [detailIssue, setDetailIssue] = useState(null);
@@ -76,7 +95,7 @@ export default function IssuesPage() {
 
   const paged = usePagedList({
     initialPageSize: 20,
-    resetOn: [filters.status, filters.priority, search],
+    resetOn: [filters.status, filters.priority, filters.flag, search],
     onReset: () => {
       // Selection is page-scoped; keeping it across a filter change would let a
       // bulk action touch rows that are no longer on screen.
@@ -90,9 +109,11 @@ export default function IssuesPage() {
       ...paged.params,
       ...(filters.status && { status: filters.status }),
       ...(filters.priority && { priority: filters.priority }),
+      ...(filters.flag === 'escalated' && { is_escalated: true }),
+      ...(filters.flag === 'blocked' && { is_blocked: true }),
       ...(search && { search }),
     }),
-    [paged.params, filters.status, filters.priority, search],
+    [paged.params, filters.status, filters.priority, filters.flag, search],
   );
 
   const issuesQuery = useQuery({
@@ -102,21 +123,6 @@ export default function IssuesPage() {
 
   const rows = issuesQuery.data?.items ?? [];
   const total = issuesQuery.data?.total ?? 0;
-
-  /**
-   * Worker id → name, for the assignment column.
-   *
-   * Replaces three chained effects plus a `useRef(new Set())` de-dupe cache
-   * that fetched missing workers one at a time after every page change.
-   */
-  const { data: workerMap = {} } = useQuery({
-    queryKey: qk.workers.nameMap(),
-    queryFn: ({ signal }) =>
-      adminApi.getWorkers({ size: 200 }, { signal }).then(({ data }) =>
-        Object.fromEntries((data.items ?? data).map((w) => [w.id, w.name])),
-      ),
-    staleTime: 5 * 60_000,
-  });
 
   const { data: locationTree = [] } = useQuery({
     queryKey: qk.locations.all,
@@ -242,12 +248,25 @@ export default function IssuesPage() {
         ),
       },
       {
-        key: 'assigned_worker_id',
+        /*
+         * The name comes off the row.
+         *
+         * This column used to be backed by a second query that fetched 200
+         * workers and built an id→name map. Two problems, and the API had
+         * already solved both: `assigned_worker_name` is a relationship-backed
+         * property on `Issue`, so it is on every row already.
+         *
+         *  - 200 is the endpoint's hard cap, so worker #201 onward rendered a
+         *    permanent "…" with nothing saying the list had been truncated.
+         *  - It was a whole extra request per session to look up data that had
+         *    arrived with the issues.
+         */
+        key: 'assigned_worker_name',
         header: 'Assigned',
         render: (issue) =>
           issue.assigned_worker_id ? (
             <span className="truncate text-xs text-ink">
-              {workerMap[issue.assigned_worker_id] ?? '…'}
+              {issue.assigned_worker_name ?? '—'}
             </span>
           ) : (
             <span className="text-xs text-ink-subtle">—</span>
@@ -292,10 +311,12 @@ export default function IssuesPage() {
         ),
       },
     ],
-    [workerMap, escalate, remove, confirm],
+    [escalate, remove, confirm],
   );
 
-  const hasFilters = Boolean(filters.status || filters.priority || filters.search);
+  const hasFilters = Boolean(
+    filters.status || filters.priority || filters.flag || filters.search,
+  );
 
   const handleExport = async () => {
     try {
@@ -370,11 +391,18 @@ export default function IssuesPage() {
           placeholder="All priorities"
           label="Filter by priority"
         />
+        <FilterSelect
+          value={filters.flag}
+          onChange={(v) => setFilters((f) => ({ ...f, flag: v }))}
+          options={FLAGS}
+          placeholder="Escalated / blocked"
+          label="Filter by flag"
+        />
         {hasFilters && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setFilters({ status: '', priority: '', search: '' })}
+            onClick={() => setFilters({ status: '', priority: '', flag: '', search: '' })}
           >
             Reset
           </Button>
@@ -461,7 +489,7 @@ export default function IssuesPage() {
       <IssueDetailModal
         open={Boolean(detailIssue)}
         issue={detailIssue}
-        workerName={detailIssue ? workerMap[detailIssue.assigned_worker_id] : undefined}
+        workerName={detailIssue?.assigned_worker_name ?? undefined}
         onClose={() => setDetailIssue(null)}
       />
     </div>

@@ -56,11 +56,16 @@ export default function IssueDetailModal({ open, issue, workerName, onClose }) {
         <div className="flex flex-wrap items-center gap-1.5">
           <StatusBadge kind="issueStatus" value={issue.status} />
           <StatusBadge kind="priority" value={issue.priority} />
+          {/* `issueFlag`, not `issueStatus`. Both of these are booleans that sit
+              alongside the status rather than replacing it, and "blocked" was
+              never in the status registry at all — it fell through to the
+              humanised fallback and rendered neutral grey, which is the one
+              tone a blocked task should not have. */}
           {issue.is_escalated && (
-            <StatusBadge kind="issueStatus" value="escalated" appearance="solid" />
+            <StatusBadge kind="issueFlag" value="escalated" appearance="solid" />
           )}
           {issue.is_blocked && (
-            <StatusBadge kind="issueStatus" value="blocked" appearance="outline" />
+            <StatusBadge kind="issueFlag" value="blocked" appearance="solid" />
           )}
         </div>
 

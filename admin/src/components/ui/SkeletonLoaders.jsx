@@ -1,85 +1,82 @@
 'use client';
 
+import Skeleton from './Skeleton';
+
 /**
- * The dashboard's own loading shape.
+ * The dashboard's loading shape.
+ *
+ * ── What this used to be ─────────────────────────────────────────────────────
+ *
+ * A blue-tinted skeleton with its own `@keyframes shimmer` in an inline
+ * `<style>` block. Three problems, in rising order of seriousness:
+ *
+ *  - **Blue.** A skeleton stands in for content that has not arrived. Tinting it
+ *    with the brand colour makes it read as content — several small blue cards
+ *    where the real screen has white ones — so the moment data lands the whole
+ *    page changes colour.
+ *  - **The inline `<style>`.** Rendered once per mount, and the same trick
+ *    elsewhere put sixty duplicate `<style>` elements on the issues table.
+ *    `civic-shimmer` lives in globals.css now.
+ *  - **No reduced-motion handling.** globals.css stops the shared animation for
+ *    anyone who has asked for that; a component-local keyframe ignores it.
  *
  * `CardSkeleton`, `ListSkeleton` and `FormSkeleton` used to live here too. Their
  * only consumer was `/dashboard/loading-preview`, a dev gallery that was still
- * routed in production builds; both it and they are gone. Anything new should
- * use `Skeleton.jsx`, which is token-driven and honours `prefers-reduced-motion`
- * — these predate it and hardcode blue.
+ * routed in production builds; it and they are gone.
+ *
+ * ── Why it stays a bespoke component ─────────────────────────────────────────
+ *
+ * `SkeletonCards` covers a plain grid. This screen is a grid *and* two charts
+ * *and* a table, and a skeleton is only worth having if it is the same shape and
+ * height as what replaces it — otherwise the page jumps when data lands, which
+ * is the thing skeletons exist to prevent.
  */
 export function DashboardSkeleton() {
   return (
-    <div className="space-y-6">
-      <style>{`
-        @keyframes shimmer {
-          0% { background-position: -1000px 0; }
-          100% { background-position: 1000px 0; }
-        }
-        .shimmer {
-          animation: shimmer 2s infinite;
-          background: linear-gradient(
-            to right,
-            #ffffff 0%,
-            #f0f4f8 50%,
-            #ffffff 100%
-          );
-          background-size: 1000px 100%;
-        }
-      `}</style>
-
-      {/* Header Skeleton */}
-      <div className="space-y-2 mb-6">
-        <div className="h-8 w-48 rounded-lg shimmer bg-blue-50" />
-        <div className="h-4 w-80 rounded shimmer bg-gray-100" />
+    <div className="space-y-4" role="status" aria-label="Loading dashboard">
+      <div className="space-y-2">
+        <Skeleton height={20} width="12rem" />
+        <Skeleton height={12} width="20rem" />
       </div>
 
-      {/* Stats Grid Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-white rounded-lg p-5 border border-blue-100 shadow-sm">
-            <div className="flex items-start justify-between mb-4">
-              <div className="space-y-2 flex-1">
-                <div className="h-4 w-24 rounded shimmer bg-blue-100" />
-                <div className="h-3 w-16 rounded shimmer bg-gray-100" />
-              </div>
-              <div className="w-12 h-12 rounded-lg shimmer bg-blue-50" />
-            </div>
-            <div className="h-8 w-20 rounded shimmer bg-blue-100" />
+      {/* Stat tiles — matches the four StatCards on the real screen. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="rounded-card border border-border bg-surface p-4">
+            <Skeleton height={11} width="60%" />
+            <Skeleton height={26} width="45%" className="mt-3" />
+            <Skeleton height={10} width="70%" className="mt-2" />
           </div>
         ))}
       </div>
 
-      {/* Charts Skeleton */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {[...Array(2)].map((_, i) => (
-          <div key={i} className="bg-white rounded-lg p-5 border border-blue-100 shadow-sm">
-            <div className="h-5 w-40 rounded shimmer bg-blue-100 mb-6" />
-            <div className="space-y-3">
-              {[...Array(4)].map((_, j) => (
-                <div key={j} className="flex items-end gap-2">
-                  <div className="flex-1 h-10 rounded shimmer bg-blue-50" />
-                  <div className="w-10 h-3 rounded shimmer bg-gray-100" />
-                </div>
+      {/* Two charts side by side. Fixed height so the row does not resize. */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {Array.from({ length: 2 }, (_, i) => (
+          <div key={i} className="rounded-card border border-border bg-surface p-4">
+            <Skeleton height={13} width="10rem" />
+            <div className="mt-5 flex h-40 items-end gap-2">
+              {/* Deterministic heights, not random: a skeleton that reshuffles
+                  on every render reads as content still arriving. */}
+              {[45, 70, 30, 85, 55, 65, 40].map((h, j) => (
+                <Skeleton key={j} height={`${h}%`} className="flex-1" />
               ))}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Table Skeleton */}
-      <div className="bg-white rounded-lg p-5 border border-blue-100 shadow-sm">
-        <div className="h-5 w-40 rounded shimmer bg-blue-100 mb-6" />
-        <div className="space-y-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="flex items-center gap-4 py-3 border-b border-blue-50 last:border-b-0">
-              <div className="w-10 h-10 rounded shimmer bg-blue-50" />
+      <div className="rounded-card border border-border bg-surface p-4">
+        <Skeleton height={13} width="10rem" />
+        <div className="mt-4 space-y-3">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="flex items-center gap-3 border-b border-divider pb-3 last:border-0">
+              <Skeleton width={32} height={32} rounded="full" />
               <div className="flex-1 space-y-1.5">
-                <div className="h-4 w-32 rounded shimmer bg-blue-100" />
-                <div className="h-3 w-48 rounded shimmer bg-gray-100" />
+                <Skeleton height={12} width={`${45 + ((i * 13) % 30)}%`} />
+                <Skeleton height={10} width="60%" />
               </div>
-              <div className="h-8 w-20 rounded shimmer bg-blue-50" />
+              <Skeleton height={22} width="4.5rem" />
             </div>
           ))}
         </div>

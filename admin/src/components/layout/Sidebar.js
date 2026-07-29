@@ -92,6 +92,40 @@ const NAV = [
     ),
   },
   {
+    /*
+     * `GET /admin/insights` and this whole screen were built and then never
+     * linked, so the only way in was to type the URL. The endpoint is
+     * `require_any_admin`, which is why there is no `roles` gate here and no
+     * ROUTE_ROLES entry — every admin tier can see the aggregates for their own
+     * jurisdiction.
+     */
+    href: '/dashboard/ai-insights',
+    label: 'AI Insights',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:18,height:18}}>
+        <path d="M12 2a7 7 0 00-4 12.7V17a2 2 0 002 2h4a2 2 0 002-2v-2.3A7 7 0 0012 2z" />
+        <line x1="9" y1="22" x2="15" y2="22" />
+      </svg>
+    ),
+  },
+  {
+    /*
+     * Same story, with a tell: this route already had a ROUTE_ROLES entry in
+     * src/api/permissions.js — it was role-gated for a link that did not exist.
+     * The roles here mirror it exactly; if they drift, `canVisit` wins and the
+     * link becomes a redirect.
+     */
+    href: '/dashboard/geofence',
+    label: 'Geofences',
+    roles: ['admin', 'district_admin'],
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:18,height:18}}>
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="3.5" />
+      </svg>
+    ),
+  },
+  {
     href: '/dashboard/sla',
     label: 'SLA Monitor',
     roles: ['admin', 'district_admin', 'taluka_admin', 'ward_admin'],
@@ -290,17 +324,24 @@ export default function Sidebar() {
     router.push('/login');
   };
 
+  /*
+   * The `chrome` tokens exist for exactly this surface. The sidebar is
+   * deliberately near-black so the data area is the only bright thing on
+   * screen — but it was hardcoded to `gray-950`/`gray-900`/`gray-800`, so
+   * "make the chrome a shade lighter" meant editing a dozen class strings
+   * instead of one custom property.
+   */
   return (
-    <aside className="w-60 bg-gray-950 flex flex-col h-full border-r border-gray-900">
+    <aside className="w-60 bg-chrome flex flex-col h-full border-r border-chrome-border">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-gray-800/60">
+      <div className="px-5 py-5 border-b border-chrome-border">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
             <span className="text-white font-black text-base leading-none">C</span>
           </div>
           <div>
             <div className="text-white font-bold text-sm leading-tight tracking-wide">Civic</div>
-            <div className="text-gray-500 text-xs">Admin Panel</div>
+            <div className="text-chrome-ink text-xs">Admin Panel</div>
           </div>
         </div>
       </div>
@@ -315,11 +356,11 @@ export default function Sidebar() {
               href={href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 active
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800/70'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-chrome-ink hover:text-white hover:bg-chrome-hover'
               }`}
             >
-              <span className={`flex-shrink-0 ${active ? 'text-white' : 'text-gray-500'}`}>
+              <span className={`flex-shrink-0 ${active ? 'text-white' : 'text-chrome-ink'}`}>
                 {icon}
               </span>
               <span className="truncate">{label}</span>
@@ -329,18 +370,18 @@ export default function Sidebar() {
       </nav>
 
       {/* User */}
-      <div className="px-4 py-4 border-t border-gray-800/60">
-        <Link href="/dashboard/profile" className="flex items-center gap-3 mb-3 rounded-lg px-1 py-1 hover:bg-gray-800/50 transition-colors group">
-          <div className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center flex-shrink-0">
+      <div className="px-4 py-4 border-t border-chrome-border">
+        <Link href="/dashboard/profile" className="flex items-center gap-3 mb-3 rounded-control px-1 py-1 hover:bg-chrome-hover transition-colors group">
+          <div className="w-8 h-8 rounded-full bg-primary-hover flex items-center justify-center flex-shrink-0">
             <span className="text-white text-sm font-bold">
               {user?.name?.charAt(0)?.toUpperCase() || 'A'}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-white text-xs font-semibold truncate group-hover:text-blue-300 transition-colors">{user?.name || 'Admin'}</div>
-            <div className="text-gray-500 text-xs truncate">{ROLE_LABELS[user?.role] || user?.role}</div>
+            <div className="text-white text-xs font-semibold truncate group-hover:text-primary transition-colors">{user?.name || 'Admin'}</div>
+            <div className="text-chrome-ink text-xs truncate">{ROLE_LABELS[user?.role] || user?.role}</div>
             {scope?.district_name && (
-              <div className="text-xs text-blue-400 mt-0.5 truncate flex items-center gap-1">
+              <div className="text-xs text-primary mt-0.5 truncate flex items-center gap-1">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:10,height:10}} className="flex-shrink-0">
                   <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
                   <circle cx="12" cy="10" r="3" />
@@ -349,13 +390,13 @@ export default function Sidebar() {
               </div>
             )}
           </div>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:12,height:12}} className="text-gray-600 flex-shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:12,height:12}} className="text-chrome-ink flex-shrink-0">
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </Link>
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-2 text-gray-500 hover:text-red-400 text-xs px-2 py-1.5 rounded-lg hover:bg-gray-800/50 transition-colors"
+          className="w-full flex items-center gap-2 text-chrome-ink hover:text-danger text-xs px-2 py-1.5 rounded-control hover:bg-chrome-hover transition-colors"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 flex-shrink-0">
             <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />

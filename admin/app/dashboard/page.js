@@ -3,7 +3,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { adminApi } from '../../src/api/index';
 import { DashboardSkeleton } from '../../src/components/ui/SkeletonLoaders';
-import LoadingPage from '../../src/components/ui/LoadingPage';
 import { logger } from '../../src/lib/logger';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,

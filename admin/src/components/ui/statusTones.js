@@ -35,14 +35,37 @@
  * @type {Record<string, Record<string, ToneEntry>>}
  */
 export const STATUS_TONES = {
-  /** Issue.status — open | assigned | in_progress | resolved | escalated | closed */
+  /**
+   * Issue.status — the backend enum is exactly
+   * `open | assigned | in_progress | resolved | closed`.
+   *
+   * This comment used to list `escalated` as a sixth value, and that mistake is
+   * where a **500** came from: the issues screen copied the list into its
+   * status filter, and `status` is a native Postgres enum, so an unknown
+   * literal is a driver error rather than an empty result.
+   *
+   * `escalated` and `blocked` remain in this registry below — but as *flags*,
+   * not statuses. They are boolean columns (`is_escalated`, `is_blocked`) that
+   * sit alongside status, so an issue is legitimately both `in_progress` and
+   * escalated, and both badges render together.
+   */
   issueStatus: {
     open:        { tone: 'danger',  label: 'Open' },
     assigned:    { tone: 'info',    label: 'Assigned' },
     in_progress: { tone: 'primary', label: 'In progress' },
     resolved:    { tone: 'success', label: 'Resolved' },
-    escalated:   { tone: 'accent',  label: 'Escalated' },
     closed:      { tone: 'neutral', label: 'Closed' },
+  },
+
+  /**
+   * Boolean flags on an issue, rendered beside its status rather than instead
+   * of it. Keyed on the flag name so a call site reads
+   * `<StatusBadge kind="issueFlag" value="escalated" />`.
+   */
+  issueFlag: {
+    escalated: { tone: 'accent',  label: 'Escalated' },
+    blocked:   { tone: 'warning', label: 'Blocked' },
+    sos:       { tone: 'danger',  label: 'SOS' },
   },
 
   /**

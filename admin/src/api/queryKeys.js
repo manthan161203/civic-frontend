@@ -29,8 +29,6 @@ export const qk = {
     all: ['admin', 'workers'],
     list: (params) => ['admin', 'workers', 'list', params],
     detail: (id) => ['admin', 'workers', 'detail', id],
-    /** Id → name, used to label assignment cells. Long staleTime. */
-    nameMap: () => ['admin', 'workers', 'nameMap'],
     locations: () => ['admin', 'workers', 'locations'],
     leaderboard: (params) => ['admin', 'workers', 'leaderboard', params],
   },
