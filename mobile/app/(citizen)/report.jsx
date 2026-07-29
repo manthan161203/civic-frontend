@@ -1,22 +1,26 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, Image, ActivityIndicator, Modal, Platform,
+  ScrollView, Image, ActivityIndicator, Modal, Platform,
+  KeyboardAvoidingView, Keyboard, TouchableWithoutFeedback,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { issuesApi } from '../../src/api/issues';
 import { locationsApi } from '../../src/api/locations';
-import { useUiStore } from '../../src/store/uiStore';
 import { reverseGeocode } from '../../src/utils/geocode';
 import MapView, { Marker } from '../../src/components/PlatformMap';
 import { compressImage } from '../../src/utils/imageUtils';
 import { enqueue, ACTIONS } from '../../src/api/offlineQueue';
-import { toApiError, getErrorMessage } from '../../src/api/errors';
+import { toApiError } from '../../src/api/errors';
+import { notify, notifyError } from '../../src/lib/notify';
 import { useNetworkStatus } from '../../src/hooks/useNetworkStatus';
 import { useVoiceToText, VOICE_LANGUAGES } from '../../src/utils/voiceToText';
+import haptics from '../../src/lib/haptics';
+import { logger } from '../../src/utils/logger';
 
 const BUILT_IN_TYPES = [
   'roads', 'water', 'electricity', 'sanitation', 'parks', 'garbage', 'other',
@@ -35,9 +39,9 @@ const TYPE_LABELS = {
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
 export default function ReportScreen() {
+  const insets = useSafeAreaInsets();
   const { isOffline } = useNetworkStatus();
   const router = useRouter();
-  const { addToast } = useUiStore();
   const [description, setDescription] = useState('');
   const [issueType, setIssueType] = useState('roads');
   const [priority, setPriority] = useState('medium');
@@ -55,7 +59,7 @@ export default function ReportScreen() {
     onResult: (text) => {
       if (text) setDescription(text);
     },
-    onError: () => addToast('Could not hear that — please try again or type it.', 'error'),
+    onError: () => notify.error('Could not hear that — please try again, or type it instead.'),
   });
   const [location, setLocation] = useState(null);
   const [address, setAddress] = useState('');
@@ -128,13 +132,15 @@ export default function ReportScreen() {
       if (wardData?.id) {
         setCurrentWardId(wardData.id);
         setSelectedWard(wardData.id);
-        const distanceMsg = wardData.distance_km ? ` (${wardData.distance_km} km away)` : '';
-        Alert.alert('Success', `Ward updated to: ${wardData.name}${distanceMsg}`);
+        const distanceMsg = wardData.distance_km ? ` · ${wardData.distance_km} km away` : '';
+        notify.success(`Ward set to ${wardData.name}${distanceMsg}`);
       } else {
-        Alert.alert('Not Found', 'No ward found within 10 km of this location');
+        // Not a failure — the report still files, it just will not be routed
+        // to a ward automatically, so say what that means.
+        notify.info('No ward within 10 km. You can pick one below, or file it without.', 5000);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to fetch nearby ward');
+      notifyError(error, 'Could not look up the ward for this spot.');
     } finally {
       setFetchingWard(false);
     }
@@ -165,23 +171,23 @@ export default function ReportScreen() {
           setSelectedWard(data.id);
         }
       } catch (err) {
-        console.warn('Failed to load secondary location data:', err.message);
+        logger.warn('Failed to load secondary location data', err);
       }
     } catch (err) {
-      console.warn('Failed to get locating position:', err.message);
+      logger.warn('Failed to get locating position', err);
     }
     setLocating(false);
   };
 
   const pickPhoto = async () => {
     if (photos.length >= 3) {
-      Alert.alert('Limit', 'You can attach up to 3 photos.');
+      notify.info('Three photos is the limit. Remove one to add another.');
       return;
     }
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to your photo library in Settings.');
+        notify.warn('Photo access is off. Enable it in Settings to attach pictures.', 6000);
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -195,19 +201,19 @@ export default function ReportScreen() {
         setPhotos((prev) => [...prev, { ...result.assets[0], uri: compressedUri }]);
       }
     } catch (err) {
-      Alert.alert('Error', 'Could not open photo library. Please check app permissions in Settings.');
+      notifyError(err, 'Could not open your photo library.');
     }
   };
 
   const takePhoto = async () => {
     if (photos.length >= 3) {
-      Alert.alert('Limit', 'You can attach up to 3 photos.');
+      notify.info('Three photos is the limit. Remove one to add another.');
       return;
     }
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow camera access in Settings.');
+        notify.warn('Camera access is off. Enable it in Settings to take a photo.', 6000);
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -220,17 +226,17 @@ export default function ReportScreen() {
         setPhotos((prev) => [...prev, { ...result.assets[0], uri: compressedUri }]);
       }
     } catch (err) {
-      Alert.alert('Error', 'Could not open camera. Please check app permissions in Settings.');
+      notifyError(err, 'Could not open the camera.');
     }
   };
 
   const submit = async () => {
     if (!description.trim()) {
-      addToast('Please describe the issue.', 'error');
+      notify.error('Describe the issue before sending.');
       return;
     }
     if (!location) {
-      addToast('Please allow location access to report an issue.', 'error');
+      notify.warn('Location is off. Enable it in Settings, or drop the pin on the map.', 6000);
       return;
     }
 
@@ -298,16 +304,19 @@ export default function ReportScreen() {
           payload: issuePayload,
           local: { photos: photos.map((p) => ({ uri: p.uri, name: 'photo.jpg', type: 'image/jpeg' })) },
         });
-        addToast('Saved — will be sent when you reconnect', 'success');
-        Alert.alert(
-          'Saved offline',
+        // One announcement, not two. This used to raise a toast *and* a modal
+        // carrying the same sentence, so the toast was still sliding in behind
+        // the alert that had already covered it.
+        notify.warn(
           photos.length
-            ? `Your report and ${photos.length} photo${photos.length === 1 ? '' : 's'} will be sent automatically when you reconnect.`
-            : 'Your report will be sent automatically when you reconnect.',
-          [{ text: 'Report Another', onPress: resetForm }, { text: 'Done', onPress: () => router.push('/(citizen)/') }],
+            ? `Saved offline. Your report and ${photos.length} photo${photos.length === 1 ? '' : 's'} go out when you reconnect.`
+            : 'Saved offline. Your report goes out when you reconnect.',
+          6000,
         );
+        resetForm();
+        router.push('/(citizen)/');
       } catch (err) {
-        addToast(getErrorMessage(err, 'Could not save the report on this device.'), 'error');
+        notifyError(err, 'Could not save the report on this device.');
       } finally {
         setSubmitting(false);
       }
@@ -328,18 +337,21 @@ export default function ReportScreen() {
         await issuesApi.uploadPhoto(data.id, form);
       }
 
-      addToast('Issue reported successfully!', 'success');
-      Alert.alert('Reported!', 'Your issue has been submitted successfully.', [
-        { text: 'View Issue', onPress: () => router.push(`/issue/${data.id}`) },
-        { text: 'Report Another', onPress: () => {
-          setDescription(''); setPhotos([]); setIssueType('pothole'); setPriority('medium');
-          setAddress(''); setAddrLine1(''); setAddrLine2(''); setLandmark('');
-          setLocality(''); setAddrCity(''); setLocation(null);
-          setSelectedWard(null); setCurrentWardId(null);
-          setFilteredWards(wards); setShowMapPin(false);
-          getLocation();
-        }},
-      ]);
+      /*
+       * Straight to the issue, with a toast.
+       *
+       * The old flow raised a toast and then a modal asking "View Issue" or
+       * "Report Another" — a question nobody has an opinion about at the moment
+       * they finish filing. Opening what they just created is the answer almost
+       * everyone would pick, and the report button is one tap away from there
+       * for the rare person filing two in a row.
+       *
+       * `replace`, not `push`: going back should return to the feed, not to a
+       * form still holding the report that has already been filed.
+       */
+      notify.success('Reported. Thank you.');
+      resetForm();
+      router.replace(`/issue/${data.id}`);
     } catch (err) {
       const apiError = toApiError(err);
 
@@ -352,24 +364,50 @@ export default function ReportScreen() {
             payload: issuePayload,
             local: { photos: photos.map((p) => ({ uri: p.uri, name: 'photo.jpg', type: 'image/jpeg' })) },
           });
-          addToast('Connection lost — saved, will send when you reconnect', 'success');
-          Alert.alert('Saved offline', 'Your report will be sent automatically when you reconnect.', [
-            { text: 'OK', onPress: resetForm },
-          ]);
+          notify.warn('Connection lost — saved. Your report goes out when you reconnect.', 6000);
+          resetForm();
+          router.push('/(citizen)/');
           return;
         } catch {
           // fall through to the generic error below
         }
       }
 
-      addToast(apiError.message, 'error');
+      notify.error(apiError.message);
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+    /*
+     * The keyboard fix.
+     *
+     * This screen had no KeyboardAvoidingView at all: seven TextInputs, and on
+     * anything smaller than a Pro Max the description box and the address field
+     * sat underneath the keyboard with no way to scroll to them. It is the
+     * app's primary conversion flow, so this was the worst defect in it.
+     *
+     * `padding` on iOS and `height` on Android is the combination that works —
+     * iOS resizes the frame, Android resizes the window, and using one
+     * behaviour for both leaves a gap on one platform or clips on the other.
+     *
+     * keyboardVerticalOffset accounts for the navigation header, which is
+     * already inset; without it the view over-shifts by exactly that much.
+     */
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}
+    >
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 40 + insets.bottom }}
+      // Lets a button be tapped while the keyboard is open, instead of the
+      // first tap only dismissing it.
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+    >
       {/* Duplicate issue warning modal */}
       <Modal visible={showDuplicateModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -393,7 +431,7 @@ export default function ReportScreen() {
                   onPress={async () => {
                     setShowDuplicateModal(false);
                     // Auto-follow (upvote) so it appears on their dashboard
-                    try { await issuesApi.upvote(issue.id); } catch (err) { console.warn('Failed to upvote issue:', err.message); }
+                    try { await issuesApi.upvote(issue.id); } catch (err) { logger.warn('Failed to upvote issue', err); }
                     router.push(`/issue/${issue.id}`);
                   }}
                 >
@@ -675,7 +713,7 @@ export default function ReportScreen() {
                           setAddress(geo.address);
                         }
                       } catch (err) {
-                        console.warn('Reverse geocoding failed:', err.message);
+                        logger.warn('Reverse geocoding failed', err);
                       }
                       // Dynamically update ward suggestion based on new pin position
                       try {
@@ -685,7 +723,7 @@ export default function ReportScreen() {
                           setSelectedWard(wardData.id);
                         }
                       } catch (err) {
-                        console.warn('Ward lookup failed:', err.message);
+                        logger.warn('Ward lookup failed', err);
                       }
                     }}
                   />
@@ -802,6 +840,7 @@ export default function ReportScreen() {
         )}
       </TouchableOpacity>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

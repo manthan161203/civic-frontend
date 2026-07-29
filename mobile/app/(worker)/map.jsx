@@ -78,7 +78,7 @@ export default function WorkerMapScreen() {
             <Marker
               key={task.id}
               coordinate={{ latitude: task.latitude, longitude: task.longitude }}
-              pinColor={task.priority === 'critical' ? 'purple' : task.priority === 'high' ? 'red' : 'orange'}
+              pinColor={task.priority === 'urgent' ? 'purple' : task.priority === 'high' ? 'red' : 'orange'}
               title={task.issue_type?.replace('_', ' ')}
               description={task.address || task.description?.slice(0, 60)}
               onCalloutPress={() => router.push(`/task/${task.id}`)}

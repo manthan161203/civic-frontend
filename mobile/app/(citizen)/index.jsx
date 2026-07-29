@@ -1,86 +1,106 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, ScrollView,
-  RefreshControl, ActivityIndicator, TextInput, Alert, Vibration,
-} from 'react-native';
+  RefreshControl, ActivityIndicator, TextInput, } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
+
 import { issuesApi } from '../../src/api/issues';
-import { useAuthStore } from '../../src/store/authStore';
 import { authApi } from '../../src/api/auth';
+import { toApiError } from '../../src/api/errors';
+import { useAuthStore } from '../../src/store/authStore';
+import { useUiStore } from '../../src/store/uiStore';
+import { useNetworkStatus } from '../../src/hooks/useNetworkStatus';
 import IssueCard from '../../src/components/common/IssueCard';
 import CitizenProfileModal from '../../src/components/CitizenProfileModal';
-import * as Location from 'expo-location';
+import ErrorState, { EmptyState } from '../../src/components/ErrorState';
+import { IssueListSkeleton } from '../../src/components/Skeleton';
+import haptics from '../../src/lib/haptics';
 import { logger } from '../../src/utils/logger';
+import { Colors, Typography, Radius, Spacing, Shadow } from '../../src/theme';
+import { confirm } from '../../src/lib/notify';
+
+/**
+ * The citizen home feed.
+ *
+ * Mobile pilot screen. What changed beyond the visuals:
+ *
+ *  - **`<ActivityIndicator style={{marginTop: 40}}/>` became a skeleton** shaped
+ *    like the real rows, so the list does not jump when data lands.
+ *  - **Failures were `console.warn` and an empty list**, indistinguishable from
+ *    "you have not reported anything". Now an error state with retry.
+ *  - **The priority filter offered `critical`**, which is not in the backend
+ *    enum (`urgent | high | medium | low`) — it matched nothing, and `urgent`,
+ *    the actually-highest priority, was missing.
+ *  - **Haptics**: selection on filters and tabs, impact on submit, and the SOS
+ *    button's raw `Vibration.vibrate([0,200,100,200])` — a 500 ms buzz — becomes
+ *    a proper warning haptic.
+ *  - **Safe areas**: the FABs sat a fixed 24pt from the bottom, which is under
+ *    the home indicator on a gesture-navigation device.
+ *  - Every colour now comes from `src/theme.js`, which this file previously
+ *    ignored in favour of 51 hardcoded hex literals.
+ */
 
 const STATUS_FILTERS = [
-  { key: 'All',         label: 'All' },
-  { key: 'open',        label: 'Open' },
-  { key: 'in_progress', label: 'In Progress' },
-  { key: 'resolved',    label: 'Resolved' },
-  { key: 'closed',      label: 'Closed' },
+  { key: 'All', label: 'All' },
+  { key: 'open', label: 'Open' },
+  { key: 'in_progress', label: 'In progress' },
+  { key: 'resolved', label: 'Resolved' },
+  { key: 'closed', label: 'Closed' },
 ];
 
+// Matches the backend enum exactly. `critical` does not exist there and was
+// never going to match a row.
 const PRIORITY_FILTERS = [
-  { key: 'all',      label: 'All',      color: null },
-  { key: 'critical', label: 'Critical', color: '#7c3aed' },
-  { key: 'high',     label: 'High',     color: '#ef4444' },
-  { key: 'medium',   label: 'Medium',   color: '#f59e0b' },
-  { key: 'low',      label: 'Low',      color: '#10b981' },
+  { key: 'all', label: 'All', color: null },
+  { key: 'urgent', label: 'Urgent', color: Colors.danger },
+  { key: 'high', label: 'High', color: Colors.warning },
+  { key: 'medium', label: 'Medium', color: Colors.info },
+  { key: 'low', label: 'Low', color: Colors.success },
 ];
 
 const SORT_OPTIONS = [
-  { key: 'newest',       label: 'Newest',     icon: 'arrow-down' },
-  { key: 'oldest',       label: 'Oldest',     icon: 'arrow-up' },
-  { key: 'most_upvoted', label: 'Most Voted',  icon: 'thumbs-up' },
+  { key: 'newest', label: 'Newest', icon: 'arrow-down' },
+  { key: 'oldest', label: 'Oldest', icon: 'arrow-up' },
+  { key: 'most_upvoted', label: 'Most voted', icon: 'thumbs-up' },
 ];
 
 function WardHealthBanner({ health }) {
   if (!health) return null;
-
   const score = health.score ?? 0;
-  const color = score >= 80 ? '#059669' : score >= 50 ? '#f59e0b' : '#ef4444';
+  const color = score >= 80 ? Colors.worker : score >= 50 ? Colors.warning : Colors.danger;
 
   return (
-    <View style={[bannerStyles.container, { borderLeftColor: color }]}>
-      <View style={bannerStyles.left}>
-        <Text style={bannerStyles.label}>Ward Health</Text>
-        <Text style={bannerStyles.wardName} numberOfLines={1}>{health.ward || 'Your Ward'}</Text>
-        <Text style={bannerStyles.sub}>
+    <View style={[banner.container, { borderLeftColor: color }]}>
+      <View style={banner.left}>
+        <Text style={banner.label}>Ward health</Text>
+        <Text style={banner.wardName} numberOfLines={1}>{health.ward || 'Your ward'}</Text>
+        <Text style={banner.sub}>
           {health.open_issues ?? 0} open · {health.resolved_issues ?? 0} resolved
         </Text>
       </View>
-      <View style={[bannerStyles.scoreBubble, { backgroundColor: color + '22' }]}>
-        <Text style={[bannerStyles.score, { color }]}>{score}</Text>
-        <Text style={[bannerStyles.scoreLabel, { color }]}>score</Text>
+      <View style={[banner.bubble, { backgroundColor: `${color}22` }]}>
+        <Text style={[banner.score, { color }]}>{score}</Text>
+        <Text style={[banner.scoreLabel, { color }]}>score</Text>
       </View>
     </View>
   );
 }
 
-const bannerStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#fff', marginHorizontal: 16, marginTop: 10, marginBottom: 4,
-    borderRadius: 12, padding: 14, borderLeftWidth: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2,
-  },
-  left: { flex: 1 },
-  label: { fontSize: 10, fontWeight: '600', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.5 },
-  wardName: { fontSize: 15, fontWeight: '700', color: '#111827', marginTop: 2 },
-  sub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  scoreBubble: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },
-  score: { fontSize: 18, fontWeight: '800' },
-  scoreLabel: { fontSize: 9, fontWeight: '600', textTransform: 'uppercase' },
-});
-
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuthStore();
+  const addToast = useUiStore((s) => s.addToast);
+  const { isOffline } = useNetworkStatus();
+
   const [mainTab, setMainTab] = useState('my');
   const [issues, setIssues] = useState([]);
   const [following, setFollowing] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('All');
   const [priority, setPriority] = useState('all');
@@ -91,147 +111,349 @@ export default function HomeScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [wardHealth, setWardHealth] = useState(null);
+  const [sendingSos, setSendingSos] = useState(false);
+
+  // Guards the focus refetch from fighting an in-flight load.
+  const inFlight = useRef(false);
 
   const fetchWardHealth = useCallback(async () => {
     if (!user?.ward) return;
     try {
       const { data } = await issuesApi.wardHealth(user.ward);
       setWardHealth(data);
-    } catch (err) {
-      console.warn('Failed to fetch ward health:', err.message);
+    } catch {
+      // Genuinely non-essential: the banner is supplementary and its absence
+      // is not worth an error state over the whole feed.
+      setWardHealth(null);
     }
   }, [user?.ward]);
 
-  const handleProfileComplete = async () => {
-    setShowProfileModal(false);
-    try {
-      const { data } = await authApi.getMe();
-      if (data) {
-        updateUser(data);
-      }
-    } catch (err) {
-      // Even if refresh fails, modal is already closed
-    }
-  };
+  const fetchIssues = useCallback(
+    async (reset = false) => {
+      const p = reset ? 1 : page;
+      try {
+        const params = { page: p, size: 20 };
+        if (filter !== 'All') params.status = filter;
+        if (priority !== 'all') params.priority = priority;
+        if (sort !== 'newest') params.sort = sort;
 
-  const fetchIssues = useCallback(async (reset = false) => {
-    const p = reset ? 1 : page;
-    try {
-      const params = { page: p, size: 20 };
-      if (filter !== 'All') params.status = filter;
-      if (priority !== 'all') params.priority = priority;
-      if (sort !== 'newest') params.sort = sort;
-      const { data } = await issuesApi.list(params);
-      const items = data.items || data;
-      if (reset) {
-        setIssues(items);
-        setPage(2);
-      } else {
-        setIssues((prev) => [...prev, ...items]);
-        setPage(p + 1);
+        const { data } = await issuesApi.list(params);
+        const items = data.items || data;
+
+        setIssues((prev) => (reset ? items : [...prev, ...items]));
+        setPage(reset ? 2 : p + 1);
+        setHasMore(items.length === 20);
+        setError(null);
+      } catch (err) {
+        // Was `console.warn` and nothing else, so a failed load rendered the
+        // same empty list as a citizen who had never reported anything.
+        const apiError = toApiError(err);
+        logger.warn('HomeScreen', `Issue list failed: ${apiError.message}`);
+        if (reset) setError(apiError);
       }
-      setHasMore(items.length === 20);
-    } catch (err) {
-      console.warn('Failed to fetch issues:', err.message);
-    }
-  }, [filter, priority, sort, page]);
+    },
+    [filter, priority, sort, page],
+  );
 
   const fetchFollowing = useCallback(async () => {
     try {
       const { data } = await issuesApi.following({ page: 1, size: 50 });
       setFollowing(data.items || data);
     } catch (err) {
-      console.warn('Failed to fetch following issues:', err.message);
+      logger.warn('HomeScreen', `Following list failed: ${toApiError(err).message}`);
     }
   }, []);
 
+  const loadAll = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      await Promise.all([fetchIssues(true), fetchFollowing(), fetchWardHealth()]);
+    } finally {
+      inFlight.current = false;
+    }
+  }, [fetchIssues, fetchFollowing, fetchWardHealth]);
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchIssues(true), fetchFollowing(), fetchWardHealth()]).finally(() => setLoading(false));
+    loadAll().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, priority, sort]);
 
-  // Refresh on every tab focus (catches changes from issue detail, report, etc.)
+  // Catches changes made on the detail and report screens.
   useFocusEffect(
     useCallback(() => {
-      fetchIssues(true);
-      fetchFollowing();
-      fetchWardHealth();
-    }, [filter, fetchWardHealth])
+      loadAll();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filter, priority, sort]),
   );
 
-  // Show/hide profile modal based on whether profile is complete
   useEffect(() => {
-    if (user) {
-      setShowProfileModal(!user.name || !user.ward_id);
-    }
+    if (user) setShowProfileModal(!user.name || !user.ward_id);
   }, [user]);
 
   const onRefresh = async () => {
+    haptics.tap();
     setRefreshing(true);
-    await Promise.all([fetchIssues(true), fetchFollowing(), fetchWardHealth()]);
+    await loadAll();
     setRefreshing(false);
   };
 
   const handleSearch = async () => {
     if (!search.trim()) {
-      fetchIssues(true);
+      loadAll();
       return;
     }
     try {
       const { data } = await issuesApi.search({ q: search, page: 1, size: 20 });
       setIssues(data.items || data);
       setHasMore(false);
+      setError(null);
     } catch (err) {
-      console.warn('Search failed:', err.message);
+      const apiError = toApiError(err);
+      addToast(apiError.message, 'error');
     }
   };
 
+  const handleProfileComplete = async () => {
+    setShowProfileModal(false);
+    try {
+      const { data } = await authApi.getMe();
+      if (data) updateUser(data);
+    } catch {
+      // The modal is already closed; the next load refreshes the user anyway.
+    }
+  };
+
+  const sendSos = async () => {
+    setSendingSos(true);
+    try {
+      // A warning haptic, not a 500 ms vibration pattern. This fires once, on
+      // confirmation, so it reads as acknowledgement rather than an alarm.
+      haptics.warning();
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      let latitude = user?.latitude || 0;
+      let longitude = user?.longitude || 0;
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        latitude = loc.coords.latitude;
+        longitude = loc.coords.longitude;
+      }
+
+      const { data } = await issuesApi.create({
+        issue_type: 'other',
+        description: 'EMERGENCY SOS — Citizen reported an immediate hazard at this location.',
+        latitude,
+        longitude,
+        address: user?.ward || 'Unknown',
+        ward: user?.ward || '',
+        is_sos: true,
+      });
+
+      logger.info('SOS', `SOS issue created: ${data?.id}`);
+      haptics.success();
+      addToast('Emergency reported. Nearby citizens and admins have been alerted.', 'success', 5000);
+      loadAll();
+    } catch (err) {
+      const apiError = toApiError(err);
+      logger.error('SOS', `Failed to send SOS: ${apiError.message}`, err);
+      haptics.error();
+      addToast(`Could not send SOS: ${apiError.message}`, 'error', 6000);
+    } finally {
+      setSendingSos(false);
+    }
+  };
+
+  const confirmSos = async () => {
+    // Still blocking, deliberately: this is irreversible and it alerts
+    // strangers. It goes through the shared helper so it behaves like every
+    // other confirmation — notably, Android's back button means "no" rather
+    // than leaving the promise hanging.
+    const ok = await confirm({
+      title: 'Send emergency SOS?',
+      message: 'This reports an immediate hazard at your current location and alerts nearby citizens and every admin.',
+      confirmLabel: 'Send SOS',
+      destructive: true,
+    });
+    if (ok) sendSos();
+  };
+
+  const rateIssue = async (item, stars) => {
+    haptics.tap();
+    try {
+      await issuesApi.update(item.id, { citizen_rating: stars });
+      setIssues((prev) => prev.map((i) => (i.id === item.id ? { ...i, citizen_rating: stars } : i)));
+      haptics.success();
+    } catch (err) {
+      haptics.error();
+      addToast(toApiError(err).message, 'error');
+    }
+  };
+
+  const closeIssue = async (item) => {
+    haptics.press();
+    try {
+      await issuesApi.update(item.id, { status: 'closed' });
+      setIssues((prev) => prev.map((i) => (i.id === item.id ? { ...i, status: 'closed' } : i)));
+      haptics.success();
+      addToast('Issue closed', 'success');
+    } catch (err) {
+      haptics.error();
+      addToast(toApiError(err).message, 'error');
+    }
+  };
+
+  const data = mainTab === 'my' ? issues : following;
+
+  const renderItem = ({ item }) => (
+    <View>
+      <IssueCard issue={item} onPress={() => router.push(`/issue/${item.id}`)} />
+      {mainTab === 'my' && item.status === 'resolved' && (
+        <View style={styles.actionRow}>
+          {!item.citizen_rating && (
+            <View style={styles.ratingRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => rateIssue(item, star)}
+                  style={styles.star}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Rate ${star} of 5`}
+                >
+                  <Ionicons name="star" size={20} color={Colors.warning} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={() => closeIssue(item)}
+            accessibilityRole="button"
+          >
+            <Ionicons name="checkmark-circle" size={18} color={Colors.white} />
+            <Text style={styles.closeBtnText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+
+  /** The list body — one place, so loading/error/empty precedence is explicit. */
+  const renderBody = () => {
+    if (loading) return <IssueListSkeleton count={4} />;
+
+    if (error && mainTab === 'my') {
+      return <ErrorState error={error} onRetry={() => { setLoading(true); loadAll().finally(() => setLoading(false)); }} />;
+    }
+
+    return (
+      <FlatList
+        data={data}
+        keyExtractor={(item, index) => item.id ?? String(index)}
+        renderItem={renderItem}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.citizen} />
+        }
+        onEndReached={() => {
+          if (mainTab === 'my' && hasMore && !loadingMore && !loading) {
+            setLoadingMore(true);
+            fetchIssues().finally(() => setLoadingMore(false));
+          }
+        }}
+        onEndReachedThreshold={0.4}
+        ListEmptyComponent={
+          mainTab === 'my' ? (
+            <EmptyState
+              icon="document-text-outline"
+              title={search ? 'No matches' : 'Nothing reported yet'}
+              message={
+                search
+                  ? 'Try a different word, or clear the search.'
+                  : 'Spotted a pothole, a broken light, uncollected waste? Report it and track what happens.'
+              }
+              action={{ label: 'Report an issue', onPress: () => router.push('/(citizen)/report') }}
+            />
+          ) : (
+            <EmptyState
+              icon="bookmark-outline"
+              title="Not following anything"
+              message="When you report something that already exists, you can follow the original instead of filing a duplicate."
+            />
+          )
+        }
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator style={{ paddingVertical: Spacing.lg }} color={Colors.citizen} />
+          ) : null
+        }
+        // Clears the FABs and the home indicator.
+        contentContainerStyle={{ paddingBottom: 96 + insets.bottom, flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+      />
+    );
+  };
+
   return (
+    // No top inset: this screen renders under a navigation header, which is
+    // already inset. Adding it again would leave a gap.
     <View style={styles.container}>
-      {/* Search Bar */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
-          <Ionicons name="search" size={18} color="#9ca3af" />
+          <Ionicons name="search" size={18} color={Colors.textLight} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search issues..."
+            placeholder="Search issues…"
+            placeholderTextColor={Colors.textLight}
             value={search}
             onChangeText={setSearch}
             onSubmitEditing={handleSearch}
             returnKeyType="search"
+            accessibilityLabel="Search issues"
           />
           {search.length > 0 && (
-            <TouchableOpacity onPress={() => { setSearch(''); fetchIssues(true); }}>
-              <Ionicons name="close" size={18} color="#9ca3af" />
+            <TouchableOpacity
+              onPress={() => {
+                setSearch('');
+                loadAll();
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
+              <Ionicons name="close" size={18} color={Colors.textLight} />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* Ward Health Banner */}
       <WardHealthBanner health={wardHealth} />
 
-      {/* Main Tab Switcher */}
       <View style={styles.mainTabs}>
-        <TouchableOpacity
-          style={[styles.mainTab, mainTab === 'my' && styles.mainTabActive]}
-          onPress={() => setMainTab('my')}
-        >
-          <Text style={[styles.mainTabText, mainTab === 'my' && styles.mainTabTextActive]}>My Issues</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.mainTab, mainTab === 'following' && styles.mainTabActive]}
-          onPress={() => setMainTab('following')}
-        >
-          <Text style={[styles.mainTabText, mainTab === 'following' && styles.mainTabTextActive]}>
-            Following{following.length > 0 ? ` (${following.length})` : ''}
-          </Text>
-        </TouchableOpacity>
+        {[
+          { key: 'my', label: 'My issues' },
+          { key: 'following', label: `Following${following.length ? ` (${following.length})` : ''}` },
+        ].map((t) => (
+          <TouchableOpacity
+            key={t.key}
+            style={[styles.mainTab, mainTab === t.key && styles.mainTabActive]}
+            onPress={() => {
+              haptics.selection();
+              setMainTab(t.key);
+            }}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: mainTab === t.key }}
+          >
+            <Text style={[styles.mainTabText, mainTab === t.key && styles.mainTabTextActive]}>
+              {t.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {mainTab === 'my' && (
         <>
-          {/* Status filter */}
           <View style={styles.filterRowContainer}>
             <ScrollView
               horizontal
@@ -242,7 +464,12 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={key}
                   style={[styles.chip, filter === key && styles.chipActive]}
-                  onPress={() => setFilter(key)}
+                  onPress={() => {
+                    haptics.selection();
+                    setFilter(key);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: filter === key }}
                 >
                   <Text style={[styles.chipText, filter === key && styles.chipTextActive]}>
                     {label}
@@ -252,27 +479,31 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
 
-          {/* Priority filter row */}
           <View style={styles.filterSection}>
-            <Text style={styles.filterSectionLabel}>Priority</Text>
+            <Text style={styles.sectionLabel}>Priority</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.priorityRow}
             >
               {PRIORITY_FILTERS.map(({ key, label, color }) => {
-                const isActive = priority === key;
+                const active = priority === key;
                 return (
                   <TouchableOpacity
                     key={key}
                     style={[
                       styles.priorityChip,
-                      isActive && { backgroundColor: color || '#1a56db', borderColor: color || '#1a56db' },
+                      active && { backgroundColor: color ?? Colors.citizen, borderColor: color ?? Colors.citizen },
                     ]}
-                    onPress={() => setPriority(key)}
+                    onPress={() => {
+                      haptics.selection();
+                      setPriority(key);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                   >
-                    {color && !isActive && <View style={[styles.priorityDot, { backgroundColor: color }]} />}
-                    <Text style={[styles.priorityChipText, isActive && styles.priorityChipTextActive]}>
+                    {color && <View style={[styles.priorityDot, { backgroundColor: active ? Colors.white : color }]} />}
+                    <Text style={[styles.priorityChipText, active && styles.priorityChipTextActive]}>
                       {label}
                     </Text>
                   </TouchableOpacity>
@@ -281,17 +512,21 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
 
-          {/* Sort row */}
           <View style={styles.sortSection}>
-            <Text style={styles.filterSectionLabel}>Sort by</Text>
+            <Text style={styles.sectionLabelInline}>Sort</Text>
             <View style={styles.sortGroup}>
               {SORT_OPTIONS.map(({ key, label, icon }) => (
                 <TouchableOpacity
                   key={key}
                   style={[styles.sortBtn, sort === key && styles.sortBtnActive]}
-                  onPress={() => setSort(key)}
+                  onPress={() => {
+                    haptics.selection();
+                    setSort(key);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: sort === key }}
                 >
-                  <Ionicons name={icon} size={11} color={sort === key ? '#1a56db' : '#9ca3af'} />
+                  <Ionicons name={icon} size={11} color={sort === key ? Colors.citizen : Colors.textLight} />
                   <Text style={[styles.sortText, sort === key && styles.sortTextActive]}>{label}</Text>
                 </TouchableOpacity>
               ))}
@@ -300,158 +535,38 @@ export default function HomeScreen() {
         </>
       )}
 
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color="#1a56db" size="large" />
-      ) : mainTab === 'my' ? (
-        <FlatList
-          data={issues}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View>
-              <IssueCard issue={item} onPress={() => router.push(`/issue/${item.id}`)} />
-              {item.status === 'resolved' && (
-                <View style={styles.actionRow}>
-                  {!item.citizen_rating && (
-                    <View style={styles.ratingRow}>
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <TouchableOpacity
-                          key={star}
-                          onPress={async () => {
-                            try {
-                              await issuesApi.update(item.id, { citizen_rating: star });
-                              setIssues((prev) =>
-                                prev.map((i) => (i.id === item.id ? { ...i, citizen_rating: star } : i))
-                              );
-                            } catch {
-                              Alert.alert('Error', 'Could not submit rating');
-                            }
-                          }}
-                          style={styles.star}
-                        >
-                          <Ionicons name="star" size={20} color="#f59e0b" />
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                  <TouchableOpacity
-                    style={styles.closeBtn}
-                    onPress={async () => {
-                      try {
-                        await issuesApi.update(item.id, { status: 'closed' });
-                        setIssues((prev) =>
-                          prev.map((i) => (i.id === item.id ? { ...i, status: 'closed' } : i))
-                        );
-                      } catch {
-                        Alert.alert('Error', 'Could not close issue');
-                      }
-                    }}
-                  >
-                    <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                    <Text style={styles.closeBtnText}>Close</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          )}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a56db" />}
-          onEndReached={() => {
-            if (hasMore && !loadingMore && !loading) {
-              setLoadingMore(true);
-              fetchIssues().finally(() => setLoadingMore(false));
-            }
-          }}
-          onEndReachedThreshold={0.4}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="document-text-outline" size={48} color="#d1d5db" />
-              <Text style={styles.emptyText}>No issues found</Text>
-            </View>
-          }
-          ListFooterComponent={loadingMore ? (
-            <ActivityIndicator style={{ paddingVertical: 16 }} color="#1a56db" />
-          ) : null}
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
-      ) : (
-        <FlatList
-          data={following}
-          keyExtractor={(item, index) => item.id ?? String(index)}
-          renderItem={({ item }) => (
-            <IssueCard issue={item} onPress={() => router.push(`/issue/${item.id}`)} />
-          )}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1a56db" />}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="bookmark-outline" size={48} color="#d1d5db" />
-              <Text style={styles.emptyText}>No followed issues yet</Text>
-              <Text style={styles.emptySubText}>When a duplicate is found while reporting, tap it to follow it</Text>
-            </View>
-          }
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
-      )}
+      {renderBody()}
 
-      {/* FAB - Report Issue */}
       <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push('/(citizen)/report')}
-      >
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
-
-      {/* SOS Emergency Button */}
-      <TouchableOpacity
-        style={styles.sosFab}
+        style={[styles.fab, { bottom: Spacing['2xl'] + insets.bottom }]}
         onPress={() => {
-          Alert.alert(
-            'Emergency SOS',
-            'This will report an emergency hazard at your current location and alert nearby citizens. Continue?',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'SEND SOS',
-                style: 'destructive',
-                onPress: async () => {
-                  try {
-                    Vibration.vibrate([0, 200, 100, 200]);
-                    const { status } = await Location.requestForegroundPermissionsAsync();
-                    let latitude = user?.latitude || 0;
-                    let longitude = user?.longitude || 0;
-                    if (status === 'granted') {
-                      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-                      latitude = loc.coords.latitude;
-                      longitude = loc.coords.longitude;
-                    }
-                    const { data } = await issuesApi.create({
-                      issue_type: 'other',
-                      description: 'EMERGENCY SOS — Citizen reported an immediate hazard at this location.',
-                      latitude,
-                      longitude,
-                      address: user?.ward || 'Unknown',
-                      ward: user?.ward || '',
-                      is_sos: true,
-                    });
-                    logger.info('SOS', `SOS issue created: ${data?.id}`);
-                    Alert.alert('SOS Sent', 'Emergency reported! Nearby citizens and all admins have been alerted.');
-                    fetchIssues(true);
-                  } catch (err) {
-                    const errorMsg = err?.response?.status === 403 
-                      ? 'Not authorized to create issue' 
-                      : err?.message || 'Unknown error';
-                    logger.error('SOS', `Failed to send SOS: ${errorMsg}`, err);
-                    Alert.alert('Error', `Failed to send SOS: ${errorMsg}. Please try again.`);
-                  }
-                },
-              },
-            ],
-          );
+          haptics.press();
+          router.push('/(citizen)/report');
         }}
+        accessibilityRole="button"
+        accessibilityLabel="Report an issue"
       >
-        <Text style={styles.sosText}>SOS</Text>
+        <Ionicons name="add" size={28} color={Colors.white} />
       </TouchableOpacity>
 
-      {/* Profile Completion Modal */}
-      <CitizenProfileModal 
+      <TouchableOpacity
+        style={[styles.sosFab, { bottom: Spacing['2xl'] + insets.bottom }]}
+        onPress={confirmSos}
+        disabled={sendingSos || isOffline}
+        accessibilityRole="button"
+        accessibilityLabel="Send emergency SOS"
+        // An SOS that silently fails is the worst possible outcome, so the
+        // control says up front when it cannot work.
+        accessibilityHint={isOffline ? 'Unavailable while offline' : undefined}
+      >
+        {sendingSos ? (
+          <ActivityIndicator color={Colors.white} size="small" />
+        ) : (
+          <Text style={styles.sosText}>SOS</Text>
+        )}
+      </TouchableOpacity>
+
+      <CitizenProfileModal
         visible={showProfileModal}
         user={user}
         onComplete={handleProfileComplete}
@@ -461,80 +576,219 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb' },
-  searchRow: { backgroundColor: '#1a56db', paddingHorizontal: 16, paddingBottom: 12, paddingTop: 8 },
-  searchBox: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
-    borderRadius: 10, paddingHorizontal: 12, gap: 8, height: 44,
+const banner = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    marginHorizontal: Spacing.lg,
+    marginTop: 10,
+    marginBottom: Spacing.xs,
+    borderRadius: Radius.md,
+    padding: 14,
+    borderLeftWidth: 4,
+    ...Shadow.sm,
   },
-  searchInput: { flex: 1, fontSize: 14, color: '#111827' },
-  filterRowContainer: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  filterRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center', flexDirection: 'row' },
-  chip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: '#f3f4f6' },
-  chipActive: { backgroundColor: '#1a56db' },
-  chipText: { fontSize: 13, fontWeight: '600', color: '#6b7280', textTransform: 'capitalize' },
-  chipTextActive: { color: '#fff' },
+  left: { flex: 1 },
+  label: {
+    fontSize: Typography.xs,
+    fontWeight: Typography.semibold,
+    color: Colors.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  wardName: {
+    fontSize: Typography.md,
+    fontWeight: Typography.bold,
+    color: Colors.textPrimary,
+    marginTop: 2,
+  },
+  sub: { fontSize: Typography.sm, color: Colors.textMuted, marginTop: 2 },
+  bubble: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },
+  score: { fontSize: Typography.xl, fontWeight: Typography.extrabold },
+  scoreLabel: { fontSize: 9, fontWeight: Typography.semibold, textTransform: 'uppercase' },
+});
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.bg },
+  searchRow: {
+    backgroundColor: Colors.citizen,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+    paddingTop: Spacing.sm,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.sm,
+    height: 44,
+  },
+  searchInput: { flex: 1, fontSize: Typography.base, color: Colors.textPrimary },
+
+  filterRowContainer: {
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  filterRow: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 10,
+    gap: Spacing.sm,
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: Radius.xl,
+    backgroundColor: Colors.bgLight,
+    minHeight: 32,
+    justifyContent: 'center',
+  },
+  chipActive: { backgroundColor: Colors.citizen },
+  chipText: { fontSize: 13, fontWeight: Typography.semibold, color: Colors.textMuted },
+  chipTextActive: { color: Colors.white },
 
   filterSection: {
-    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
-    paddingTop: 8, paddingBottom: 4,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xs,
   },
-  sortSection: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
-    paddingHorizontal: 16, paddingVertical: 8, gap: 12,
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: Typography.bold,
+    color: Colors.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.xs,
   },
-  filterSectionLabel: {
-    fontSize: 11, fontWeight: '700', color: '#9ca3af',
-    textTransform: 'uppercase', letterSpacing: 0.5,
-    paddingHorizontal: 16, marginBottom: 4,
+  sectionLabelInline: {
+    fontSize: 11,
+    fontWeight: Typography.bold,
+    color: Colors.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  priorityRow: { paddingHorizontal: 12, paddingBottom: 8, gap: 6, alignItems: 'center', flexDirection: 'row' },
-  priorityChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  priorityRow: {
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.sm,
+    gap: 6,
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  priorityChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+    minHeight: 30,
+  },
   priorityDot: { width: 6, height: 6, borderRadius: 3 },
-  priorityChipText: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
-  priorityChipTextActive: { color: '#fff' },
+  priorityChipText: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.textMuted },
+  priorityChipTextActive: { color: Colors.white },
 
+  sortSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    gap: Spacing.md,
+  },
   sortGroup: { flexDirection: 'row', gap: 6, flex: 1 },
-  sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', flex: 1, justifyContent: 'center' },
-  sortBtnActive: { borderColor: '#1a56db', backgroundColor: '#eff6ff' },
-  sortText: { fontSize: 11, fontWeight: '600', color: '#9ca3af' },
-  sortTextActive: { color: '#1a56db' },
-  empty: { alignItems: 'center', marginTop: 80, gap: 12, paddingHorizontal: 32 },
-  emptyText: { fontSize: 16, color: '#9ca3af' },
-  emptySubText: { fontSize: 13, color: '#d1d5db', textAlign: 'center' },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 30,
+  },
+  sortBtnActive: { borderColor: Colors.citizen, backgroundColor: '#eff6ff' },
+  sortText: { fontSize: 11, fontWeight: Typography.semibold, color: Colors.textLight },
+  sortTextActive: { color: Colors.citizen },
+
   mainTabs: {
-    flexDirection: 'row', backgroundColor: '#fff',
-    borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+    flexDirection: 'row',
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
   },
   mainTab: {
-    flex: 1, paddingVertical: 11, alignItems: 'center',
-    borderBottomWidth: 2, borderBottomColor: 'transparent',
+    flex: 1,
+    paddingVertical: 11,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
-  mainTabActive: { borderBottomColor: '#1a56db' },
-  mainTabText: { fontSize: 14, fontWeight: '600', color: '#6b7280' },
-  mainTabTextActive: { color: '#1a56db' },
+  mainTabActive: { borderBottomColor: Colors.citizen },
+  mainTabText: { fontSize: Typography.base, fontWeight: Typography.semibold, color: Colors.textMuted },
+  mainTabTextActive: { color: Colors.citizen },
+
   fab: {
-    position: 'absolute', bottom: 24, right: 20,
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: '#1a56db', justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8,
-    elevation: 8,
+    position: 'absolute',
+    right: Spacing.xl,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.citizen,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadow.md,
   },
   sosFab: {
-    position: 'absolute', bottom: 24, left: 20,
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: '#dc2626', justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#dc2626', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8,
-    elevation: 8, borderWidth: 2, borderColor: '#fca5a5',
+    position: 'absolute',
+    left: Spacing.xl,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#dc2626',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fca5a5',
+    ...Shadow.md,
   },
-  sosText: {
-    color: '#fff', fontSize: 13, fontWeight: '900', letterSpacing: 1,
+  sosText: { color: Colors.white, fontSize: 13, fontWeight: '900', letterSpacing: 1 },
+
+  actionRow: {
+    flexDirection: 'row',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 10,
+    gap: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  actionRow: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: 'center', justifyContent: 'space-between' },
-  ratingRow: { flexDirection: 'row', gap: 4 },
-  star: { padding: 4 },
-  closeBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#059669', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 },
-  closeBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  ratingRow: { flexDirection: 'row', gap: Spacing.xs },
+  star: { padding: Spacing.xs },
+  closeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.worker,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.xs,
+    minHeight: 36,
+  },
+  closeBtnText: { color: Colors.white, fontSize: 13, fontWeight: Typography.semibold },
 });

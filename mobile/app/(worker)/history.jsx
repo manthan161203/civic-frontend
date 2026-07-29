@@ -7,6 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRouter, useFocusEffect } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
 import { formatDate } from '../../src/utils/dateUtils';
+import { notifyError } from '../../src/lib/notify';
+import { logger } from '../../src/utils/logger';
+import ErrorState from '../../src/components/ErrorState';
+import { Colors } from '../../src/theme';
 
 const STATUS_COLORS = {
   resolved: '#059669',
@@ -57,13 +61,13 @@ function HistoryCard({ task, onPress }) {
           {task.priority && (
             <View style={[styles.priorityBadge, {
               backgroundColor:
-                task.priority === 'critical' ? '#f3e8ff' :
+                task.priority === 'urgent' ? '#fee2e2' :
                 task.priority === 'high' ? '#fee2e2' :
                 task.priority === 'medium' ? '#fef3c7' : '#f0fdf4',
             }]}>
               <Text style={[styles.priorityText, {
                 color:
-                  task.priority === 'critical' ? '#7c3aed' :
+                  task.priority === 'urgent' ? '#991b1b' :
                   task.priority === 'high' ? '#dc2626' :
                   task.priority === 'medium' ? '#d97706' : '#059669',
               }]}>{task.priority}</Text>
@@ -90,6 +94,7 @@ export default function TaskHistoryScreen() {
   const router = useRouter();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
@@ -124,8 +129,13 @@ export default function TaskHistoryScreen() {
         setPage(p + 1);
       }
       setHasMore(items.length === 20);
+      setLoadError(null);
     } catch (err) {
-      console.warn('Failed to fetch history:', err.message);
+      logger.error('Failed to fetch task history', err);
+      // Only blank the screen when there is nothing to blank. Failing to load
+      // page 3 should not throw away pages 1 and 2 the worker is reading.
+      if (reset) setLoadError(err);
+      else notifyError(err, 'Could not load any more history.');
     }
   }, [filter]);
 
@@ -182,10 +192,25 @@ export default function TaskHistoryScreen() {
           onEndReached={loadMore}
           onEndReachedThreshold={0.4}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="time-outline" size={48} color="#d1d5db" />
-              <Text style={styles.emptyText}>No history found</Text>
-            </View>
+            // A failed first page and a genuinely empty history rendered the
+            // same "No history found". They are different answers and only one
+            // of them has a fix the worker can apply.
+            loadError ? (
+              <ErrorState
+                error={loadError}
+                onRetry={() => fetchHistory(true)}
+                accent={Colors.worker}
+              />
+            ) : (
+              <View style={styles.empty}>
+                <Ionicons name="time-outline" size={48} color="#d1d5db" />
+                <Text style={styles.emptyText}>
+                  {filter === 'all'
+                    ? 'Nothing finished yet'
+                    : `No ${filter} tasks in your history`}
+                </Text>
+              </View>
+            )
           }
           ListFooterComponent={
             loadingMore ? <ActivityIndicator color="#059669" style={{ marginVertical: 16 }} /> : null

@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, ActivityIndicator, Image, TextInput, Modal, KeyboardAvoidingView, Platform, Linking,
+  ActivityIndicator, Image, TextInput, Modal, KeyboardAvoidingView, Platform, Linking,
   RefreshControl,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { runOrQueue, ACTIONS } from '../../src/api/offlineQueue';
-import { getErrorMessage } from '../../src/api/errors';
 import { useLocalSearchParams, useNavigation, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { workersApi } from '../../src/api/workers';
@@ -14,8 +13,19 @@ import { issuesApi } from '../../src/api/issues';
 import { BASE_URL } from '../../src/api/client';
 import { formatDateTime } from '../../src/utils/dateUtils';
 import { compressImage } from '../../src/utils/imageUtils';
+import { ListSkeleton } from '../../src/components/Skeleton';
+import ErrorState, { EmptyState } from '../../src/components/ErrorState';
+import { notify, notifyError } from '../../src/lib/notify';
+import haptics from '../../src/lib/haptics';
 
-const PRIORITY_COLOR = { critical: '#7c3aed', high: '#ef4444', medium: '#f59e0b', low: '#10b981' };
+/**
+ * Matches the backend enum exactly: urgent | high | medium | low.
+ *
+ * This map used to lead with `critical`, which the API cannot produce — so the
+ * one colour that stood out was never reachable, and a genuinely `urgent` task
+ * fell through to the default and rendered like any other.
+ */
+const PRIORITY_COLOR = { urgent: '#dc2626', high: '#ef4444', medium: '#f59e0b', low: '#10b981' };
 
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -30,6 +40,7 @@ export default function TaskDetailScreen() {
   const [notesLoading, setNotesLoading] = useState(false);
   const [notes, setNotes] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(null);
 
   const loadAll = useCallback(async () => {
     try {
@@ -40,10 +51,12 @@ export default function TaskDetailScreen() {
       const allComments = commentsRes.data.items || commentsRes.data;
       setIssue(issueRes.data);
       setNotes(allComments.filter((c) => c.is_internal));
+      setLoadError(null);
       navigation.setOptions({ title: issueRes.data.issue_type?.replace('_', ' ') || 'Task' });
     } catch (err) {
-      console.error('Failed to load task:', err);
-      Alert.alert('Error', 'Failed to load task details: ' + (err.response?.data?.detail || err.message));
+      // Kept in state rather than announced and forgotten: a worker standing at
+      // the site needs the retry button, not a dismissed alert.
+      setLoadError(err);
     }
   }, [id]);
 
@@ -87,14 +100,10 @@ export default function TaskDetailScreen() {
         issueId: id,
       });
       setIssue((prev) => ({ ...prev, status: 'in_progress' }));
-      Alert.alert(
-        queued ? 'Saved offline' : 'Accepted',
-        queued
-          ? "You're offline. This will be sent automatically when you reconnect."
-          : 'Task is now in progress.',
-      );
+      if (queued) notify.warn('Saved offline — this is sent automatically when you reconnect.', 5000);
+      else notify.success('Task accepted. It is now in progress.');
     } catch (err) {
-      Alert.alert('Error', getErrorMessage(err, 'Could not accept this task.'));
+      notifyError(err, 'Could not accept this task.');
     }
     setActionLoading(false);
   };
@@ -108,7 +117,7 @@ export default function TaskDetailScreen() {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow camera access in Settings.');
+        notify.warn('Camera access is off. Enable it in Settings to photograph the finished work.', 6000);
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -126,9 +135,9 @@ export default function TaskDetailScreen() {
       });
       await workersApi.resolveTask(id, form);
       setIssue((prev) => ({ ...prev, status: 'resolved' }));
-      Alert.alert('Resolved!', 'Task marked as resolved. Great work!');
+      notify.success('Marked resolved. Nice work.');
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Could not open camera. Please check app permissions in Settings.');
+      notifyError(err, 'Could not mark this resolved. The photo may not have uploaded.');
     }
     setActionLoading(false);
   };
@@ -154,12 +163,13 @@ export default function TaskDetailScreen() {
       );
       setNoteInput('');
       if (queued) {
-        Alert.alert('Saved offline', 'This note will be posted when you reconnect.');
+        notify.warn('Saved offline — this note is posted when you reconnect.', 5000);
       } else {
         await loadNotes();
+        haptics.success();
       }
     } catch (err) {
-      Alert.alert('Error', getErrorMessage(err, 'Could not add note.'));
+      notifyError(err, 'Could not add that note.');
     }
     setNotesLoading(false);
   };
@@ -171,22 +181,43 @@ export default function TaskDetailScreen() {
     try {
       if (reasonModal === 'reject') {
         await workersApi.rejectTask(id, reasonText.trim());
-        Alert.alert('Rejected', 'Task has been rejected and reassigned.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
+        // Leaving immediately is right — the task is no longer theirs, so the
+        // screen behind the old "OK" button showed stale work.
+        notify.success('Task rejected and sent back for reassignment.');
+        router.back();
       } else {
         await workersApi.blockTask(id, reasonText.trim());
         setIssue((prev) => ({ ...prev, status: 'blocked' }));
-        Alert.alert('Reported', 'Admin has been notified.');
+        notify.success('Reported as blocked. An admin has been notified.');
       }
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed');
+      notifyError(err, reasonModal === 'reject' ? 'Could not reject this task.' : 'Could not report this block.');
     }
     setActionLoading(false);
   };
 
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} color="#059669" size="large" />;
-  if (!issue) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Not found</Text></View>;
+  // A skeleton, not a full-screen spinner: replacing the whole screen
+  // wipes the header and any list already rendered, so a refresh looked
+  // like a navigation event.
+  if (loading) return <ListSkeleton />;
+
+  /*
+   * A failed load and a task that genuinely does not exist used to render the
+   * same bare "Not found" — so a dropped connection looked like an admin had
+   * deleted the job out from under the worker, and there was no way to retry.
+   */
+  if (loadError) {
+    return <ErrorState error={loadError} onRetry={() => { setLoading(true); loadAll().finally(() => setLoading(false)); }} />;
+  }
+  if (!issue) {
+    return (
+      <EmptyState
+        icon="clipboard-outline"
+        title="This task is gone"
+        message="It may have been reassigned or withdrawn. Pull down on your task list to refresh it."
+      />
+    );
+  }
 
   const photo = issue.before_photos?.[0] ?? null;
   const photoUri = photo

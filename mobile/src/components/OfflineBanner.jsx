@@ -21,6 +21,7 @@
 
 import { useEffect, useRef } from 'react';
 import { Text, StyleSheet, Animated, TouchableOpacity, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
@@ -51,6 +52,9 @@ const STATES = {
  */
 export default function OfflineBanner({ onRetry }) {
   const { isOffline, isSlow, isRetrying } = useNetworkStatus();
+  // The banner sat at `top: 0`, i.e. underneath the status bar. SDK 54
+  // defaults Android to edge-to-edge, so this was wrong on both platforms.
+  const insets = useSafeAreaInsets();
 
   const key = isOffline ? 'offline' : isRetrying ? 'retrying' : isSlow ? 'slow' : null;
   const visible = key !== null;
@@ -60,12 +64,12 @@ export default function OfflineBanner({ onRetry }) {
 
   useEffect(() => {
     Animated.spring(slide, {
-      toValue: visible ? 0 : -HEIGHT,
+      toValue: visible ? 0 : -(HEIGHT + insets.top),
       useNativeDriver: true,
       speed: 14,
       bounciness: 4,
     }).start();
-  }, [visible, slide]);
+  }, [visible, slide, insets.top]);
 
   // Spin the refresh glyph only while actually retrying, so the animation means
   // something rather than being decoration.
@@ -100,7 +104,12 @@ export default function OfflineBanner({ onRetry }) {
       pointerEvents={visible ? 'auto' : 'none'}
       style={[
         styles.banner,
-        { backgroundColor: state.background, transform: [{ translateY: slide }] },
+        {
+          backgroundColor: state.background,
+          transform: [{ translateY: slide }],
+          paddingTop: insets.top,
+          height: HEIGHT + insets.top,
+        },
       ]}
       accessibilityLiveRegion="polite"
       accessibilityRole="alert"

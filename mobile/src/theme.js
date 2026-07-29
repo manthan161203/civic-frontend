@@ -51,8 +51,10 @@ export const PriorityColors = {
   low:      { dot: '#10b981', bg: '#f0fdf4', border: '#10b981' },
   medium:   { dot: '#f59e0b', bg: '#fffbeb', border: '#f59e0b' },
   high:     { dot: '#ef4444', bg: '#fef2f2', border: '#ef4444' },
-  critical: { dot: '#7c3aed', bg: '#f5f3ff', border: '#7c3aed' },
-  urgent:   { dot: '#ef4444', bg: '#fef2f2', border: '#ef4444' },
+  // The backend enum's highest level. It is deliberately a deeper red than
+  // `high` rather than a different hue: urgency is a matter of degree here, and
+  // the purple that `critical` used read as a separate category entirely.
+  urgent:   { dot: '#dc2626', bg: '#fef2f2', border: '#dc2626' },
 };
 
 // ── Typography ────────────────────────────────────────────────────────────────

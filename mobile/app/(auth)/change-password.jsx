@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, BackHandler } from 'react-native';
+import {
+  StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, BackHandler, KeyboardAvoidingView, Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import LoadingButton from '../../src/components/LoadingButton';
@@ -7,6 +9,7 @@ import SvgIcon from '../../src/components/SvgIcon';
 import { useUiStore } from '../../src/store/uiStore';
 import { useAuthStore } from '../../src/store/authStore';
 import { authApi } from '../../src/api/auth';
+import { notify } from '../../src/lib/notify';
 
 export default function ChangePasswordScreen() {
   const [showCurrent, setShowCurrent] = useState(false);
@@ -28,7 +31,7 @@ export default function ChangePasswordScreen() {
     if (!mustChangePassword) return;
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      Alert.alert('Cannot Go Back', 'You must change your password to continue using the app.');
+      notify.info('Set a new password to continue.');
       return true;
     });
 
@@ -84,7 +87,11 @@ export default function ChangePasswordScreen() {
 
   return (
     <LinearGradient colors={['#f0f9ff', '#e0f2fe']} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <SvgIcon name="checkCircle" size={48} color="#2563eb" />
@@ -181,6 +188,7 @@ export default function ChangePasswordScreen() {
           </LoadingButton>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </LinearGradient>
   );
 }

@@ -10,15 +10,33 @@ import { useUiStore } from '../../src/store/uiStore';
 import { getErrorMessage } from '../../src/api/errors';
 import { workersApi } from '../../src/api/workers';
 import { Colors, PriorityColors, StatusColors, Typography, Radius, Spacing, Shadow } from '../../src/theme';
+import { IssueListSkeleton } from '../../src/components/Skeleton';
+import ErrorState from '../../src/components/ErrorState';
+import { logger } from '../../src/utils/logger';
 
+/*
+ * The backend enum is exactly: urgent | high | medium | low.
+ *
+ * Every map on this screen led with `critical`, which the API cannot produce.
+ * Three things followed from that, all invisible in a code review and all
+ * obvious to a worker:
+ *
+ *   - the **"Critical" filter chip always returned nothing**, and there was no
+ *     chip for `urgent` — so the highest priority the system has could not be
+ *     filtered for at all;
+ *   - `PRIORITY_ORDER` had no entry for `urgent`, so sorting by priority put
+ *     `undefined` against numbers and pushed the most urgent work to the
+ *     *bottom* of the list;
+ *   - the colour lookup missed, so an urgent task rendered in the default grey.
+ */
 const PRIORITY_COLOR = {
-  critical: PriorityColors.critical.dot,
+  urgent:   PriorityColors.urgent.dot,
   high:     PriorityColors.high.dot,
   medium:   PriorityColors.medium.dot,
   low:      PriorityColors.low.dot,
 };
 const PRIORITY_BG = {
-  critical: PriorityColors.critical.bg,
+  urgent:   PriorityColors.urgent.bg,
   high:     PriorityColors.high.bg,
   medium:   PriorityColors.medium.bg,
   low:      PriorityColors.low.bg,
@@ -147,7 +165,7 @@ const ACTIVE_SECTIONS = [
 
 const PRIORITY_FILTERS = [
   { key: 'all',      label: 'All' },
-  { key: 'critical', label: 'Critical' },
+  { key: 'urgent',   label: 'Urgent' },
   { key: 'high',     label: 'High' },
   { key: 'medium',   label: 'Medium' },
   { key: 'low',      label: 'Low' },
@@ -165,7 +183,7 @@ const SORT_OPTIONS = [
   { key: 'priority', label: 'Priority', icon: 'flag' },
 ];
 
-const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+const PRIORITY_ORDER = { urgent: 0, high: 1, medium: 2, low: 3 };
 
 function FilterPills({ options, selected, onSelect, activeColor = '#059669' }) {
   return (
@@ -222,6 +240,7 @@ export default function TasksScreen() {
   const [tasks, setTasks]               = useState([]);
   const [history, setHistory]           = useState([]);
   const [loading, setLoading]           = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing]     = useState(false);
   const [priorityFilter, setPriority]   = useState('all');
   const [historyStatus, setHistStatus]  = useState('all');
@@ -231,6 +250,7 @@ export default function TasksScreen() {
   const [actionLoading, setActionLoading] = useState(null); // task id being acted on
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const [activeRes, histRes] = await Promise.all([
         workersApi.getTasks(),
@@ -239,7 +259,11 @@ export default function TasksScreen() {
       setTasks(activeRes.data.items || activeRes.data);
       setHistory(histRes.data.items || histRes.data);
     } catch (err) {
-      console.warn('Failed to load worker tasks:', err.message);
+      setLoadError(err);
+      // Was `console.warn` only, so a failed load rendered as an empty
+      // list — indistinguishable from having nothing to show, and with
+      // no way to try again.
+      logger.error('Failed to load worker tasks', err);
     }
   }, []);
 
@@ -311,7 +335,11 @@ export default function TasksScreen() {
     return 0;
   });
 
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} color="#059669" size="large" />;
+  // A skeleton, not a full-screen spinner: replacing the whole screen
+  // wipes the header and any list already rendered, so a refresh looked
+  // like a navigation event.
+  if (loading) return <IssueListSkeleton />;
+  if (loadError) return <ErrorState error={loadError} onRetry={load} accent={Colors.worker} />;
 
   return (
     <View style={styles.container}>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Image, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, FlatList, Modal,
+  TextInput, ActivityIndicator, FlatList, Modal,
   KeyboardAvoidingView, Platform, Share, RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams, useNavigation, useFocusEffect } from 'expo-router';
@@ -13,6 +13,19 @@ import { useAuthStore } from '../../src/store/authStore';
 import { formatDate, formatDateTime } from '../../src/utils/dateUtils';
 import { logger } from '../../src/utils/logger';
 import { AIClassificationWidget, AIResolutionWidget } from '../../src/components/AIInsightWidgets';
+import { notify, notifyError, confirm } from '../../src/lib/notify';
+import haptics from '../../src/lib/haptics';
+
+/** Inline validation message — see the note in DisputeModal.handleSubmit. */
+function ModalFieldError({ message }) {
+  if (!message) return null;
+  return (
+    <View style={styles.modalErrorRow}>
+      <Ionicons name="alert-circle" size={13} color="#dc2626" />
+      <Text style={styles.modalErrorText}>{message}</Text>
+    </View>
+  );
+}
 
 const STATUS_COLORS = {
   open: { bg: '#fef3c7', text: '#92400e' },
@@ -95,12 +108,17 @@ function FlagModal({ visible, onClose, onSubmit }) {
 function DisputeModal({ visible, onClose, onSubmit }) {
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async () => {
+    // Inline, because this fires inside a modal — an alert stacked on a sheet
+    // is two dismissals to get back to the field you have to fix.
     if (reason.trim().length < 10) {
-      Alert.alert('Too Short', 'Please provide at least 10 characters explaining why you dispute this resolution.');
+      setError(`Add a little more — ${10 - reason.trim().length} more character${10 - reason.trim().length === 1 ? '' : 's'} needed.`);
+      haptics.error();
       return;
     }
+    setError('');
     setSubmitting(true);
     await onSubmit(reason.trim());
     setSubmitting(false);
@@ -122,13 +140,14 @@ function DisputeModal({ visible, onClose, onSubmit }) {
             If you believe this issue was not properly resolved, explain why below. The issue will be reopened for review.
           </Text>
           <TextInput
-            style={styles.modalTextArea}
+            style={[styles.modalTextArea, error && styles.modalTextAreaInvalid]}
             value={reason}
-            onChangeText={setReason}
+            onChangeText={(v) => { setReason(v); if (error) setError(''); }}
             placeholder="Why was this not properly resolved? (min 10 chars)"
             multiline
             numberOfLines={4}
           />
+          <ModalFieldError message={error} />
           <TouchableOpacity
             style={[styles.submitBtn, { backgroundColor: '#f59e0b' }, submitting && { opacity: 0.6 }]}
             onPress={handleSubmit}
@@ -247,12 +266,15 @@ function ComplaintModal({ visible, onClose, onSubmit, workerId, issueId }) {
   const [reason, setReason] = useState('poor_work');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async () => {
     if (description.trim().length < 10) {
-      Alert.alert('Too Short', 'Please provide at least 10 characters.');
+      setError(`Add a little more — ${10 - description.trim().length} more character${10 - description.trim().length === 1 ? '' : 's'} needed.`);
+      haptics.error();
       return;
     }
+    setError('');
     setSubmitting(true);
     await onSubmit({
       worker_id: workerId,
@@ -290,13 +312,14 @@ function ComplaintModal({ visible, onClose, onSubmit, workerId, issueId }) {
           </View>
           <Text style={styles.modalLabel}>Description</Text>
           <TextInput
-            style={styles.modalTextArea}
+            style={[styles.modalTextArea, error && styles.modalTextAreaInvalid]}
             value={description}
-            onChangeText={setDescription}
+            onChangeText={(v) => { setDescription(v); if (error) setError(''); }}
             placeholder="Describe the issue with this worker... (min 10 chars)"
             multiline
             numberOfLines={4}
           />
+          <ModalFieldError message={error} />
           <TouchableOpacity
             style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
             onPress={handleSubmit}
@@ -481,7 +504,7 @@ export default function IssueDetailScreen() {
       }
       setUpvoted(!upvoted);
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed');
+      notifyError(err, upvoted ? 'Could not remove your upvote.' : 'Could not add your upvote.');
     }
   };
 
@@ -496,7 +519,7 @@ export default function IssueDetailScreen() {
         setBookmarked(true);
       }
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to update bookmark');
+      notifyError(err, bookmarked ? 'Could not remove the bookmark.' : 'Could not bookmark this.');
     }
     setBookmarkLoading(false);
   };
@@ -519,16 +542,22 @@ export default function IssueDetailScreen() {
       }
       setComment('');
       setReplyingTo(null);
-    } catch {}
+      haptics.success();
+    } catch (err) {
+      // Previously `catch {}`: the comment box cleared and the comment simply
+      // never appeared, which reads as "posted, then lost". The text is kept
+      // in the box now so it can be retried without retyping.
+      notifyError(err, 'Your comment was not posted. Tap send to try again.');
+    }
     setPosting(false);
   };
 
   const handleFlag = async (reason, details) => {
     try {
       await issuesApi.flag(id, reason, details);
-      Alert.alert('Reported', 'Thank you. Our team will review this issue.');
+      notify.success('Reported. Our team will review it.');
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to submit report.');
+      notifyError(err, 'Could not submit that report.');
     }
   };
 
@@ -537,8 +566,9 @@ export default function IssueDetailScreen() {
     try {
       await issuesApi.reopen(id);
       await load();
+      notify.success('Reopened. It is back in the queue.');
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to reopen issue.');
+      notifyError(err, 'Could not reopen this issue.');
     }
     setReopening(false);
   };
@@ -546,10 +576,10 @@ export default function IssueDetailScreen() {
   const handleDispute = async (reason) => {
     try {
       await issuesApi.createDispute(id, reason);
-      Alert.alert('Dispute Filed', 'Your dispute has been submitted. The issue will be reopened for review.');
+      notify.success('Dispute filed. The issue is reopened for review.', 5000);
       await load();
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to file dispute.');
+      notifyError(err, 'Could not file that dispute.');
     }
   };
 
@@ -557,41 +587,47 @@ export default function IssueDetailScreen() {
     try {
       const { data: survey } = await issuesApi.submitSurvey(id, data);
       setSurveyData(survey);
-      Alert.alert('Thank You!', 'Your feedback helps us improve.');
+      notify.success('Thanks — your feedback helps.');
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to submit survey.');
+      notifyError(err, 'Could not submit your feedback.');
     }
   };
 
   const handleComplaint = async (data) => {
     try {
       await workersApi.fileComplaint(data);
-      Alert.alert('Complaint Filed', 'Your complaint has been submitted for admin review.');
+      notify.success('Complaint filed for admin review.');
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to file complaint.');
+      notifyError(err, 'Could not file that complaint.');
     }
   };
 
-  const handleDeleteComment = (commentId) => {
-    Alert.alert('Delete Comment', 'Remove this comment?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive', onPress: async () => {
-          try {
-            await issuesApi.deleteComment(id, commentId);
-            setComments((prev) => {
-              const withoutTop = prev.filter((c) => c.id !== commentId);
-              return withoutTop.map((c) => ({
-                ...c,
-                replies: (c.replies || []).filter((r) => r.id !== commentId),
-              }));
-            });
-          } catch (err) {
-            Alert.alert('Error', err.response?.data?.detail || 'Failed to delete comment.');
-          }
-        },
-      },
-    ]);
+  /*
+   * One of the few things here that stays a blocking dialog: it destroys
+   * something the user wrote, and there is no undo.
+   */
+  const handleDeleteComment = async (commentId) => {
+    const ok = await confirm({
+      title: 'Delete this comment?',
+      message: 'It is removed for everyone, and cannot be restored.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    try {
+      await issuesApi.deleteComment(id, commentId);
+      setComments((prev) => {
+        const withoutTop = prev.filter((c) => c.id !== commentId);
+        return withoutTop.map((c) => ({
+          ...c,
+          replies: (c.replies || []).filter((r) => r.id !== commentId),
+        }));
+      });
+      notify.success('Comment deleted.');
+    } catch (err) {
+      notifyError(err, 'Could not delete that comment.');
+    }
   };
 
   const handleRate = async (rating) => {
@@ -603,9 +639,12 @@ export default function IssueDetailScreen() {
       if (rating === 1) {
         await issuesApi.reopen(id);
         await load();
+        notify.info('Thanks — a one-star rating reopens the issue for review.', 5000);
+      } else {
+        haptics.success();
       }
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to submit rating.');
+      notifyError(err, 'Could not save your rating.');
     }
     setRatingSubmitting(false);
   };
@@ -677,8 +716,8 @@ export default function IssueDetailScreen() {
               <Text style={[styles.typeText, { color: '#7c3aed' }]}>{issue.custom_issue_type_label}</Text>
             </View>
           )}
-          <View style={[styles.priorityChip, { backgroundColor: issue.priority === 'high' || issue.priority === 'critical' ? '#fee2e2' : '#f3f4f6' }]}>
-            <Text style={{ fontSize: 12, color: issue.priority === 'high' || issue.priority === 'critical' ? '#991b1b' : '#6b7280', fontWeight: '600' }}>
+          <View style={[styles.priorityChip, { backgroundColor: issue.priority === 'high' || issue.priority === 'urgent' ? '#fee2e2' : '#f3f4f6' }]}>
+            <Text style={{ fontSize: 12, color: issue.priority === 'high' || issue.priority === 'urgent' ? '#991b1b' : '#6b7280', fontWeight: '600' }}>
               {issue.priority}
             </Text>
           </View>
@@ -1110,6 +1149,9 @@ const styles = StyleSheet.create({
   reasonText: { fontSize: 13, fontWeight: '600', color: '#6b7280', textTransform: 'capitalize' },
   reasonTextActive: { color: '#1a56db' },
   modalTextArea: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#111827', minHeight: 72, textAlignVertical: 'top' },
+  modalTextAreaInvalid: { borderColor: '#dc2626', borderWidth: 1.5 },
+  modalErrorRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },
+  modalErrorText: { flex: 1, fontSize: 12.5, color: '#dc2626', lineHeight: 17 },
   submitBtn: { marginTop: 20, backgroundColor: '#ef4444', borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
   submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   thankYouBox: { alignItems: 'center', paddingVertical: 24, backgroundColor: '#f0fdf4', borderRadius: 12, padding: 16 },

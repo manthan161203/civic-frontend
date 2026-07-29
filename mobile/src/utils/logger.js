@@ -51,6 +51,57 @@ const _formatTime = () => {
 };
 
 /**
+ * Extra destinations for log records.
+ *
+ * Console and AsyncStorage stay; this is the seam a crash reporter attaches to:
+ *
+ *   import * as Sentry from '@sentry/react-native';
+ *   addLogSink((record) => {
+ *     if (record.level === 'ERROR') {
+ *       Sentry.captureException(record.error ?? new Error(record.message), {
+ *         tags: { component: record.component, request_id: record.requestId },
+ *       });
+ *     }
+ *   });
+ *
+ * @type {((record: object) => void)[]}
+ */
+const sinks = [];
+
+/** @param {(record: object) => void} fn @returns {() => void} unsubscribe */
+export function addLogSink(fn) {
+  sinks.push(fn);
+  return () => {
+    const i = sinks.indexOf(fn);
+    if (i >= 0) sinks.splice(i, 1);
+  };
+}
+
+/**
+ * Turn a thrown value into something that survives JSON.stringify.
+ *
+ * `error.message` alone loses the stack — and for an ApiError it also loses
+ * `kind`, `status` and `requestId`, the last of which is the join key between
+ * this log line and the backend one that caused it.
+ *
+ * @private
+ */
+const _serialiseError = (error) => {
+  if (!error) return undefined;
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      ...(error.kind ? { kind: error.kind } : {}),
+      ...(error.status ? { status: error.status } : {}),
+      ...(error.requestId ? { requestId: error.requestId } : {}),
+    };
+  }
+  return { name: 'NonError', message: String(error) };
+};
+
+/**
  * Core logging function
  * @private
  */
@@ -74,6 +125,16 @@ const _log = (level, component, message, data) => {
   
   // Store in AsyncStorage for debugging
   _writeToStorage(logEntry);
+
+  // Fan out. Wrapped because a logger that throws takes down the code path it
+  // was reporting on.
+  for (const sink of sinks) {
+    try {
+      sink(logEntry);
+    } catch {
+      /* a broken sink must not break the caller */
+    }
+  }
 };
 
 export const logger = {
@@ -105,9 +166,16 @@ export const logger = {
    * Error level — error messages for failures
    * Use when errors occur that need investigation
    */
-  error: (component, message, error) => {
-    const errorData = error?.message || String(error);
-    _log('ERROR', component, message, errorData);
+  error: (component, message, error, meta) => {
+    // Previously `error?.message || String(error)` — which discarded the stack,
+    // and for an ApiError discarded `kind`, `status` and `requestId` too, so a
+    // logged failure could not be traced back to the request that caused it.
+    const serialised = _serialiseError(error);
+    _log('ERROR', component, message, {
+      ...(serialised ? { error: serialised } : {}),
+      ...(meta ? { meta } : {}),
+      ...(serialised?.requestId ? { requestId: serialised.requestId } : {}),
+    });
   },
 
   /**

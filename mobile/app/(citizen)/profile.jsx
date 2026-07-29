@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, TextInput, Modal, Image,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, TextInput, Modal, Image, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -15,6 +14,8 @@ import { issuesApi } from '../../src/api/issues';
 import { locationsApi } from '../../src/api/locations';
 import { compressImage } from '../../src/utils/imageUtils';
 import { reverseGeocode, forwardGeocode } from '../../src/utils/geocode';
+import { notify, notifyError, confirm } from '../../src/lib/notify';
+import { logger } from '../../src/utils/logger';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -50,6 +51,7 @@ export default function ProfileScreen() {
   const [profilePhoto, setProfilePhoto] = useState(user?.profile_photo_url || null);
   const [selectedPhotoUri, setSelectedPhotoUri] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [showDistrictDropdown, setShowDistrictDropdown] = useState(false);
   const [showTalukaDropdown, setShowTalukaDropdown] = useState(false);
   const [showWardDropdown, setShowWardDropdown] = useState(false);
@@ -142,11 +144,85 @@ export default function ProfileScreen() {
   // Setup is now handled by dedicated setup screen, not modal
   // If user reaches profile without completing setup, they're redirected by root layout
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: logout },
-    ]);
+  /*
+   * One of four things on this screen that stays a blocking dialog. Signing out
+   * discards the offline queue's association with this account, so it is not a
+   * tap to make by accident.
+   */
+  const handleLogout = async () => {
+    const ok = await confirm({
+      title: 'Sign out?',
+      message: 'Anything still waiting to send will stay on this device until you sign in again.',
+      confirmLabel: 'Sign out',
+      destructive: true,
+    });
+    if (ok) logout();
+  };
+
+  /**
+   * Export everything we hold about this user.
+   *
+   * Stays a dialog on the way in — it is a deliberate privacy action and worth
+   * a beat of confirmation — but the *result* is a toast. The old version
+   * reported the counts in a second alert built from `\n` bullets, which on a
+   * narrow phone wrapped into an unreadable block.
+   */
+  const handleExportData = async () => {
+    const ok = await confirm({
+      title: 'Download your data?',
+      message: 'Exports your profile, reports, notifications and rewards as JSON.',
+      confirmLabel: 'Export',
+    });
+    if (!ok) return;
+
+    setExporting(true);
+    try {
+      const { data } = await authApi.exportMyData();
+      const parts = [
+        [data.issues_reported?.length || 0, 'report'],
+        [data.notifications?.length || 0, 'notification'],
+        [data.reward_transactions?.length || 0, 'transaction'],
+        [data.badges_earned?.length || 0, 'badge'],
+      ]
+        .filter(([n]) => n > 0)
+        .map(([n, noun]) => `${n} ${noun}${n === 1 ? '' : 's'}`);
+
+      notify.success(parts.length ? `Exported ${parts.join(', ')}.` : 'Export ready — nothing recorded yet.', 6000);
+    } catch (err) {
+      notifyError(err, 'Could not export your data. Try again later.');
+    }
+    setExporting(false);
+  };
+
+  /**
+   * The most destructive thing in the app, so it asks twice: once for intent,
+   * once for certainty. The second dialog names what is lost, because "all
+   * data" is abstract and "your reports and rewards" is not.
+   */
+  const handleDeleteAccount = async () => {
+    const intent = await confirm({
+      title: 'Delete your account?',
+      message: 'Your profile, reports, comments and rewards are removed permanently. This cannot be undone.',
+      confirmLabel: 'Continue',
+      destructive: true,
+    });
+    if (!intent) return;
+
+    const certain = await confirm({
+      title: 'Delete permanently?',
+      message: 'Last chance — there is no way to restore this account or anything in it.',
+      confirmLabel: 'Delete my account',
+      cancelLabel: 'Keep my account',
+      destructive: true,
+    });
+    if (!certain) return;
+
+    try {
+      await authApi.deleteAccount();
+      await logout();
+    } catch (err) {
+      notifyError(err, 'Could not delete your account. Try again, or contact support.');
+    }
   };
 
   const pickProfilePhoto = async () => {
@@ -163,7 +239,7 @@ export default function ProfileScreen() {
         setSelectedPhotoUri(compressedUri);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick image');
+      notifyError(error, 'Could not open your photo library.');
     }
   };
 
@@ -184,28 +260,23 @@ export default function ProfileScreen() {
       setProfilePhoto(photoUrl);
       updateUser(data); // Update entire user object
       setSelectedPhotoUri(null);
-      Alert.alert('Success', 'Profile photo updated!');
+      notify.success('Profile photo updated.');
     } catch (error) {
-      Alert.alert('Error', error?.response?.data?.detail || 'Failed to upload photo');
+      notifyError(error, 'Could not upload that photo.');
     }
     setUploadingPhoto(false);
   };
 
   const handleSaveProfile = async () => {
-    if (!editName.trim()) {
-      Alert.alert('Error', 'Name is required.');
-      return;
-    }
-    if (!editDistrict) {
-      Alert.alert('Error', 'Please select a district.');
-      return;
-    }
-    if (!editTaluka) {
-      Alert.alert('Error', 'Please select a taluka.');
-      return;
-    }
-    if (!editWard) {
-      Alert.alert('Error', 'Please select a ward.');
+    const missing = [];
+    if (!editName.trim()) missing.push('your name');
+    if (!editDistrict) missing.push('a district');
+    if (!editTaluka) missing.push('a taluka');
+    if (!editWard) missing.push('a ward');
+    if (missing.length > 0) {
+      // One message listing everything, rather than four alerts in sequence
+      // each fixed and re-submitted.
+      notify.error(`Still needed: ${missing.join(', ')}.`, 5000);
       return;
     }
     setSaving(true);
@@ -222,24 +293,20 @@ export default function ProfileScreen() {
       const { data } = await authApi.updateProfile(updateData);
       updateUser(data);
       setEditModal(false);
-      Alert.alert('Success', 'Profile updated successfully!');
+      notify.success('Profile updated.');
     } catch (error) {
-      Alert.alert('Error', error?.response?.data?.detail || 'Failed to update profile.');
+      notifyError(error, 'Could not update your profile.');
     }
     setSaving(false);
   };
 
   const handleMandatorySaveProfile = async () => {
-    if (!mandatoryName.trim()) {
-      Alert.alert('Error', 'Full Name is required.');
-      return;
-    }
-    if (!mandatoryWardObj) {
-      Alert.alert('Error', 'Please select your ward.');
-      return;
-    }
-    if (!mandatoryLat || !mandatoryLon) {
-      Alert.alert('Error', 'Please set your home location using GPS or enter it manually.');
+    const missing = [];
+    if (!mandatoryName.trim()) missing.push('your full name');
+    if (!mandatoryWardObj) missing.push('your ward');
+    if (!mandatoryLat || !mandatoryLon) missing.push('your home location');
+    if (missing.length > 0) {
+      notify.error(`Still needed: ${missing.join(', ')}.`, 5000);
       return;
     }
     setMandatorySaving(true);
@@ -258,8 +325,9 @@ export default function ProfileScreen() {
       const { data } = await authApi.updateProfile(updateData);
       updateUser(data);
       setShowMandatoryModal(false);
+      notify.success('You’re all set.');
     } catch (error) {
-      Alert.alert('Error', error?.response?.data?.detail || 'Failed to complete profile setup.');
+      notifyError(error, 'Could not finish setting up your profile.');
     }
     setMandatorySaving(false);
   };
@@ -269,7 +337,7 @@ export default function ProfileScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Location access is required. Please enable it in Settings.');
+        notify.warn('Location access is off. Enable it in Settings, or set your home on the map.', 6000);
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -282,7 +350,7 @@ export default function ProfileScreen() {
         if (geo) setAddress(geo.address);
       }
     } catch {
-      Alert.alert('Error', 'Could not get your location. Please try again.');
+      notify.error('Could not get your location. Try the map instead.');
     } finally {
       setGetting(false);
     }
@@ -304,10 +372,10 @@ export default function ProfileScreen() {
           longitudeDelta: 0.005,
         }, 500);
       } else {
-        Alert.alert('Not found', 'Could not find that address. Try a more specific search.');
+        notify.info('No match for that address. Try adding a landmark or the area name.', 4000);
       }
-    } catch {
-      Alert.alert('Error', 'Address search failed. Please try again.');
+    } catch (err) {
+      notifyError(err, 'Address search failed. Try again, or drag the pin.');
     } finally {
       setSearching(false);
     }
@@ -342,7 +410,7 @@ export default function ProfileScreen() {
             }
           }
         } catch (err) {
-          console.warn('Failed to load profile location:', err.message);
+          logger.warn('Failed to load profile location', err);
         }
       }
     }
@@ -351,7 +419,7 @@ export default function ProfileScreen() {
 
   const handleSaveLocation = async () => {
     if (!locationLat || !locationLon) {
-      Alert.alert('Error', 'Please set your location using GPS or select it manually.');
+      notify.error('Set your home first — use GPS, search, or drag the pin.');
       return;
     }
     setLocationSaving(true);
@@ -366,15 +434,19 @@ export default function ProfileScreen() {
       const { data } = await authApi.updateProfile(updateData);
       updateUser(data);
       setShowLocationModal(false);
-      Alert.alert('Success', 'Home location updated!');
+      notify.success('Home location updated.');
     } catch (error) {
-      Alert.alert('Error', error?.response?.data?.detail || 'Failed to save location.');
+      notifyError(error, 'Could not save your home location.');
     }
     setLocationSaving(false);
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView style={styles.container}>
       {/* Header Card */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -551,26 +623,12 @@ export default function ProfileScreen() {
         <MenuItem icon="trophy-outline" label="Leaderboard & Badges" onPress={() => router.push('/(citizen)/leaderboard')} />
         <MenuItem icon="chatbubble-ellipses-outline" label="AI Assistant" onPress={() => router.push('/(citizen)/chat')} />
         <MenuItem icon="notifications-outline" label="Ward Subscriptions" onPress={() => router.push('/(citizen)/subscriptions')} />
-        <MenuItem icon="download-outline" label="Download My Data" onPress={() => {
-          Alert.alert(
-            'Download My Data',
-            'Export all your personal data (profile, issues, notifications, rewards) as JSON.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Export',
-                onPress: async () => {
-                  try {
-                    const { data } = await authApi.exportMyData();
-                    Alert.alert('Data Exported', `Export contains:\n• ${data.issues_reported?.length || 0} issues\n• ${data.notifications?.length || 0} notifications\n• ${data.reward_transactions?.length || 0} transactions\n• ${data.badges_earned?.length || 0} badges\n\nExported at: ${data.exported_at}`);
-                  } catch (err) {
-                    Alert.alert('Error', err.response?.data?.detail || 'Failed to export data. Try again later.');
-                  }
-                },
-              },
-            ]
-          );
-        }} />
+        <MenuItem
+          icon="download-outline"
+          label={exporting ? 'Preparing your data…' : 'Download My Data'}
+          onPress={handleExportData}
+          disabled={exporting}
+        />
         <MenuItem icon="person-outline" label="Edit Profile" onPress={async () => { 
           setEditName(user?.name || ''); 
           setEditPhone(user?.phone || '');
@@ -627,27 +685,7 @@ export default function ProfileScreen() {
         <MenuItem
           icon="trash-outline"
           label="Delete Account"
-          onPress={() => {
-            Alert.alert(
-              'Delete Account',
-              'This will permanently delete your account and all data. This cannot be undone.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete',
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      await authApi.deleteAccount();
-                      await logout();
-                    } catch {
-                      Alert.alert('Error', 'Failed to delete account. Please try again.');
-                    }
-                  },
-                },
-              ]
-            );
-          }}
+          onPress={handleDeleteAccount}
           danger
         />
       </View>
@@ -767,7 +805,7 @@ export default function ProfileScreen() {
                               const { data } = await locationsApi.getTalukas(d.id);
                               setTalukas(data || []);
                             } catch (err) {
-                              console.warn('Failed to load talukas:', err.message);
+                              logger.warn('Failed to load talukas', err);
                             }
                           }}
                         >
@@ -810,7 +848,7 @@ export default function ProfileScreen() {
                               const { data } = await locationsApi.getWards(t.id);
                               setWards(data || []);
                             } catch (err) {
-                              console.warn('Failed to load wards:', err.message);
+                              logger.warn('Failed to load wards', err);
                             }
                           }}
                         >
@@ -992,7 +1030,7 @@ export default function ProfileScreen() {
                               const { data } = await locationsApi.getTalukas(d.id);
                               setMandatoryTalukas(data || []);
                             } catch (err) {
-                              console.warn('Failed to load mandatory talukas:', err.message);
+                              logger.warn('Failed to load mandatory talukas', err);
                             }
                           }}
                         >
@@ -1031,7 +1069,7 @@ export default function ProfileScreen() {
                               const { data } = await locationsApi.getWards(t.id);
                               setMandatoryWards(data || []);
                             } catch (err) {
-                              console.warn('Failed to load mandatory wards:', err.message);
+                              logger.warn('Failed to load mandatory wards', err);
                             }
                           }}
                         >
@@ -1321,7 +1359,7 @@ export default function ProfileScreen() {
                               const { data } = await locationsApi.getTalukas(d.id);
                               setLocationTalukas(data || []);
                             } catch (err) {
-                              console.warn('Failed to load location talukas:', err.message);
+                              logger.warn('Failed to load location talukas', err);
                             }
                           }}
                         >
@@ -1360,7 +1398,7 @@ export default function ProfileScreen() {
                               const { data } = await locationsApi.getWards(t.id);
                               setLocationWards(data || []);
                             } catch (err) {
-                              console.warn('Failed to load location wards:', err.message);
+                              logger.warn('Failed to load location wards', err);
                             }
                           }}
                         >
@@ -1423,15 +1461,28 @@ export default function ProfileScreen() {
         </View>
       </Modal>
     </ScrollView>
+      </KeyboardAvoidingView>
   );
 }
 
-function MenuItem({ icon, label, onPress, danger }) {
+function MenuItem({ icon, label, onPress, danger, disabled }) {
   return (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+    <TouchableOpacity
+      style={[styles.menuItem, disabled && { opacity: 0.5 }]}
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
+    >
       <Ionicons name={icon} size={20} color={danger ? '#ef4444' : '#374151'} />
       <Text style={[styles.menuLabel, danger && styles.menuLabelDanger]}>{label}</Text>
-      <Ionicons name="chevron-forward" size={16} color="#d1d5db" />
+      {/* A row that is doing work shows a spinner where the chevron was, so the
+          affordance matches the state: nothing to tap into right now. */}
+      {disabled ? (
+        <ActivityIndicator size="small" color="#9ca3af" />
+      ) : (
+        <Ionicons name="chevron-forward" size={16} color="#d1d5db" />
+      )}
     </TouchableOpacity>
   );
 }

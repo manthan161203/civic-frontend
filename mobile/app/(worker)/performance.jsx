@@ -8,6 +8,10 @@ import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { rewardsApi } from '../../src/api/rewards';
 import { useAuthStore } from '../../src/store/authStore';
+import { StatsSkeleton } from '../../src/components/Skeleton';
+import ErrorState from '../../src/components/ErrorState';
+import { logger } from '../../src/utils/logger';
+import { Colors } from '../../src/theme';
 
 // ── Level system ──────────────────────────────────────────────────────────────
 const LEVEL_THRESHOLDS = [0, 100, 250, 500, 1000];
@@ -155,9 +159,11 @@ export default function PerformanceScreen() {
   const [rewards, setRewards] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const [rRes, lRes] = await Promise.all([
         rewardsApi.getMyRewards(),
@@ -166,7 +172,11 @@ export default function PerformanceScreen() {
       setRewards(rRes.data);
       setLeaderboard(lRes.data.items || lRes.data);
     } catch (err) {
-      console.warn('Failed to load performance data:', err.message);
+      setLoadError(err);
+      // Was `console.warn` only, so a failed load rendered as an empty
+      // list — indistinguishable from having nothing to show, and with
+      // no way to try again.
+      logger.error('Failed to load performance data', err);
     }
   }, []);
 
@@ -180,7 +190,11 @@ export default function PerformanceScreen() {
     setRefreshing(false);
   };
 
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} color="#059669" size="large" />;
+  // A skeleton, not a full-screen spinner: replacing the whole screen
+  // wipes the header and any list already rendered, so a refresh looked
+  // like a navigation event.
+  if (loading) return <StatsSkeleton />;
+  if (loadError) return <ErrorState error={loadError} onRetry={load} accent={Colors.worker} />;
 
   const lc = LEVEL_COLORS[rewards?.level_name] || LEVEL_COLORS.Newcomer;
   const progress = rewards

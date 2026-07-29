@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView,
+  StyleSheet, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { authApi } from '../../src/api/auth';
 import { useAuthStore } from '../../src/store/authStore';
+import { notify, notifyError } from '../../src/lib/notify';
 
 export default function AadharScreen() {
   const router = useRouter();
@@ -31,7 +32,7 @@ export default function AadharScreen() {
   const handleSendOtp = async () => {
     const digits = aadhaar.replace(/\D/g, '');
     if (digits.length !== 12) {
-      Alert.alert('Invalid Aadhaar', 'Please enter your 12-digit Aadhaar number.');
+      notify.error('Enter all 12 digits of your Aadhaar number.');
       return;
     }
     setLoading(true);
@@ -40,7 +41,7 @@ export default function AadharScreen() {
       setStep('otp');
       setCountdown(60);
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed to send OTP. Try again.');
+      notifyError(err, 'Could not send the OTP. Try again.');
     }
     setLoading(false);
   };
@@ -68,7 +69,7 @@ export default function AadharScreen() {
       const { data } = await authApi.verifyAadhar(digits, code);
       await setSession(data.access_token, data.refresh_token);
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Invalid OTP. Please try again.');
+      notifyError(err, 'That code was not right. Try again.');
       setOtp(['', '', '', '', '', '']);
       inputs.current[0]?.focus();
     }
@@ -80,9 +81,9 @@ export default function AadharScreen() {
     try {
       await authApi.sendAadharOtp(digits);
       setCountdown(60);
-      Alert.alert('Sent', 'A new OTP has been sent to your registered mobile.');
+      notify.success('A new code is on its way to your registered mobile.');
     } catch {
-      Alert.alert('Error', 'Could not resend OTP.');
+      notify.error('Could not resend the code. Try again in a moment.');
     }
   };
 

@@ -8,6 +8,10 @@ import { useNavigation, useFocusEffect } from 'expo-router';
 import { locationsApi } from '../../src/api/locations';
 import { useNotificationStore } from '../../src/store/notificationStore';
 import { formatDate } from '../../src/utils/dateUtils';
+import { ListSkeleton } from '../../src/components/Skeleton';
+import ErrorState from '../../src/components/ErrorState';
+import { logger } from '../../src/utils/logger';
+import { Colors } from '../../src/theme';
 
 const SCOPE_COLORS = {
   state: { bg: '#f3e8ff', text: '#7c3aed', icon: 'globe-outline' },
@@ -21,6 +25,7 @@ export default function AnnouncementsScreen() {
   const { clearAnnouncementBadge } = useNotificationStore();
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded] = useState({});
 
@@ -35,11 +40,16 @@ export default function AnnouncementsScreen() {
   }, []);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const { data } = await locationsApi.getAnnouncements({ page: 1, size: 50 });
       setAnnouncements(data.items || data);
     } catch (err) {
-      console.warn('Failed to load announcements:', err.message);
+      setLoadError(err);
+      // Was `console.warn` only, so a failed load rendered as an empty
+      // list — indistinguishable from having nothing to show, and with
+      // no way to try again.
+      logger.error('Failed to load announcements', err);
     }
   }, []);
 
@@ -63,7 +73,11 @@ export default function AnnouncementsScreen() {
 
   const toggleExpand = (id) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
 
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} color="#1a56db" size="large" />;
+  // A skeleton, not a full-screen spinner: replacing the whole screen
+  // wipes the header and any list already rendered, so a refresh looked
+  // like a navigation event.
+  if (loading) return <ListSkeleton />;
+  if (loadError) return <ErrorState error={loadError} onRetry={load} accent={Colors.citizen} />;
 
   return (
     <FlatList

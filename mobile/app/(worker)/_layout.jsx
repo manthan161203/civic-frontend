@@ -8,6 +8,7 @@ import { useNotificationStore } from '../../src/store/notificationStore';
 import { workersApi } from '../../src/api/workers';
 import OfflineBanner from '../../src/components/OfflineBanner';
 import { Colors } from '../../src/theme';
+import { logger } from '../../src/utils/logger';
 
 function BadgeIcon({ name, color, size, count }) {
   return (
@@ -50,7 +51,7 @@ export default function WorkerLayout() {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
-          console.warn('Location permission not granted');
+          logger.warn('Background location permission not granted; positions will not update');
           return;
         }
         const pos = await Location.getCurrentPositionAsync({

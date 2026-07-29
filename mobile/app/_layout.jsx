@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppState, ActivityIndicator, Alert } from 'react-native';
 import { useAuthStore, registerPushToken } from '../src/store/authStore';
 import { onSessionEnded } from '../src/api/client';
@@ -213,13 +214,29 @@ export default function RootLayout() {
 
   if (isLoading) {
     return (
-      <GestureHandlerRootView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f9ff' }}>
-        <ActivityIndicator size="large" color="#1a56db" />
-      </GestureHandlerRootView>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f0f9ff' }}>
+          <ActivityIndicator size="large" color="#1a56db" />
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
     );
   }
 
   return (
+    /*
+     * SafeAreaProvider is what makes `useSafeAreaInsets` return real numbers.
+     *
+     * `react-native-safe-area-context` was a declared dependency imported by
+     * nothing, so every screen either hardcoded a padding (`paddingTop: 60`
+     * standing in for a notch) or ran under the status bar and the home
+     * indicator. Two screens used the deprecated core `SafeAreaView`, which is
+     * iOS-only — and SDK 54 defaults Android to edge-to-edge, so those were
+     * broken on Android specifically.
+     *
+     * It has to sit above the navigator: React Navigation reads the same
+     * context to inset its own header and tab bar.
+     */
+    <SafeAreaProvider>
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
@@ -232,5 +249,6 @@ export default function RootLayout() {
       </Stack>
       <Toast />
     </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }

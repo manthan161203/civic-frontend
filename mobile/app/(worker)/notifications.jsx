@@ -1,12 +1,12 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, ActivityIndicator, Alert,
-} from 'react-native';
+  RefreshControl, ActivityIndicator, } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useNotificationStore } from '../../src/store/notificationStore';
 import { formatDateTime } from '../../src/utils/dateUtils';
+import { confirm } from '../../src/lib/notify';
 
 // Worker-flavoured notifications screen — same data/store as citizen, green accent colour
 export default function WorkerNotificationsScreen() {
@@ -16,8 +16,21 @@ export default function WorkerNotificationsScreen() {
     fetchNotifications, markAllRead, markOneRead, deleteOne, deleteAll,
   } = useNotificationStore();
 
+  // Local, because the list itself comes from a Zustand store that has no
+  // notion of a user-initiated pull.
+  const [refreshing, setRefreshing] = useState(false);
+
   useEffect(() => { fetchNotifications(); }, []);
   useFocusEffect(useCallback(() => { fetchNotifications(); }, [fetchNotifications]));
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchNotifications();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handlePress = (n) => {
     markOneRead(n.id);
@@ -25,22 +38,28 @@ export default function WorkerNotificationsScreen() {
     if (n.issue_id) router.push(`/task/${n.issue_id}`);
   };
 
-  const handleDeleteAll = () => {
-    Alert.alert(
-      'Clear All Notifications',
-      'Delete all notifications? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete All', style: 'destructive', onPress: deleteAll },
-      ]
-    );
+  /*
+   * Both of these stay modal — they destroy something with no undo — but as
+   * promises rather than callback pyramids, and with copy that says how much is
+   * going away rather than the bare word "all".
+   */
+  const handleDeleteAll = async () => {
+    const ok = await confirm({
+      title: 'Clear every notification?',
+      message: 'They are removed from this device and your account. This cannot be undone.',
+      confirmLabel: 'Clear all',
+      destructive: true,
+    });
+    if (ok) deleteAll();
   };
 
-  const handleDeleteOne = (id) => {
-    Alert.alert('Delete Notification', 'Remove this notification?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteOne(id) },
-    ]);
+  const handleDeleteOne = async (id) => {
+    const ok = await confirm({
+      title: 'Delete this notification?',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (ok) deleteOne(id);
   };
 
   const renderItem = ({ item: n }) => (
@@ -94,7 +113,11 @@ export default function WorkerNotificationsScreen() {
           data={notifications}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderItem}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={fetchNotifications} tintColor="#059669" />}
+          refreshControl={
+          // Was `refreshing={false}` as a literal, so the spinner snapped
+          // away instantly and pull-to-refresh gave no sign it had run.
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#059669" />
+        }
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="notifications-off-outline" size={48} color="#d1d5db" />

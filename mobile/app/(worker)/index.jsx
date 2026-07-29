@@ -9,6 +9,10 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
 import { workersApi } from '../../src/api/workers';
 import { useAuthStore } from '../../src/store/authStore';
+import ErrorState from '../../src/components/ErrorState';
+import { logger } from '../../src/utils/logger';
+import { Colors } from '../../src/theme';
+import { notify, notifyError } from '../../src/lib/notify';
 
 function StatCard({ label, value, icon, color }) {
   return (
@@ -27,10 +31,12 @@ export default function WorkerDashboard() {
   const [tasks, setTasks] = useState([]);
   const [isOnline, setIsOnline] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [toggling, setToggling] = useState(false);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const [statsRes, tasksRes] = await Promise.all([
         workersApi.getStats(),
@@ -41,7 +47,11 @@ export default function WorkerDashboard() {
       setTasks(taskList);
       setIsOnline(user?.is_online ?? false);
     } catch (err) {
-      console.warn('Failed to load worker dashboard:', err.message);
+      setLoadError(err);
+      // Was `console.warn` only, so a failed load rendered as an empty
+      // list — indistinguishable from having nothing to show, and with
+      // no way to try again.
+      logger.error('Failed to load worker dashboard', err);
     }
   }, [user?.is_online]);
 
@@ -80,13 +90,22 @@ export default function WorkerDashboard() {
       await workersApi.setStatus(val);
       setIsOnline(val);
       updateUser({ is_online: val });
+      notify.success(val ? 'You are online — tasks can be assigned to you.' : 'You are offline.');
     } catch (err) {
-      console.warn('Failed to set worker status:', err.message);
+      /*
+       * This one mattered more than most. The switch is how a worker says "I am
+       * available"; when the call failed the app kept the old value and said
+       * nothing, so someone who thought they had clocked on was invisible to
+       * dispatch for the rest of their shift.
+       */
+      logger.error('Failed to set worker status', err);
+      notifyError(err, val ? 'Could not put you online. Try again.' : 'Could not take you offline. Try again.');
     }
     setToggling(false);
   };
 
   if (loading) return <ActivityIndicator style={{ flex: 1 }} color="#059669" size="large" />;
+  if (loadError) return <ErrorState error={loadError} onRetry={load} accent={Colors.worker} />;
 
   return (
     <ScrollView
@@ -145,7 +164,7 @@ export default function WorkerDashboard() {
             >
               <View style={styles.taskLeft}>
                 <View style={[styles.priorityBar, {
-                  backgroundColor: task.priority === 'critical' ? '#7c3aed'
+                  backgroundColor: task.priority === 'urgent' ? '#dc2626'
                     : task.priority === 'high' ? '#ef4444'
                     : task.priority === 'medium' ? '#f59e0b' : '#10b981',
                 }]} />

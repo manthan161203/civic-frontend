@@ -5,8 +5,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, ActivityIndicator, BackHandler, Alert,
+  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, BackHandler, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import * as Location from 'expo-location';
 import MapView, { Marker, PROVIDER_GOOGLE } from '../../src/components/PlatformMap';
@@ -16,6 +15,27 @@ import { useAuthStore } from '../../src/store/authStore';
 import { authApi } from '../../src/api/auth';
 import { locationsApi } from '../../src/api/locations';
 import { reverseGeocode, forwardGeocode } from '../../src/utils/geocode';
+import { notify, notifyError } from '../../src/lib/notify';
+import haptics from '../../src/lib/haptics';
+
+/**
+ * Validation lives beside the field it is about.
+ *
+ * This screen used to answer every mistake with `Alert.alert('Error', …)` — a
+ * modal that names the problem, then vanishes when you dismiss it, leaving you
+ * to remember which of six fields it meant. On a form you cannot skip (the hard
+ * back button is disabled during setup) that is the difference between fixing
+ * one field and re-reading the whole thing.
+ */
+function FieldError({ message }) {
+  if (!message) return null;
+  return (
+    <View style={styles.fieldErrorRow}>
+      <Ionicons name="alert-circle" size={13} color="#dc2626" />
+      <Text style={styles.fieldErrorText}>{message}</Text>
+    </View>
+  );
+}
 
 export default function SetupScreen() {
   const router = useRouter();
@@ -25,6 +45,12 @@ export default function SetupScreen() {
   const [email, setEmail] = useState(user?.email || '');
   const [language, setLanguage] = useState(user?.language || 'en');
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  // Clearing on edit rather than re-validating on every keystroke: nobody wants
+  // to be told their email is invalid while they are still typing the domain.
+  const clearError = (field) =>
+    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
 
   // Area
   const [districts, setDistricts] = useState([]);
@@ -62,17 +88,21 @@ export default function SetupScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Location access is required. Please enable it in Settings.');
+        // Not an error the user can retry from here — the fix is in Settings —
+        // so it says where to go rather than offering a dead retry.
+        notify.warn('Location access is off. Enable it in Settings, or set your home on the map below.', 6000);
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const { latitude, longitude } = loc.coords;
       setLat(latitude); setLon(longitude);
+      clearError('location');
       mapRef.current?.animateToRegion({ latitude, longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 }, 500);
       const geo = await reverseGeocode(latitude, longitude);
       if (geo) setAddress(geo.address);
-    } catch {
-      Alert.alert('Error', 'Could not get your location. Please try again.');
+      haptics.success();
+    } catch (err) {
+      notifyError(err, 'Could not get your location. Try the map instead.');
     } finally {
       setGettingGPS(false);
     }
@@ -86,25 +116,42 @@ export default function SetupScreen() {
       if (geo) {
         setLat(geo.latitude); setLon(geo.longitude);
         setAddress(geo.address);
+        clearError('location');
         mapRef.current?.animateToRegion({ latitude: geo.latitude, longitude: geo.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 }, 500);
+        haptics.success();
       } else {
-        Alert.alert('Not found', 'Could not find that address. Try a more specific search.');
+        notify.info('No match for that address. Try adding a landmark or the area name.', 4000);
       }
-    } catch {
-      Alert.alert('Error', 'Address search failed. Please try again.');
+    } catch (err) {
+      notifyError(err, 'Address search failed. Try again, or drag the pin on the map.');
     } finally {
       setSearching(false);
     }
   };
 
   const handleSave = async () => {
-    if (!name.trim()) { Alert.alert('Error', 'Full name is required.'); return; }
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      Alert.alert('Error', 'A valid email address is required.'); return;
-    }
-    if (!wardObj) { Alert.alert('Error', 'Please select your ward.'); return; }
-    if (!lat || !lon) { Alert.alert('Error', 'Please set your home location using GPS or the map.'); return; }
+    // Collected all at once rather than returning on the first miss: four
+    // sequential alerts, each fixed and re-submitted, was four round trips
+    // through a form the user cannot leave.
+    const found = {};
+    if (!name.trim()) found.name = 'Enter your full name.';
+    if (!email.trim()) found.email = 'Enter your email address.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) found.email = 'Check this address — it does not look right.';
+    if (!wardObj) found.ward = 'Choose the ward you live in.';
+    if (!lat || !lon) found.location = 'Set your home with GPS, search, or by dragging the pin.';
 
+    if (Object.keys(found).length > 0) {
+      setErrors(found);
+      haptics.error();
+      notify.error(
+        Object.keys(found).length === 1
+          ? 'One field still needs filling in.'
+          : `${Object.keys(found).length} fields still need filling in.`,
+      );
+      return;
+    }
+
+    setErrors({});
     setSaving(true);
     try {
       const payload = {
@@ -121,9 +168,10 @@ export default function SetupScreen() {
       await authApi.updateProfile(payload);
       const { data } = await authApi.getMe();
       updateUser(data);
+      notify.success('You’re all set.');
       router.replace('/(citizen)/');
     } catch (err) {
-      Alert.alert('Error', err?.response?.data?.detail || 'Failed to save profile. Please try again.');
+      notifyError(err, 'Could not save your profile. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -141,32 +189,39 @@ export default function SetupScreen() {
       </View>
 
       {/* Scrollable Content */}
-      <ScrollView style={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView style={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
         {/* Name */}
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>Full Name *</Text>
           <TextInput
-            style={styles.fieldInput}
+            style={[styles.fieldInput, errors.name && styles.fieldInputInvalid]}
             placeholder="Enter your full name"
             placeholderTextColor="#9ca3af"
             value={name}
-            onChangeText={setName}
+            onChangeText={(v) => { setName(v); clearError('name'); }}
           />
+          <FieldError message={errors.name} />
         </View>
 
         {/* Email */}
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>Email *</Text>
           <TextInput
-            style={styles.fieldInput}
+            style={[styles.fieldInput, errors.email && styles.fieldInputInvalid]}
             placeholder="Enter your email address"
             placeholderTextColor="#9ca3af"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(v) => { setEmail(v); clearError('email'); }}
             keyboardType="email-address"
             autoCapitalize="none"
+            autoCorrect={false}
           />
+          <FieldError message={errors.email} />
         </View>
 
         {/* District */}
@@ -238,7 +293,11 @@ export default function SetupScreen() {
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>Ward *</Text>
           <TouchableOpacity
-            style={[styles.dropdownBtn, !taluka && styles.dropdownBtnDisabled]}
+            style={[
+              styles.dropdownBtn,
+              !taluka && styles.dropdownBtnDisabled,
+              errors.ward && styles.fieldInputInvalid,
+            ]}
             onPress={() => { if (!taluka) return; setShowWard(!showWard); setShowDistrict(false); setShowTaluka(false); }}
             disabled={!taluka}
           >
@@ -254,7 +313,7 @@ export default function SetupScreen() {
                   <TouchableOpacity
                     key={w.id}
                     style={[styles.dropdownItem, wardObj?.id === w.id && styles.dropdownItemActive]}
-                    onPress={() => { setWardObj(w); setShowWard(false); }}
+                    onPress={() => { setWardObj(w); setShowWard(false); clearError('ward'); haptics.selection(); }}
                   >
                     <Text style={[styles.dropdownItemText, wardObj?.id === w.id && styles.dropdownItemTextActive]}>
                       {w.name}{w.ward_number ? ` (${w.ward_number})` : ''}
@@ -264,12 +323,14 @@ export default function SetupScreen() {
               </ScrollView>
             </View>
           )}
+          <FieldError message={errors.ward} />
         </View>
 
         {/* Home Location */}
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>Home Location *</Text>
           <Text style={styles.fieldHint}>Set your home so we can send relevant local alerts.</Text>
+          <FieldError message={errors.location} />
 
           <View style={styles.addressRow}>
             <TextInput
@@ -360,6 +421,7 @@ export default function SetupScreen() {
 
         <View style={{ height: 24 }} />
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Footer */}
       <View style={styles.footer}>
@@ -391,6 +453,11 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 },
   fieldHint: { fontSize: 12, color: '#9ca3af', marginBottom: 8 },
   fieldInput: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: '#111827' },
+  // Border alone would fail anyone who cannot distinguish the red; the message
+  // below the field is what actually carries the meaning.
+  fieldInputInvalid: { borderColor: '#dc2626', borderWidth: 1.5 },
+  fieldErrorRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },
+  fieldErrorText: { flex: 1, fontSize: 12.5, color: '#dc2626', lineHeight: 17 },
 
   dropdownBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff' },
   dropdownBtnDisabled: { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb' },

@@ -1,17 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, RefreshControl, Alert, Switch,
+  ActivityIndicator, RefreshControl, Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from 'expo-router';
 import { locationsApi } from '../../src/api/locations';
+import { ListSkeleton } from '../../src/components/Skeleton';
+import ErrorState from '../../src/components/ErrorState';
+import { logger } from '../../src/utils/logger';
+import { Colors } from '../../src/theme';
+import { notifyError } from '../../src/lib/notify';
 
 export default function SubscriptionsScreen() {
   const navigation = useNavigation();
   const [tree, setTree] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [toggling, setToggling] = useState({});
   const [expanded, setExpanded] = useState({});
@@ -27,6 +33,7 @@ export default function SubscriptionsScreen() {
   }, []);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const [treeRes, subRes] = await Promise.all([
         locationsApi.getTree(),
@@ -36,7 +43,11 @@ export default function SubscriptionsScreen() {
       const subs = subRes.data.items || subRes.data;
       setSubscriptions(subs.map((s) => s.ward_id ?? s.id));
     } catch (err) {
-      console.warn('Failed to load subscriptions:', err.message);
+      setLoadError(err);
+      // Was `console.warn` only, so a failed load rendered as an empty
+      // list — indistinguishable from having nothing to show, and with
+      // no way to try again.
+      logger.error('Failed to load subscriptions', err);
     }
   }, []);
 
@@ -63,7 +74,7 @@ export default function SubscriptionsScreen() {
         setSubscriptions((prev) => [...prev, wardId]);
       }
     } catch {
-      Alert.alert('Error', 'Failed to update subscription. Please try again.');
+      notifyError(err, 'Could not update that subscription.');
     }
     setToggling((prev) => ({ ...prev, [wardId]: false }));
   };
@@ -71,7 +82,11 @@ export default function SubscriptionsScreen() {
   const toggleExpand = (key) =>
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} color="#1a56db" size="large" />;
+  // A skeleton, not a full-screen spinner: replacing the whole screen
+  // wipes the header and any list already rendered, so a refresh looked
+  // like a navigation event.
+  if (loading) return <ListSkeleton />;
+  if (loadError) return <ErrorState error={loadError} onRetry={load} accent={Colors.citizen} />;
 
   return (
     <FlatList

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Switch,
-  Modal, TextInput, Image, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch, Modal, TextInput, Image, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +11,8 @@ import { workersApi } from '../../src/api/workers';
 import { rewardsApi } from '../../src/api/rewards';
 import { authApi } from '../../src/api/auth';
 import { compressImage } from '../../src/utils/imageUtils';
+import { logger } from '../../src/utils/logger';
+import { notify, notifyError, confirm } from '../../src/lib/notify';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -59,7 +60,7 @@ export default function WorkerProfile() {
     workersApi.getShifts()
       .then(({ data }) => setShifts(data.items || data))
       .catch((err) => {
-        console.warn('Failed to load shifts in profile:', err.message);
+        logger.warn('Failed to load shifts in profile', err);
         setShifts([]);
       });
   }, []);
@@ -78,11 +79,16 @@ export default function WorkerProfile() {
     if (user?.profile_photo_url) setProfilePhoto(user.profile_photo_url);
   }, [user?.profile_photo_url]);
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: logout },
-    ]);
+  const handleLogout = async () => {
+    // Same wording as the citizen app: signing out leaves anything queued on
+    // the device, and a worker mid-shift should know that before tapping.
+    const ok = await confirm({
+      title: 'Sign out?',
+      message: 'Anything still waiting to send stays on this device until you sign in again.',
+      confirmLabel: 'Sign out',
+      destructive: true,
+    });
+    if (ok) logout();
   };
 
   const pickProfilePhoto = async () => {
@@ -98,7 +104,7 @@ export default function WorkerProfile() {
         setSelectedPhotoUri(compressedUri);
       }
     } catch {
-      Alert.alert('Error', 'Failed to pick image');
+      notifyError(err, 'Could not open your photo library.');
     }
   };
 
@@ -146,7 +152,11 @@ export default function WorkerProfile() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView keyboardShouldPersistTaps="handled" style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.avatarWrap} onPress={pickProfilePhoto}>
@@ -222,7 +232,7 @@ export default function WorkerProfile() {
               await workersApi.setAvailability(val);
             } catch {
               setIsAvailable(prev);
-              Alert.alert('Error', 'Could not update availability. Please try again.');
+              notify.error('Could not update your availability. Try again.');
             }
           }}
           trackColor={{ false: '#d1d5db', true: '#6ee7b7' }}
@@ -351,6 +361,7 @@ export default function WorkerProfile() {
         </View>
       </Modal>
     </ScrollView>
+      </KeyboardAvoidingView>
   );
 }
 

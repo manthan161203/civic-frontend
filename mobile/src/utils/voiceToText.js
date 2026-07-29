@@ -12,6 +12,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Platform, Alert } from 'react-native';
 import logger from './logger';
+import { notify } from '../lib/notify';
 
 /**
  * Custom hook for voice-to-text recording/transcription.
@@ -47,10 +48,7 @@ export function useVoiceToText({ language = 'en-IN', onResult, onError } = {}) {
     try {
       const Voice = await getVoice();
       if (!Voice) {
-        Alert.alert(
-          'Speech Recognition Unavailable',
-          'Install @react-native-voice/voice to enable voice input.',
-        );
+        notify.info('Voice input is not available in this build. Type your report instead.', 4000);
         return;
       }
 

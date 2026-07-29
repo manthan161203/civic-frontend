@@ -7,6 +7,10 @@ import Svg, { Circle, Rect, Text as SvgText } from 'react-native-svg';
 import { useNavigation, useFocusEffect } from 'expo-router';
 import { rewardsApi } from '../../src/api/rewards';
 import { useAuthStore } from '../../src/store/authStore';
+import { ListSkeleton } from '../../src/components/Skeleton';
+import ErrorState from '../../src/components/ErrorState';
+import { logger } from '../../src/utils/logger';
+import { Colors } from '../../src/theme';
 
 // ── Medal icons — same design as citizen leaderboard ─────────────────────────
 const MEDALS = {
@@ -112,6 +116,7 @@ export default function WorkerLeaderboardScreen() {
   const [workers, setWorkers] = useState([]);
   const [myRewards, setMyRewards] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -125,6 +130,7 @@ export default function WorkerLeaderboardScreen() {
   }, []);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const [wRes, mRes] = await Promise.all([
         rewardsApi.workerLeaderboard({ page: 1, size: 50 }),
@@ -133,7 +139,11 @@ export default function WorkerLeaderboardScreen() {
       setWorkers(wRes.data.items || wRes.data);
       setMyRewards(mRes.data);
     } catch (err) {
-      console.warn('Failed to load leaderboard data:', err.message);
+      setLoadError(err);
+      // Was `console.warn` only, so a failed load rendered as an empty
+      // list — indistinguishable from having nothing to show, and with
+      // no way to try again.
+      logger.error('Failed to load leaderboard data', err);
     }
   }, []);
 
@@ -146,7 +156,11 @@ export default function WorkerLeaderboardScreen() {
     setRefreshing(false);
   };
 
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} color="#059669" size="large" />;
+  // A skeleton, not a full-screen spinner: replacing the whole screen
+  // wipes the header and any list already rendered, so a refresh looked
+  // like a navigation event.
+  if (loading) return <ListSkeleton />;
+  if (loadError) return <ErrorState error={loadError} onRetry={load} accent={Colors.worker} />;
 
   return (
     <View style={styles.container}>

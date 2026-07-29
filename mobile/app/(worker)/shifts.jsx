@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, RefreshControl, Alert, Modal,
-  TextInput,
+  View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, RefreshControl, Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from 'expo-router';
 import { workersApi } from '../../src/api/workers';
+import ErrorState from '../../src/components/ErrorState';
+import { logger } from '../../src/utils/logger';
+import { Colors } from '../../src/theme';
+import { notify, notifyError, confirm } from '../../src/lib/notify';
 
 const DAYS = [
   { key: 'monday', label: 'Mon', full: 'Monday', num: 0 },
@@ -143,6 +145,7 @@ export default function ShiftsScreen() {
   const navigation = useNavigation();
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [editingDay, setEditingDay] = useState(null);
 
@@ -157,12 +160,17 @@ export default function ShiftsScreen() {
   }, []);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const { data } = await workersApi.getShifts();
       setShifts(data.items || data);
     } catch (err) {
-      console.warn('Failed to load shifts:', err.message);
-      Alert.alert('Error', 'Could not load your shifts. Pull to refresh.');
+      // The error state below renders the message and a retry, so no toast:
+      // announcing the same failure twice is how a screen ends up shouting.
+      // Was `console.warn` only, which rendered as an empty week with no way
+      // to tell a failed load from a genuinely unset schedule.
+      setLoadError(err);
+      logger.error('Failed to load shifts', err);
     }
   }, []);
 
@@ -192,36 +200,42 @@ export default function ShiftsScreen() {
 
   const getShift = (dayNum) => shifts.find((s) => s.day_of_week === dayNum);
 
-  const handleDelete = (dayNum, dayKey) => {
-    Alert.alert(
-      'Remove Shift',
-      `Remove shift for ${DAYS.find((d) => d.key === dayKey)?.full}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await workersApi.deleteShift(dayNum);
-              setShifts((prev) => prev.filter((s) => s.day_of_week !== dayNum));
-            } catch (err) {
-              const backendError = err.response?.data?.detail || 'Failed to remove shift.';
-              Alert.alert('Error', backendError);
-            }
-          },
-        },
-      ]
-    );
+  const handleDelete = async (dayNum, dayKey) => {
+    const day = DAYS.find((d) => d.key === dayKey)?.full;
+    const ok = await confirm({
+      title: `Remove your ${day} shift?`,
+      // Says the consequence, not just the action: a removed shift is not a
+      // blank row, it is a day nothing gets assigned to you.
+      message: `You will not be assigned tasks on ${day}s until you add it back.`,
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    try {
+      await workersApi.deleteShift(dayNum);
+      setShifts((prev) => prev.filter((s) => s.day_of_week !== dayNum));
+      notify.success(`${day} shift removed.`);
+    } catch (err) {
+      notifyError(err, 'Could not remove that shift.');
+    }
   };
 
   if (loading) return <ActivityIndicator style={{ flex: 1 }} color="#059669" size="large" />;
+  if (loadError) return <ErrorState error={loadError} onRetry={load} accent={Colors.worker} />;
 
   const totalHours = shifts.reduce((acc, s) => {
     return acc + (timeToMinutes(s.end_time) - timeToMinutes(s.start_time)) / 60;
   }, 0);
 
   return (
+    // A FlatList of HH:MM time inputs rather than a ScrollView, so the avoider
+    // wraps the container. Without it the later weekday rows sit under the
+    // keyboard while being edited.
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
     <View style={styles.container}>
       {/* Summary */}
       <View style={styles.summary}>
@@ -290,6 +304,7 @@ export default function ShiftsScreen() {
         />
       )}
     </View>
+    </KeyboardAvoidingView>
   );
 }
 

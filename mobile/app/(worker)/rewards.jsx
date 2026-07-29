@@ -4,10 +4,12 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+// The core SafeAreaView is deprecated and is a no-op on Android; this
+// one reads the real insets on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Svg, { Circle, Path, Polyline, Polygon } from 'react-native-svg';
 import { workersApi } from '../../src/api/workers';
