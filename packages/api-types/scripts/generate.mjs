@@ -176,7 +176,9 @@ if (CHECK) {
   console.log(
     "\nNote: src/endpoint-access.js is derived from the backend SOURCE (role\n" +
       "dependencies are not expressed in OpenAPI). Refresh it with:\n" +
-      "  python3 scripts/derive-endpoint-access.py ../../civic-backend",
+      // ../../civic-backend resolves inside civic-frontend/, which is not where
+      // the backend lives — the hint sent you to a path that does not exist.
+      "  python3 scripts/derive-endpoint-access.py ../../../civic-backend",
   );
 }
 

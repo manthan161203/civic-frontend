@@ -842,6 +842,19 @@
       "CreateGeofenceRequest": {
         "description": "Request body for ``POST /admin/geofences``.\n\nFIX HIGH PRIORITY BUG #12 & MEDIUM PRIORITY BUG #4: Comprehensive geofence validation\n- Validates coordinate ranges\n- Enforces radius limits (0.1 km to 100 km)\n- Prevents invalid/unsafe geofences",
         "properties": {
+          "district_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Owning district (super-admin only)",
+            "title": "District Id"
+          },
           "latitude": {
             "description": "Latitude (-90 to 90)",
             "maximum": 90,
@@ -869,6 +882,32 @@
             "maximum": 50,
             "title": "Radius Km",
             "type": "number"
+          },
+          "taluka_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Owning taluka (super-admin only)",
+            "title": "Taluka Id"
+          },
+          "ward_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Owning ward (super-admin only)",
+            "title": "Ward Id"
           }
         },
         "required": [
@@ -1381,6 +1420,19 @@
             "description": "Name of admin who created this geofence",
             "title": "Created By Name"
           },
+          "district_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Owning district, if any",
+            "title": "District Id"
+          },
           "id": {
             "description": "Geofence UUID",
             "format": "uuid",
@@ -1406,6 +1458,32 @@
             "description": "Radius in kilometers",
             "title": "Radius Km",
             "type": "number"
+          },
+          "taluka_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Owning taluka, if any",
+            "title": "Taluka Id"
+          },
+          "ward_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Owning ward, if any",
+            "title": "Ward Id"
           }
         },
         "required": [
@@ -1492,6 +1570,509 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IssueAdminListResponse": {
+        "description": "Paginated admin issue list.\n\nInherits the ``mode=\"before\"`` validator that reconciles ``page``/``size``\nwith ``limit``/``offset`` — subclassing keeps it, and a test pins that,\nbecause losing it would silently return every admin list to reporting\n``limit: 50, offset: 0`` on every page.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IssueAdminResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "default": 50,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "pages": {
+            "default": 0,
+            "title": "Pages",
+            "type": "integer"
+          },
+          "size": {
+            "default": 50,
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "IssueAdminListResponse",
+        "type": "object"
+      },
+      "IssueAdminResponse": {
+        "description": "``IssueResponse`` plus the reporter's phone number.\n\nDeclared as the ``response_model`` on the admin issue routes. It exists so\nthat the *default* response shape is the safe one: any route that does not\nexplicitly ask for this variant cannot emit a phone number, because\n:class:`IssueReporterInfo` has no such field to emit.\n\nNothing else differs — see the sibling test asserting this stays a strict\nsuperset, so the two shapes cannot quietly drift apart.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "admin_unblock_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Unblock Note"
+          },
+          "after_photos": {
+            "items": {
+              "type": "string"
+            },
+            "title": "After Photos",
+            "type": "array"
+          },
+          "ai_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Confidence"
+          },
+          "ai_is_resolved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Is Resolved"
+          },
+          "ai_issue_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Issue Type"
+          },
+          "ai_resolution_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Resolution Notes"
+          },
+          "ai_resolution_quality": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Resolution Quality"
+          },
+          "ai_severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Severity"
+          },
+          "ai_suggested_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Suggested Description"
+          },
+          "assigned_worker_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Worker Id"
+          },
+          "assigned_worker_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Worker Name"
+          },
+          "before_photos": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Before Photos",
+            "type": "array"
+          },
+          "block_resolved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Block Resolved By"
+          },
+          "blocked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked At"
+          },
+          "blocked_by_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked By Id"
+          },
+          "blocked_duration_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Duration Hours"
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
+          },
+          "citizen_rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citizen Rating"
+          },
+          "comment_count": {
+            "default": 0,
+            "title": "Comment Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "custom_issue_type_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Issue Type Label"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "escalated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalated At"
+          },
+          "escalation_level": {
+            "default": 0,
+            "title": "Escalation Level",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_blocked": {
+            "title": "Is Blocked",
+            "type": "boolean"
+          },
+          "is_deleted": {
+            "default": false,
+            "title": "Is Deleted",
+            "type": "boolean"
+          },
+          "is_duplicate": {
+            "title": "Is Duplicate",
+            "type": "boolean"
+          },
+          "is_escalated": {
+            "title": "Is Escalated",
+            "type": "boolean"
+          },
+          "is_sos": {
+            "default": false,
+            "title": "Is Sos",
+            "type": "boolean"
+          },
+          "issue_type": {
+            "title": "Issue Type",
+            "type": "string"
+          },
+          "latitude": {
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "title": "Longitude",
+            "type": "number"
+          },
+          "parent_issue_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Issue Id"
+          },
+          "priority": {
+            "default": "medium",
+            "title": "Priority",
+            "type": "string"
+          },
+          "reassignment_count": {
+            "default": 0,
+            "title": "Reassignment Count",
+            "type": "integer"
+          },
+          "reporter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IssueReporterAdminInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reporter_id": {
+            "format": "uuid",
+            "title": "Reporter Id",
+            "type": "string"
+          },
+          "resolution_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Notes"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "unblocked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unblocked At"
+          },
+          "unblocked_by_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unblocked By Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "upvote_count": {
+            "default": 0,
+            "title": "Upvote Count",
+            "type": "integer"
+          },
+          "user_upvoted": {
+            "default": false,
+            "title": "User Upvoted",
+            "type": "boolean"
+          },
+          "ward": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ward"
+          },
+          "ward_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ward Id"
+          }
+        },
+        "required": [
+          "id",
+          "reporter_id",
+          "issue_type",
+          "severity",
+          "status",
+          "latitude",
+          "longitude",
+          "before_photos",
+          "after_photos",
+          "is_duplicate",
+          "is_escalated",
+          "is_blocked",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "IssueAdminResponse",
         "type": "object"
       },
       "IssueCommentAuthor": {
@@ -1828,8 +2409,8 @@
         "title": "IssuePriorityEnum",
         "type": "string"
       },
-      "IssueReporterInfo": {
-        "description": "Embedded reporter info within ``IssueResponse``.\n\nAttributes:\n    id:    Reporter's user UUID.\n    name:  Reporter's display name.\n    phone: Reporter's phone number.",
+      "IssueReporterAdminInfo": {
+        "description": "Reporter info including the phone number. Admin responses only.\n\nReachable only through :class:`IssueAdminResponse`. FastAPI serialises\nagainst the declared ``response_model``, so returning one of these from a\nroute that declares plain ``IssueResponse`` drops the phone rather than\nleaking it — the failure mode points the safe way.\n\nAttributes:\n    phone: Reporter's phone number.",
         "properties": {
           "id": {
             "format": "uuid",
@@ -1857,6 +2438,32 @@
               }
             ],
             "title": "Phone"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "IssueReporterAdminInfo",
+        "type": "object"
+      },
+      "IssueReporterInfo": {
+        "description": "Embedded reporter info within ``IssueResponse``.\n\n**This deliberately carries no phone number.**\n\n``IssueResponse`` is ``from_attributes`` over a model with a ``reporter``\nrelationship, so every one of its 24 ``model_validate`` call sites populates\nthis object automatically. While ``phone`` lived here, two of those sites\npublished it to any authenticated citizen:\n\n* ``GET /issues/nearby`` — a **list**, keyed on a caller-supplied\n  coordinate, so no issue id had to be guessed;\n* ``GET /issues/{id}`` — whose own docstring says citizens may view any\n  issue; the one access check there restricts workers.\n\nAdmins have a genuine need for it — they call citizens back about their\nreports — so it moved to :class:`IssueReporterAdminInfo`, reachable only via\n:class:`IssueAdminResponse` on routes that opt in. Keeping the narrow shape\nas the default means a route added later leaks nothing by omission, which is\nnot a property that stripping the field at each call site could offer.\n\nAttributes:\n    id:    Reporter's user UUID.\n    name:  Reporter's display name.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           }
         },
         "required": [
@@ -2357,7 +2964,7 @@
         "type": "string"
       },
       "IssueUpdate": {
-        "description": "Request body for ``PATCH /issues/{id}``.\n\nRole-based field restrictions:\n- **Citizens**: can only set ``citizen_rating`` on their own resolved issues.\n- **Workers/Admins**: can update ``status`` and ``resolution_notes``.\n- **Admins only**: can set ``assigned_worker_id`` (triggers reassignment).\n\nAttributes:\n    status:             New status value.\n    resolution_notes:   Notes from the worker about the resolution.\n    assigned_worker_id: UUID of the worker to assign (admin only).\n    citizen_rating:     Satisfaction rating 1-5 (citizen only, on resolved issues).",
+        "description": "Request body for ``PATCH /issues/{id}``.\n\nRole-based field restrictions:\n- **Citizens**: can only set ``citizen_rating`` on their own resolved issues.\n- **Workers/Admins**: can update ``status`` and ``resolution_notes``.\n- **Admins only**: can set ``assigned_worker_id`` (triggers reassignment),\n  ``priority`` and ``department``.\n\nFields the caller is not entitled to set are ignored rather than rejected.\n\nAttributes:\n    status:             New status value.\n    resolution_notes:   Notes from the worker about the resolution.\n    assigned_worker_id: UUID of the worker to assign (admin only).\n    citizen_rating:     Satisfaction rating 1-5 (citizen only, on resolved issues).\n    priority:           Re-triaged priority (admin only). Applied before any\n                        status change in the same request, because the\n                        after-photo requirement is keyed on it.\n    department:         Owning department (admin only). Changing it does not\n                        reassign an already-assigned worker.",
         "properties": {
           "assigned_worker_id": {
             "anyOf": [
@@ -3312,6 +3919,76 @@
           "user"
         ],
         "title": "TokenResponse",
+        "type": "object"
+      },
+      "UpdateAnnouncementRequest": {
+        "description": "Request body for editing an announcement. All fields optional.\n\n``scope`` and its three target ids are deliberately absent. Re-scoping a\ndelivered announcement is not an edit — the citizens who received it are not\nthe citizens who would receive it now — so that is a delete plus a new post,\nwhich is also what keeps the push audit honest.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "New expiry datetime (UTC)",
+            "title": "Expires At"
+          },
+          "location_lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Latitude citizens can view on map",
+            "title": "Location Lat"
+          },
+          "location_lng": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Longitude citizens can view on map",
+            "title": "Location Lng"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "UpdateAnnouncementRequest",
         "type": "object"
       },
       "UpdateGeofenceRequest": {
@@ -4486,6 +5163,61 @@
         "tags": [
           "Admin"
         ]
+      },
+      "patch": {
+        "description": "Edit an announcement's text, expiry or map pin.\n\nAuthorization matches ``DELETE``: author, or super-admin.\n\n**Editing never re-notifies.** ``push_dispatched_at`` is the latch the\n``jobs`` service reads to decide who still needs a push; clearing it here\nwould re-deliver the announcement to every matching citizen, so a typo fix\nwould buzz an entire district a second time. It is therefore left untouched,\nand returned in the response so the console can say plainly that the edit\nwill not reach anyone who already received the original.\n\nRe-scoping is not offered — see ``UpdateAnnouncementRequest``.\n\n**Roles**: any admin (must be author or super-admin).",
+        "operationId": "update_announcement_admin_announcements__announcement_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "announcement_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Announcement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAnnouncementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Announcement",
+        "tags": [
+          "Admin"
+        ]
       }
     },
     "/admin/blocked-tasks": {
@@ -4534,7 +5266,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueListResponse"
+                  "$ref": "#/components/schemas/IssueAdminListResponse"
                 }
               }
             },
@@ -5459,7 +6191,7 @@
     },
     "/admin/geofences": {
       "get": {
-        "description": "List geofences with pagination and admin scope filtering.\n\nADMIN ROLES AUDIT - GAP #5: Scope Consistency\nApplies geographic scope filtering based on admin role.\n- super_admin: sees all geofences\n- district_admin: sees geofences in their district\n- taluka_admin: sees geofences in their taluka\n- ward_admin: sees geofences in their ward\n\nNOTE: Current Geofence model does not track ward_id/taluka_id/district_id.\nFor full geographic scoping, Geofence model needs to be extended with geographic fields\nvia database migration. Until then, all admins can see all geofences but access control\nis enforced at creation/update/delete time.\n\n**Roles**: any admin.\n\nArgs:\n    page: Page number (1-indexed), default 1\n    size: Items per page (1-200), default 20\n\nReturns:\n    GeofenceListResponse with items, total, page, size",
+        "description": "List geofences in the admin's jurisdiction, paginated.\n\n- super-admin:    every zone, including state-level ones\n- district_admin: zones in their district\n- taluka_admin:   zones in their taluka\n- ward_admin:     zones in their ward\n\nZones with no jurisdiction (all three ids NULL) are state-level and appear\nonly for a super-admin. Every geofence created before ``a9b0c1d2e3`` is in\nthat category — there was no boundary geometry to derive a jurisdiction\nfrom, so they were left for a super-admin to assign rather than guessed at.\n\n**Roles**: any admin.\n\nArgs:\n    page: Page number (1-indexed), default 1\n    size: Items per page (1-200), default 20\n\nReturns:\n    GeofenceListResponse with items, total, page, size",
         "operationId": "list_geofences_admin_geofences_get",
         "parameters": [
           {
@@ -5519,7 +6251,7 @@
         ]
       },
       "post": {
-        "description": "Create a new geofence zone.\n\n**Roles**: admin or district_admin.\n\nArgs:\n    body: CreateGeofenceRequest with name, latitude, longitude, radius_km\n\nReturns:\n    Created GeofenceResponse",
+        "description": "Create a new geofence zone.\n\nThe zone is stamped with the caller's own jurisdiction. A scoped admin\ncannot choose one — supplying ``ward_id``/``taluka_id``/``district_id`` is\nhonoured only for a super-admin, because an admin able to nominate a scope\ncould create, and thereafter manage, a zone anywhere in the state.\n\n**Roles**: any admin.\n\nArgs:\n    body: CreateGeofenceRequest with name, latitude, longitude, radius_km,\n          and optionally a jurisdiction (super-admin only).\n\nReturns:\n    Created GeofenceResponse",
         "operationId": "create_geofence_admin_geofences_post",
         "requestBody": {
           "content": {
@@ -5566,7 +6298,7 @@
     },
     "/admin/geofences/{geofence_id}": {
       "delete": {
-        "description": "Delete a geofence zone.\n\n**Roles**: admin or district_admin.\n\nArgs:\n    geofence_id: UUID of the geofence to delete",
+        "description": "Delete a geofence zone.\n\nRestricted to zones inside the caller's jurisdiction. This is the endpoint\nthe missing check mattered most on: a single-ward admin could delete any\nzone in the state, and the deletion is not recoverable.\n\n**Roles**: any admin, within their own jurisdiction.\n\nArgs:\n    geofence_id: UUID of the geofence to delete",
         "operationId": "delete_geofence_admin_geofences__geofence_id__delete",
         "parameters": [
           {
@@ -5606,7 +6338,7 @@
         ]
       },
       "patch": {
-        "description": "Update a geofence zone (all fields optional).\n\n**Roles**: admin or district_admin.\n\nArgs:\n    geofence_id: UUID of the geofence to update\n    body: UpdateGeofenceRequest with optional fields\n\nReturns:\n    Updated GeofenceResponse",
+        "description": "Update a geofence zone (all fields optional).\n\nRestricted to zones inside the caller's jurisdiction. Until this check\nexisted, any admin tier could edit any zone in the state.\n\nA zone's jurisdiction is not editable here — moving a zone between wards is\na transfer of ownership, not a field update, and re-scoping it out from\nunder its current admin should be a deliberate super-admin act rather than a\nside effect of nudging a radius.\n\n**Roles**: any admin, within their own jurisdiction.\n\nArgs:\n    geofence_id: UUID of the geofence to update\n    body: UpdateGeofenceRequest with optional fields\n\nReturns:\n    Updated GeofenceResponse",
         "operationId": "update_geofence_admin_geofences__geofence_id__patch",
         "parameters": [
           {
@@ -5658,6 +6390,131 @@
           }
         ],
         "summary": "Update Geofence",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/geofences/{geofence_id}/alerts": {
+      "get": {
+        "description": "Broadcast history for a zone, newest first.\n\nHistory starts at migration ``b0c1d2e3f4``. Before it, ``POST\n/admin/notifications/geofence`` persisted nothing at all, so there is no\nearlier data and none was invented — an empty list on an old zone means \"not\nrecorded\", not \"never alerted\".\n\n**Roles**: any admin, for zones within their own jurisdiction.",
+        "operationId": "geofence_alerts_admin_geofences__geofence_id__alerts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "geofence_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Geofence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Geofence Alerts Admin Geofences  Geofence Id  Alerts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Geofence Alerts",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/geofences/{geofence_id}/workers": {
+      "get": {
+        "description": "Which workers are currently inside this zone.\n\n``User.latitude``/``longitude`` is a **single mutable point**, not a track —\nit is overwritten on each location update and there is no history table. So\nthis answers \"where was each worker when they last reported\", which is not\nthe same as \"where are they now\".\n\nThat distinction matters enough to be in the payload rather than only in\nthis docstring: ``location_updated_at`` and ``location_age_minutes`` are\nreturned per worker, and ``stale`` marks anyone whose fix predates the\nthreshold below. Without it, a worker whose phone died three hours ago in\nthe zone reads as present.\n\nWorkers are restricted to the caller's jurisdiction by the same\n``user_scope_filter`` used elsewhere, so this cannot be used to locate\nanother district's staff.\n\n**Roles**: any admin, for zones within their own jurisdiction.",
+        "operationId": "geofence_workers_admin_geofences__geofence_id__workers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "geofence_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Geofence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Geofence Workers Admin Geofences  Geofence Id  Workers Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Geofence Workers",
         "tags": [
           "Admin"
         ]
@@ -5819,9 +6676,76 @@
         ]
       }
     },
+    "/admin/insights": {
+      "get": {
+        "description": "Aggregate insights for the admin's jurisdiction.\n\nThis replaces what the console was doing in the browser: paging through\n``/admin/issues`` 200 rows at a time up to a 2,000-row ceiling, aggregating\nclient-side, and rendering an amber banner admitting the figures were a\nsample rather than a total. Every count below is computed in SQL over the\nwhole scoped dataset, so it is a total.\n\nThree blocks:\n\n* ``ai_quality`` — how much the classifier is producing, how confident it\n  is, and how much it has flagged as poorly resolved. This is the data the\n  AI-insights screen displays.\n* ``movement`` — each issue type this period against the one before it.\n  Guarded twice, by percentage *and* by absolute base, because a category\n  going 1 → 3 is not a 200% surge worth an admin's attention.\n* ``anomalies`` — wards whose share of reports moved sharply.\n\n``narrative`` is best-effort. If no provider key is configured, or the call\nfails, the field is ``null`` and every number above is still returned — a\ndashboard must not go blank because a third party is down.\n\n**Roles**: any admin (scoped).",
+        "operationId": "get_insights_admin_insights_get",
+        "parameters": [
+          {
+            "description": "Length of the current period",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "Length of the current period",
+              "maximum": 90,
+              "minimum": 7,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Include a written summary if a provider is configured",
+            "in": "query",
+            "name": "narrative",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Include a written summary if a provider is configured",
+              "title": "Narrative",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Insights Admin Insights Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Insights",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/issues": {
       "get": {
-        "description": "List all issues in the admin's scope with optional filters (paginated).\n\n**Roles**: any admin.",
+        "description": "List all issues in the admin's scope with optional filters (paginated).\n\n``ai_flag`` exists so the AI-insights screen can page its drill-down lists\nserver-side. It previously fetched up to 2,000 issues and filtered them in\nthe browser, which both truncated the result and made the counts a sample.\n\n**Roles**: any admin.",
         "operationId": "list_all_issues_admin_issues_get",
         "parameters": [
           {
@@ -5946,6 +6870,24 @@
               "description": "Filter by department",
               "title": "Department"
             }
+          },
+          {
+            "description": "Drill-down for the insights screen: low_confidence | poor_resolution",
+            "in": "query",
+            "name": "ai_flag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Drill-down for the insights screen: low_confidence | poor_resolution",
+              "title": "Ai Flag"
+            }
           }
         ],
         "responses": {
@@ -5953,7 +6895,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueListResponse"
+                  "$ref": "#/components/schemas/IssueAdminListResponse"
                 }
               }
             },
@@ -6251,7 +7193,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueResponse"
+                  "$ref": "#/components/schemas/IssueAdminResponse"
                 }
               }
             },
@@ -6300,7 +7242,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueResponse"
+                  "$ref": "#/components/schemas/IssueAdminResponse"
                 }
               }
             },
@@ -6359,7 +7301,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueResponse"
+                  "$ref": "#/components/schemas/IssueAdminResponse"
                 }
               }
             },
@@ -6445,7 +7387,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueResponse"
+                  "$ref": "#/components/schemas/IssueAdminResponse"
                 }
               }
             },
@@ -6507,7 +7449,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssueResponse"
+                  "$ref": "#/components/schemas/IssueAdminResponse"
                 }
               }
             },
@@ -6811,44 +7753,9 @@
     },
     "/admin/notifications/geofence": {
       "post": {
-        "description": "Send bulk push notification to all citizens and workers within a geofence.\n\nNotifies users who have:\n1. Location data (latitude/longitude from app)\n2. FCM token registered\n3. Active account\n\n**Parameters**:\n- `latitude`, `longitude`: Center point of geofence\n- `radius_km`: Circular radius in kilometers\n- `title`, `body`: Notification content\n\n**Returns**: Count of users notified",
+        "description": "Send bulk push notification to all citizens and workers within a geofence.\n\nNotifies users who have:\n1. Location data (latitude/longitude from app)\n2. FCM token registered\n3. Active account\n\n**Two ways to aim it:**\n\n- ``geofence_id`` — broadcast to a saved zone. The centre and radius come\n  from the zone, and the resulting record is **linked** to it, which is what\n  makes ``GET /admin/geofences/{id}/alerts`` show a history. The zone must\n  be within your jurisdiction.\n- ``latitude`` + ``longitude`` + ``radius_km`` — an ad-hoc circle, for a\n  one-off that does not correspond to a saved zone. Recorded with the circle\n  but no zone link, because attributing it to one would be a guess.\n\nEither way the dispatch is written to ``geofence_alerts``. It previously\nexisted only as this response and a log line, so a broadcast that reached\nnobody looked exactly like one that reached everybody.\n\n**Returns**: Count of users notified, plus the id of the recorded alert.",
         "operationId": "send_geofence_notification_admin_notifications_geofence_post",
         "parameters": [
-          {
-            "description": "Center latitude",
-            "in": "query",
-            "name": "latitude",
-            "required": true,
-            "schema": {
-              "description": "Center latitude",
-              "title": "Latitude",
-              "type": "number"
-            }
-          },
-          {
-            "description": "Center longitude",
-            "in": "query",
-            "name": "longitude",
-            "required": true,
-            "schema": {
-              "description": "Center longitude",
-              "title": "Longitude",
-              "type": "number"
-            }
-          },
-          {
-            "description": "Radius in kilometers (max 50)",
-            "in": "query",
-            "name": "radius_km",
-            "required": true,
-            "schema": {
-              "description": "Radius in kilometers (max 50)",
-              "exclusiveMinimum": 0,
-              "maximum": 50,
-              "title": "Radius Km",
-              "type": "number"
-            }
-          },
           {
             "description": "Notification title",
             "in": "query",
@@ -6869,6 +7776,81 @@
               "description": "Notification body",
               "title": "Body",
               "type": "string"
+            }
+          },
+          {
+            "description": "Broadcast to a saved zone. Supply this OR latitude/longitude/radius_km.",
+            "in": "query",
+            "name": "geofence_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Broadcast to a saved zone. Supply this OR latitude/longitude/radius_km.",
+              "title": "Geofence Id"
+            }
+          },
+          {
+            "description": "Center latitude (ad-hoc circle)",
+            "in": "query",
+            "name": "latitude",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Center latitude (ad-hoc circle)",
+              "title": "Latitude"
+            }
+          },
+          {
+            "description": "Center longitude (ad-hoc circle)",
+            "in": "query",
+            "name": "longitude",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Center longitude (ad-hoc circle)",
+              "title": "Longitude"
+            }
+          },
+          {
+            "description": "Radius in km (max 50)",
+            "in": "query",
+            "name": "radius_km",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 50,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Radius in km (max 50)",
+              "title": "Radius Km"
             }
           },
           {
@@ -7536,7 +8518,7 @@
     },
     "/admin/workers": {
       "get": {
-        "description": "List workers in the admin's scope. **Roles**: any admin.\n\nQuery params:\n  - is_active: true/false to list active or invited/inactive workers.",
+        "description": "List workers in the admin's scope. **Roles**: any admin.\n\nQuery params:\n  - is_active: true/false to list active or deactivated workers.\n  - pending_invite: true lists workers who still hold the temporary password\n    they were invited with — i.e. they have never signed in.\n\n`pending_invite` exists because the console's \"Invited workers\" tab used to\napproximate it with ``is_active=false``, which is a different set entirely:\ndeactivated workers. The two never overlap, so that tab listed people who\ncould not be re-invited while hiding everyone who was actually waiting on an\ninvitation.",
         "operationId": "list_workers_admin_workers_get",
         "parameters": [
           {
@@ -7592,6 +8574,24 @@
                 }
               ],
               "title": "Is Active"
+            }
+          },
+          {
+            "description": "True lists workers who have been invited but have not signed in yet.",
+            "in": "query",
+            "name": "pending_invite",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "True lists workers who have been invited but have not signed in yet.",
+              "title": "Pending Invite"
             }
           },
           {
@@ -10201,7 +11201,7 @@
         ]
       },
       "patch": {
-        "description": "Update issue fields. Role-based restrictions apply.\n\n- **Citizens**: can set ``citizen_rating`` on their own resolved issues.\n- **Workers/Admins**: can update ``status`` and ``resolution_notes``.\n- **Admins only**: can set ``assigned_worker_id`` (triggers reassignment to ``assigned`` status).\n\nReturns:\n    Updated ``IssueResponse``.\n\nRaises:\n    403: Citizen trying to update another user's issue.\n    404: Issue not found.",
+        "description": "Update issue fields. Role-based restrictions apply.\n\n- **Citizens**: can set ``citizen_rating`` on their own resolved issues.\n- **Workers/Admins**: can update ``status`` and ``resolution_notes``.\n- **Admins only**: can set ``assigned_worker_id`` (triggers reassignment to\n  ``assigned`` status), ``priority`` and ``department``.\n\nFields a caller is not entitled to set are ignored rather than rejected,\nmatching how ``assigned_worker_id`` has always behaved here.\n\nReturns:\n    Updated ``IssueResponse``.\n\nRaises:\n    403: Citizen updating another user's issue; worker updating a task that\n         is not theirs; scoped admin acting outside their jurisdiction.\n    404: Issue not found.\n    422: Unknown ``priority`` or ``department`` value.",
         "operationId": "update_issue_issues__issue_id__patch",
         "parameters": [
           {
@@ -11202,7 +12202,7 @@
     },
     "/leaderboard/citizens": {
       "get": {
-        "description": "Top citizens ranked by total reward points.\n\n**Roles**: any authenticated user.",
+        "description": "Top citizens ranked by total reward points.\n\n``level`` and ``badges`` stay lifetime figures even with ``days`` set — a\nbadge earned last year is not un-earned by asking for this week's board.\n\n**Roles**: any authenticated user.",
         "operationId": "citizen_leaderboard_leaderboard_citizens_get",
         "parameters": [
           {
@@ -11230,6 +12230,26 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Rank on points earned in the last N days. Omit for all-time.",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 365,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Rank on points earned in the last N days. Omit for all-time.",
+              "title": "Days"
             }
           }
         ],
@@ -11272,7 +12292,7 @@
     },
     "/leaderboard/workers": {
       "get": {
-        "description": "Top workers ranked by total reward points.\n\n**Roles**: any authenticated user.",
+        "description": "Top workers ranked by total reward points.\n\nWith ``days`` set, ``tasks_completed`` and ``avg_rating`` are restricted to\nthe same window (keyed on ``resolved_at``) so the two halves of a row agree.\n\n**Roles**: any authenticated user.",
         "operationId": "worker_leaderboard_rewards_leaderboard_workers_get",
         "parameters": [
           {
@@ -11300,6 +12320,26 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "description": "Rank on points earned in the last N days. Omit for all-time.",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 365,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Rank on points earned in the last N days. Omit for all-time.",
+              "title": "Days"
             }
           }
         ],

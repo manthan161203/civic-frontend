@@ -100,6 +100,16 @@ export const ENDPOINT_ACCESS = {
     "surfaces": [],
     "router": "admin"
   },
+  "PATCH /admin/announcements/{announcement_id}": {
+    "roles": [
+      "admin",
+      "district_admin",
+      "taluka_admin",
+      "ward_admin"
+    ],
+    "surfaces": [],
+    "router": "admin"
+  },
   "GET /admin/blocked-tasks": {
     "roles": [
       "admin",
@@ -326,6 +336,26 @@ export const ENDPOINT_ACCESS = {
     ],
     "router": "admin"
   },
+  "GET /admin/geofences/{geofence_id}/alerts": {
+    "roles": [
+      "admin",
+      "district_admin",
+      "taluka_admin",
+      "ward_admin"
+    ],
+    "surfaces": [],
+    "router": "admin"
+  },
+  "GET /admin/geofences/{geofence_id}/workers": {
+    "roles": [
+      "admin",
+      "district_admin",
+      "taluka_admin",
+      "ward_admin"
+    ],
+    "surfaces": [],
+    "router": "admin"
+  },
   "GET /admin/heatmap": {
     "roles": [
       "admin",
@@ -348,6 +378,16 @@ export const ENDPOINT_ACCESS = {
     "surfaces": [
       "admin"
     ],
+    "router": "admin"
+  },
+  "GET /admin/insights": {
+    "roles": [
+      "admin",
+      "district_admin",
+      "taluka_admin",
+      "ward_admin"
+    ],
+    "surfaces": [],
     "router": "admin"
   },
   "GET /admin/issues": {
@@ -1094,7 +1134,6 @@ export const ENDPOINT_ACCESS = {
       "ward_admin"
     ],
     "surfaces": [
-      "admin",
       "mobile"
     ],
     "router": "issues"

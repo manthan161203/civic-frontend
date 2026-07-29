@@ -82,10 +82,23 @@ void citizenHomeWard;
 type NoSuchRoute = ResponseBody<"/issues/{issue_id}", "delete">;
 void 0 as unknown as NoSuchRoute;
 
-// @ts-expect-error — the admin app calls PATCH /admin/announcements/{id}; the
-// backend never defined it. Editing an announcement 405s today.
-type NoAnnouncementPatch = RequestBody<"/admin/announcements/{announcement_id}", "patch">;
-void 0 as unknown as NoAnnouncementPatch;
+// PATCH /admin/announcements/{id} now exists. This assertion was inverted when
+// the endpoint landed — it previously carried a @ts-expect-error recording that
+// the admin app's Edit modal called a route the backend had never defined, so
+// editing an announcement 405'd.
+//
+// Kept as a positive assertion rather than deleted: it is the thing that fails
+// if the route is ever removed again.
+type AnnouncementPatch = RequestBody<"/admin/announcements/{announcement_id}", "patch">;
+const announcementEdit: AnnouncementPatch = { title: "Corrected title" };
+void announcementEdit;
+
+// Re-scoping is deliberately not offered — the citizens who received a ward
+// announcement are not the ones who would receive it as a district one, so a
+// scope change is a delete plus a new post.
+// @ts-expect-error — `scope` is not part of the update body.
+const rescope: AnnouncementPatch = { scope: "state" };
+void rescope;
 
 /* ── Every path is a literal, so typos cannot reach the network ──────────── */
 

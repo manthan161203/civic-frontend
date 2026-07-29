@@ -94,23 +94,26 @@ export const REQUEST_FIELD_ACCESS = {
         note: "Only on the caller's own resolved issue. 1–5.",
       },
       priority: {
-        allowed: [],
+        allowed: ["admin", "district_admin", "taluka_admin", "ward_admin"],
         onViolation: "ignored",
-        surface: "none",
-        unimplemented: true,
+        surface: "admin",
         note:
-          "DECLARED BUT NOT WIRED. The schema documents it as admin-only and the " +
-          "handler never reads body.priority — the request returns 200 and the " +
-          "priority is unchanged. Do not build UI against this field until the " +
-          "backend implements it; use POST /admin/issues/bulk (action='priority') " +
-          "instead, which does work.",
+          "Now wired. It was declared, documented as admin-only, enum-validated " +
+          "and never read by the handler — the request returned 200 with the " +
+          "priority unchanged, so re-triaging looked like it worked. " +
+          "Applied before any status change in the same request, because the " +
+          "after-photo requirement is keyed on the stored priority. " +
+          "Values are urgent|high|medium|low — note there is no 'critical', " +
+          "which the admin console's filter offered for a while.",
       },
       department: {
-        allowed: [],
+        allowed: ["admin", "district_admin", "taluka_admin", "ward_admin"],
         onViolation: "ignored",
-        surface: "none",
-        unimplemented: true,
-        note: "Same as priority — declared, documented, never applied.",
+        surface: "admin",
+        note:
+          "Now wired, same history as priority. Changing it does NOT reassign an " +
+          "already-assigned worker — they stay matched on the old department " +
+          "until an admin revisits the assignment deliberately.",
       },
     },
   },
@@ -227,17 +230,19 @@ export const RESPONSE_FIELD_VISIBILITY = {
     workerOriented: ["assigned_worker_id", "assigned_worker_name", "resolution_notes"],
     sensitive: {
       reporter: {
-        severity: "high",
+        severity: "resolved",
         note:
-          "IssueResponse.reporter is Optional[IssueReporterInfo] with " +
-          "from_attributes, and Issue.reporter is an eager ORM relationship — so " +
-          "model_validate emits {id, name, phone} unconditionally. Verified by " +
-          "constructing the model directly: every GET /issues, /issues/{id}, " +
-          "/issues/nearby and /issues/search response hands the reporter's PHONE " +
-          "NUMBER to any authenticated caller, including unrelated citizens. " +
-          "Neither app renders it today, but it is on the wire. This needs a " +
-          "backend fix (role-conditional serializer or a separate response model), " +
-          "not a client-side omission.",
+          "FIXED. IssueResponse.reporter is Optional[IssueReporterInfo] with " +
+          "from_attributes over an eager ORM relationship, so model_validate " +
+          "populated it at all 24 call sites — and while `phone` lived on that " +
+          "model, GET /issues/nearby handed the phone number of every nearby " +
+          "reporter to any authenticated citizen, in bulk, keyed on a " +
+          "caller-supplied coordinate. " +
+          "`phone` is now gone from IssueReporterInfo entirely, so no response " +
+          "model can emit it. Admin routes declare IssueAdminResponse, whose " +
+          "reporter is IssueReporterAdminInfo and does carry it. " +
+          "The direction matters: a route added later that forgets to opt in " +
+          "leaks nothing, which stripping the field per-site could not give.",
       },
     },
   },

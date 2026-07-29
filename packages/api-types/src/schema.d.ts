@@ -1726,14 +1726,20 @@ export interface paths {
          *
          *     - **Citizens**: can set ``citizen_rating`` on their own resolved issues.
          *     - **Workers/Admins**: can update ``status`` and ``resolution_notes``.
-         *     - **Admins only**: can set ``assigned_worker_id`` (triggers reassignment to ``assigned`` status).
+         *     - **Admins only**: can set ``assigned_worker_id`` (triggers reassignment to
+         *       ``assigned`` status), ``priority`` and ``department``.
+         *
+         *     Fields a caller is not entitled to set are ignored rather than rejected,
+         *     matching how ``assigned_worker_id`` has always behaved here.
          *
          *     Returns:
          *         Updated ``IssueResponse``.
          *
          *     Raises:
-         *         403: Citizen trying to update another user's issue.
+         *         403: Citizen updating another user's issue; worker updating a task that
+         *              is not theirs; scoped admin acting outside their jurisdiction.
          *         404: Issue not found.
+         *         422: Unknown ``priority`` or ``department`` value.
          */
         patch: operations["update_issue_issues__issue_id__patch"];
         trace?: never;
@@ -2286,6 +2292,10 @@ export interface paths {
          * List All Issues
          * @description List all issues in the admin's scope with optional filters (paginated).
          *
+         *     ``ai_flag`` exists so the AI-insights screen can page its drill-down lists
+         *     server-side. It previously fetched up to 2,000 issues and filtered them in
+         *     the browser, which both truncated the result and made the counts a sample.
+         *
          *     **Roles**: any admin.
          */
         get: operations["list_all_issues_admin_issues_get"];
@@ -2674,7 +2684,15 @@ export interface paths {
          * @description List workers in the admin's scope. **Roles**: any admin.
          *
          *     Query params:
-         *       - is_active: true/false to list active or invited/inactive workers.
+         *       - is_active: true/false to list active or deactivated workers.
+         *       - pending_invite: true lists workers who still hold the temporary password
+         *         they were invited with — i.e. they have never signed in.
+         *
+         *     `pending_invite` exists because the console's "Invited workers" tab used to
+         *     approximate it with ``is_active=false``, which is a different set entirely:
+         *     deactivated workers. The two never overlap, so that tab listed people who
+         *     could not be re-invited while hiding everyone who was actually waiting on an
+         *     invitation.
          */
         get: operations["list_workers_admin_workers_get"];
         put?: never;
@@ -3293,7 +3311,24 @@ export interface paths {
         delete: operations["delete_announcement_admin_announcements__announcement_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Announcement
+         * @description Edit an announcement's text, expiry or map pin.
+         *
+         *     Authorization matches ``DELETE``: author, or super-admin.
+         *
+         *     **Editing never re-notifies.** ``push_dispatched_at`` is the latch the
+         *     ``jobs`` service reads to decide who still needs a push; clearing it here
+         *     would re-deliver the announcement to every matching citizen, so a typo fix
+         *     would buzz an entire district a second time. It is therefore left untouched,
+         *     and returned in the response so the console can say plainly that the edit
+         *     will not reach anyone who already received the original.
+         *
+         *     Re-scoping is not offered — see ``UpdateAnnouncementRequest``.
+         *
+         *     **Roles**: any admin (must be author or super-admin).
+         */
+        patch: operations["update_announcement_admin_announcements__announcement_id__patch"];
         trace?: never;
     };
     "/admin/flags": {
@@ -3467,19 +3502,17 @@ export interface paths {
         };
         /**
          * List Geofences
-         * @description List geofences with pagination and admin scope filtering.
+         * @description List geofences in the admin's jurisdiction, paginated.
          *
-         *     ADMIN ROLES AUDIT - GAP #5: Scope Consistency
-         *     Applies geographic scope filtering based on admin role.
-         *     - super_admin: sees all geofences
-         *     - district_admin: sees geofences in their district
-         *     - taluka_admin: sees geofences in their taluka
-         *     - ward_admin: sees geofences in their ward
+         *     - super-admin:    every zone, including state-level ones
+         *     - district_admin: zones in their district
+         *     - taluka_admin:   zones in their taluka
+         *     - ward_admin:     zones in their ward
          *
-         *     NOTE: Current Geofence model does not track ward_id/taluka_id/district_id.
-         *     For full geographic scoping, Geofence model needs to be extended with geographic fields
-         *     via database migration. Until then, all admins can see all geofences but access control
-         *     is enforced at creation/update/delete time.
+         *     Zones with no jurisdiction (all three ids NULL) are state-level and appear
+         *     only for a super-admin. Every geofence created before ``a9b0c1d2e3`` is in
+         *     that category — there was no boundary geometry to derive a jurisdiction
+         *     from, so they were left for a super-admin to assign rather than guessed at.
          *
          *     **Roles**: any admin.
          *
@@ -3496,10 +3529,16 @@ export interface paths {
          * Create Geofence
          * @description Create a new geofence zone.
          *
-         *     **Roles**: admin or district_admin.
+         *     The zone is stamped with the caller's own jurisdiction. A scoped admin
+         *     cannot choose one — supplying ``ward_id``/``taluka_id``/``district_id`` is
+         *     honoured only for a super-admin, because an admin able to nominate a scope
+         *     could create, and thereafter manage, a zone anywhere in the state.
+         *
+         *     **Roles**: any admin.
          *
          *     Args:
-         *         body: CreateGeofenceRequest with name, latitude, longitude, radius_km
+         *         body: CreateGeofenceRequest with name, latitude, longitude, radius_km,
+         *               and optionally a jurisdiction (super-admin only).
          *
          *     Returns:
          *         Created GeofenceResponse
@@ -3525,7 +3564,11 @@ export interface paths {
          * Delete Geofence
          * @description Delete a geofence zone.
          *
-         *     **Roles**: admin or district_admin.
+         *     Restricted to zones inside the caller's jurisdiction. This is the endpoint
+         *     the missing check mattered most on: a single-ward admin could delete any
+         *     zone in the state, and the deletion is not recoverable.
+         *
+         *     **Roles**: any admin, within their own jurisdiction.
          *
          *     Args:
          *         geofence_id: UUID of the geofence to delete
@@ -3537,7 +3580,15 @@ export interface paths {
          * Update Geofence
          * @description Update a geofence zone (all fields optional).
          *
-         *     **Roles**: admin or district_admin.
+         *     Restricted to zones inside the caller's jurisdiction. Until this check
+         *     existed, any admin tier could edit any zone in the state.
+         *
+         *     A zone's jurisdiction is not editable here — moving a zone between wards is
+         *     a transfer of ownership, not a field update, and re-scoping it out from
+         *     under its current admin should be a deliberate super-admin act rather than a
+         *     side effect of nudging a radius.
+         *
+         *     **Roles**: any admin, within their own jurisdiction.
          *
          *     Args:
          *         geofence_id: UUID of the geofence to update
@@ -3547,6 +3598,70 @@ export interface paths {
          *         Updated GeofenceResponse
          */
         patch: operations["update_geofence_admin_geofences__geofence_id__patch"];
+        trace?: never;
+    };
+    "/admin/geofences/{geofence_id}/workers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Geofence Workers
+         * @description Which workers are currently inside this zone.
+         *
+         *     ``User.latitude``/``longitude`` is a **single mutable point**, not a track —
+         *     it is overwritten on each location update and there is no history table. So
+         *     this answers "where was each worker when they last reported", which is not
+         *     the same as "where are they now".
+         *
+         *     That distinction matters enough to be in the payload rather than only in
+         *     this docstring: ``location_updated_at`` and ``location_age_minutes`` are
+         *     returned per worker, and ``stale`` marks anyone whose fix predates the
+         *     threshold below. Without it, a worker whose phone died three hours ago in
+         *     the zone reads as present.
+         *
+         *     Workers are restricted to the caller's jurisdiction by the same
+         *     ``user_scope_filter`` used elsewhere, so this cannot be used to locate
+         *     another district's staff.
+         *
+         *     **Roles**: any admin, for zones within their own jurisdiction.
+         */
+        get: operations["geofence_workers_admin_geofences__geofence_id__workers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/geofences/{geofence_id}/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Geofence Alerts
+         * @description Broadcast history for a zone, newest first.
+         *
+         *     History starts at migration ``b0c1d2e3f4``. Before it, ``POST
+         *     /admin/notifications/geofence`` persisted nothing at all, so there is no
+         *     earlier data and none was invented — an empty list on an old zone means "not
+         *     recorded", not "never alerted".
+         *
+         *     **Roles**: any admin, for zones within their own jurisdiction.
+         */
+        get: operations["geofence_alerts_admin_geofences__geofence_id__alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/admin/analytics": {
@@ -3561,6 +3676,48 @@ export interface paths {
          * @description Trend data for dashboard charts (scoped). **Roles**: any admin.
          */
         get: operations["get_analytics_admin_analytics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Insights
+         * @description Aggregate insights for the admin's jurisdiction.
+         *
+         *     This replaces what the console was doing in the browser: paging through
+         *     ``/admin/issues`` 200 rows at a time up to a 2,000-row ceiling, aggregating
+         *     client-side, and rendering an amber banner admitting the figures were a
+         *     sample rather than a total. Every count below is computed in SQL over the
+         *     whole scoped dataset, so it is a total.
+         *
+         *     Three blocks:
+         *
+         *     * ``ai_quality`` — how much the classifier is producing, how confident it
+         *       is, and how much it has flagged as poorly resolved. This is the data the
+         *       AI-insights screen displays.
+         *     * ``movement`` — each issue type this period against the one before it.
+         *       Guarded twice, by percentage *and* by absolute base, because a category
+         *       going 1 → 3 is not a 200% surge worth an admin's attention.
+         *     * ``anomalies`` — wards whose share of reports moved sharply.
+         *
+         *     ``narrative`` is best-effort. If no provider key is configured, or the call
+         *     fails, the field is ``null`` and every number above is still returned — a
+         *     dashboard must not go blank because a third party is down.
+         *
+         *     **Roles**: any admin (scoped).
+         */
+        get: operations["get_insights_admin_insights_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3587,12 +3744,21 @@ export interface paths {
          *     2. FCM token registered
          *     3. Active account
          *
-         *     **Parameters**:
-         *     - `latitude`, `longitude`: Center point of geofence
-         *     - `radius_km`: Circular radius in kilometers
-         *     - `title`, `body`: Notification content
+         *     **Two ways to aim it:**
          *
-         *     **Returns**: Count of users notified
+         *     - ``geofence_id`` — broadcast to a saved zone. The centre and radius come
+         *       from the zone, and the resulting record is **linked** to it, which is what
+         *       makes ``GET /admin/geofences/{id}/alerts`` show a history. The zone must
+         *       be within your jurisdiction.
+         *     - ``latitude`` + ``longitude`` + ``radius_km`` — an ad-hoc circle, for a
+         *       one-off that does not correspond to a saved zone. Recorded with the circle
+         *       but no zone link, because attributing it to one would be a guess.
+         *
+         *     Either way the dispatch is written to ``geofence_alerts``. It previously
+         *     existed only as this response and a log line, so a broadcast that reached
+         *     nobody looked exactly like one that reached everybody.
+         *
+         *     **Returns**: Count of users notified, plus the id of the recorded alert.
          */
         post: operations["send_geofence_notification_admin_notifications_geofence_post"];
         delete?: never;
@@ -4210,6 +4376,9 @@ export interface paths {
          * Citizen Leaderboard
          * @description Top citizens ranked by total reward points.
          *
+         *     ``level`` and ``badges`` stay lifetime figures even with ``days`` set — a
+         *     badge earned last year is not un-earned by asking for this week's board.
+         *
          *     **Roles**: any authenticated user.
          */
         get: operations["citizen_leaderboard_leaderboard_citizens_get"];
@@ -4231,6 +4400,9 @@ export interface paths {
         /**
          * Worker Leaderboard Rewards
          * @description Top workers ranked by total reward points.
+         *
+         *     With ``days`` set, ``tasks_completed`` and ``avg_rating`` are restricted to
+         *     the same window (keyed on ``resolved_at``) so the two halves of a row agree.
          *
          *     **Roles**: any authenticated user.
          */
@@ -4889,6 +5061,21 @@ export interface components {
              * @description Radius in km (0.1 to 50)
              */
             radius_km: number;
+            /**
+             * Ward Id
+             * @description Owning ward (super-admin only)
+             */
+            ward_id?: string | null;
+            /**
+             * Taluka Id
+             * @description Owning taluka (super-admin only)
+             */
+            taluka_id?: string | null;
+            /**
+             * District Id
+             * @description Owning district (super-admin only)
+             */
+            district_id?: string | null;
         };
         /**
          * CreateSubAdminRequest
@@ -5194,6 +5381,21 @@ export interface components {
              * @description Creation timestamp
              */
             created_at: string;
+            /**
+             * Ward Id
+             * @description Owning ward, if any
+             */
+            ward_id?: string | null;
+            /**
+             * Taluka Id
+             * @description Owning taluka, if any
+             */
+            taluka_id?: string | null;
+            /**
+             * District Id
+             * @description Owning district, if any
+             */
+            district_id?: string | null;
         };
         /**
          * GoogleLoginRequest
@@ -5249,6 +5451,197 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * IssueAdminListResponse
+         * @description Paginated admin issue list.
+         *
+         *     Inherits the ``mode="before"`` validator that reconciles ``page``/``size``
+         *     with ``limit``/``offset`` — subclassing keeps it, and a test pins that,
+         *     because losing it would silently return every admin list to reporting
+         *     ``limit: 50, offset: 0`` on every page.
+         */
+        IssueAdminListResponse: {
+            /** Items */
+            items: components["schemas"]["IssueAdminResponse"][];
+            /** Total */
+            total: number;
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Size
+             * @default 50
+             */
+            size: number;
+            /**
+             * Limit
+             * @default 50
+             */
+            limit: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset: number;
+            /**
+             * Pages
+             * @default 0
+             */
+            pages: number;
+        };
+        /**
+         * IssueAdminResponse
+         * @description ``IssueResponse`` plus the reporter's phone number.
+         *
+         *     Declared as the ``response_model`` on the admin issue routes. It exists so
+         *     that the *default* response shape is the safe one: any route that does not
+         *     explicitly ask for this variant cannot emit a phone number, because
+         *     :class:`IssueReporterInfo` has no such field to emit.
+         *
+         *     Nothing else differs — see the sibling test asserting this stays a strict
+         *     superset, so the two shapes cannot quietly drift apart.
+         */
+        IssueAdminResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Reporter Id
+             * Format: uuid
+             */
+            reporter_id: string;
+            /** Assigned Worker Id */
+            assigned_worker_id?: string | null;
+            /** Assigned Worker Name */
+            assigned_worker_name?: string | null;
+            /** Issue Type */
+            issue_type: string;
+            /** Custom Issue Type Label */
+            custom_issue_type_label?: string | null;
+            /** Severity */
+            severity: string;
+            /**
+             * Priority
+             * @default medium
+             */
+            priority: string;
+            /** Status */
+            status: string;
+            /** Department */
+            department?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Latitude */
+            latitude: number;
+            /** Longitude */
+            longitude: number;
+            /** Address */
+            address?: string | null;
+            /** Ward */
+            ward?: string | null;
+            /** Ward Id */
+            ward_id?: string | null;
+            /** Before Photos */
+            before_photos: string[];
+            /** After Photos */
+            after_photos: string[];
+            /**
+             * Upvote Count
+             * @default 0
+             */
+            upvote_count: number;
+            /**
+             * User Upvoted
+             * @default false
+             */
+            user_upvoted: boolean;
+            /** Ai Issue Type */
+            ai_issue_type?: string | null;
+            /** Ai Severity */
+            ai_severity?: string | null;
+            /** Ai Confidence */
+            ai_confidence?: number | null;
+            /** Ai Suggested Description */
+            ai_suggested_description?: string | null;
+            /** Ai Is Resolved */
+            ai_is_resolved?: boolean | null;
+            /** Ai Resolution Quality */
+            ai_resolution_quality?: string | null;
+            /** Ai Resolution Notes */
+            ai_resolution_notes?: string | null;
+            /** Resolution Notes */
+            resolution_notes?: string | null;
+            /** Citizen Rating */
+            citizen_rating?: number | null;
+            /** Is Duplicate */
+            is_duplicate: boolean;
+            /** Is Escalated */
+            is_escalated: boolean;
+            /** Escalated At */
+            escalated_at?: string | null;
+            /**
+             * Escalation Level
+             * @default 0
+             */
+            escalation_level: number;
+            /** Is Blocked */
+            is_blocked: boolean;
+            /** Blocked Reason */
+            blocked_reason?: string | null;
+            /** Blocked At */
+            blocked_at?: string | null;
+            /** Blocked By Id */
+            blocked_by_id?: string | null;
+            /** Unblocked At */
+            unblocked_at?: string | null;
+            /** Unblocked By Id */
+            unblocked_by_id?: string | null;
+            /** Admin Unblock Note */
+            admin_unblock_note?: string | null;
+            /** Block Resolved By */
+            block_resolved_by?: string | null;
+            /** Blocked Duration Hours */
+            blocked_duration_hours?: number | null;
+            /**
+             * Reassignment Count
+             * @default 0
+             */
+            reassignment_count: number;
+            /**
+             * Is Deleted
+             * @default false
+             */
+            is_deleted: boolean;
+            /**
+             * Is Sos
+             * @default false
+             */
+            is_sos: boolean;
+            /** Parent Issue Id */
+            parent_issue_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Resolved At */
+            resolved_at?: string | null;
+            reporter?: components["schemas"]["IssueReporterAdminInfo"] | null;
+            /**
+             * Comment Count
+             * @default 0
+             */
+            comment_count: number;
         };
         /**
          * IssueCommentAuthor
@@ -5479,15 +5872,18 @@ export interface components {
          */
         IssuePriorityEnum: "low" | "medium" | "high" | "urgent";
         /**
-         * IssueReporterInfo
-         * @description Embedded reporter info within ``IssueResponse``.
+         * IssueReporterAdminInfo
+         * @description Reporter info including the phone number. Admin responses only.
+         *
+         *     Reachable only through :class:`IssueAdminResponse`. FastAPI serialises
+         *     against the declared ``response_model``, so returning one of these from a
+         *     route that declares plain ``IssueResponse`` drops the phone rather than
+         *     leaking it — the failure mode points the safe way.
          *
          *     Attributes:
-         *         id:    Reporter's user UUID.
-         *         name:  Reporter's display name.
          *         phone: Reporter's phone number.
          */
-        IssueReporterInfo: {
+        IssueReporterAdminInfo: {
             /**
              * Id
              * Format: uuid
@@ -5497,6 +5893,41 @@ export interface components {
             name?: string | null;
             /** Phone */
             phone?: string | null;
+        };
+        /**
+         * IssueReporterInfo
+         * @description Embedded reporter info within ``IssueResponse``.
+         *
+         *     **This deliberately carries no phone number.**
+         *
+         *     ``IssueResponse`` is ``from_attributes`` over a model with a ``reporter``
+         *     relationship, so every one of its 24 ``model_validate`` call sites populates
+         *     this object automatically. While ``phone`` lived here, two of those sites
+         *     published it to any authenticated citizen:
+         *
+         *     * ``GET /issues/nearby`` — a **list**, keyed on a caller-supplied
+         *       coordinate, so no issue id had to be guessed;
+         *     * ``GET /issues/{id}`` — whose own docstring says citizens may view any
+         *       issue; the one access check there restricts workers.
+         *
+         *     Admins have a genuine need for it — they call citizens back about their
+         *     reports — so it moved to :class:`IssueReporterAdminInfo`, reachable only via
+         *     :class:`IssueAdminResponse` on routes that opt in. Keeping the narrow shape
+         *     as the default means a route added later leaks nothing by omission, which is
+         *     not a property that stripping the field at each call site could offer.
+         *
+         *     Attributes:
+         *         id:    Reporter's user UUID.
+         *         name:  Reporter's display name.
+         */
+        IssueReporterInfo: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name?: string | null;
         };
         /**
          * IssueResponse
@@ -5700,13 +6131,21 @@ export interface components {
          *     Role-based field restrictions:
          *     - **Citizens**: can only set ``citizen_rating`` on their own resolved issues.
          *     - **Workers/Admins**: can update ``status`` and ``resolution_notes``.
-         *     - **Admins only**: can set ``assigned_worker_id`` (triggers reassignment).
+         *     - **Admins only**: can set ``assigned_worker_id`` (triggers reassignment),
+         *       ``priority`` and ``department``.
+         *
+         *     Fields the caller is not entitled to set are ignored rather than rejected.
          *
          *     Attributes:
          *         status:             New status value.
          *         resolution_notes:   Notes from the worker about the resolution.
          *         assigned_worker_id: UUID of the worker to assign (admin only).
          *         citizen_rating:     Satisfaction rating 1-5 (citizen only, on resolved issues).
+         *         priority:           Re-triaged priority (admin only). Applied before any
+         *                             status change in the same request, because the
+         *                             after-photo requirement is keyed on it.
+         *         department:         Owning department (admin only). Changing it does not
+         *                             reassign an already-assigned worker.
          */
         IssueUpdate: {
             /** @description open | assigned | in_progress | resolved | closed */
@@ -6290,6 +6729,36 @@ export interface components {
              * @default false
              */
             must_change_password: boolean;
+        };
+        /**
+         * UpdateAnnouncementRequest
+         * @description Request body for editing an announcement. All fields optional.
+         *
+         *     ``scope`` and its three target ids are deliberately absent. Re-scoping a
+         *     delivered announcement is not an edit — the citizens who received it are not
+         *     the citizens who would receive it now — so that is a delete plus a new post,
+         *     which is also what keeps the push audit honest.
+         */
+        UpdateAnnouncementRequest: {
+            /** Title */
+            title?: string | null;
+            /** Body */
+            body?: string | null;
+            /**
+             * Expires At
+             * @description New expiry datetime (UTC)
+             */
+            expires_at?: string | null;
+            /**
+             * Location Lat
+             * @description Latitude citizens can view on map
+             */
+            location_lat?: number | null;
+            /**
+             * Location Lng
+             * @description Longitude citizens can view on map
+             */
+            location_lng?: number | null;
         };
         /**
          * UpdateGeofenceRequest
@@ -9275,6 +9744,8 @@ export interface operations {
                 priority?: string | null;
                 /** @description Filter by department */
                 department?: string | null;
+                /** @description Drill-down for the insights screen: low_confidence | poor_resolution */
+                ai_flag?: string | null;
             };
             header?: never;
             path?: never;
@@ -9288,7 +9759,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IssueListResponse"];
+                    "application/json": components["schemas"]["IssueAdminListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9323,7 +9794,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IssueResponse"];
+                    "application/json": components["schemas"]["IssueAdminResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9357,7 +9828,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IssueResponse"];
+                    "application/json": components["schemas"]["IssueAdminResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9391,7 +9862,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IssueListResponse"];
+                    "application/json": components["schemas"]["IssueAdminListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9429,7 +9900,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IssueResponse"];
+                    "application/json": components["schemas"]["IssueAdminResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9500,7 +9971,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IssueResponse"];
+                    "application/json": components["schemas"]["IssueAdminResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9531,7 +10002,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IssueResponse"];
+                    "application/json": components["schemas"]["IssueAdminResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9731,6 +10202,8 @@ export interface operations {
                 size?: number;
                 is_online?: boolean | null;
                 is_active?: boolean | null;
+                /** @description True lists workers who have been invited but have not signed in yet. */
+                pending_invite?: boolean | null;
                 ward?: string | null;
                 department?: string | null;
                 search?: string | null;
@@ -10747,6 +11220,41 @@ export interface operations {
             };
         };
     };
+    update_announcement_admin_announcements__announcement_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                announcement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAnnouncementRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_flags_admin_flags_get: {
         parameters: {
             query?: {
@@ -11111,6 +11619,75 @@ export interface operations {
             };
         };
     };
+    geofence_workers_admin_geofences__geofence_id__workers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                geofence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    geofence_alerts_admin_geofences__geofence_id__alerts_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                geofence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_analytics_admin_analytics_get: {
         parameters: {
             query?: {
@@ -11144,19 +11721,57 @@ export interface operations {
             };
         };
     };
+    get_insights_admin_insights_get: {
+        parameters: {
+            query?: {
+                /** @description Length of the current period */
+                days?: number;
+                /** @description Include a written summary if a provider is configured */
+                narrative?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     send_geofence_notification_admin_notifications_geofence_post: {
         parameters: {
             query: {
-                /** @description Center latitude */
-                latitude: number;
-                /** @description Center longitude */
-                longitude: number;
-                /** @description Radius in kilometers (max 50) */
-                radius_km: number;
                 /** @description Notification title */
                 title: string;
                 /** @description Notification body */
                 body: string;
+                /** @description Broadcast to a saved zone. Supply this OR latitude/longitude/radius_km. */
+                geofence_id?: string | null;
+                /** @description Center latitude (ad-hoc circle) */
+                latitude?: number | null;
+                /** @description Center longitude (ad-hoc circle) */
+                longitude?: number | null;
+                /** @description Radius in km (max 50) */
+                radius_km?: number | null;
                 /** @description Clickable map location latitude (defaults to center) */
                 location_lat?: number | null;
                 /** @description Clickable map location longitude (defaults to center) */
@@ -12125,6 +12740,8 @@ export interface operations {
                 limit?: number;
                 /** @description Number of entries to skip (for pagination) */
                 offset?: number;
+                /** @description Rank on points earned in the last N days. Omit for all-time. */
+                days?: number | null;
             };
             header?: never;
             path?: never;
@@ -12159,6 +12776,8 @@ export interface operations {
                 limit?: number;
                 /** @description Number of entries to skip (for pagination) */
                 offset?: number;
+                /** @description Rank on points earned in the last N days. Omit for all-time. */
+                days?: number | null;
             };
             header?: never;
             path?: never;
