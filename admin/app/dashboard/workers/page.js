@@ -1,972 +1,484 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Map, AdvancedMarker, InfoWindow, useMap } from '@vis.gl/react-google-maps';
-import { adminApi } from '../../../src/api/index';
-import { getErrorMessage } from '../../../src/lib/apiError';
-import { locationsApi } from '../../../src/api/index';
-import { formatDate } from '../../../src/lib/dateUtils';
-import { useAuthStore } from '../../../src/store/authStore';
-import { useUiStore } from '../../../src/store/uiStore';
-import AdminScopeHeader from '../../../src/components/AdminScopeHeader';
-import LoadingButton from '../../../src/components/ui/LoadingButton';
 
-const DEPT_OPTIONS = ['water', 'roads', 'electricity', 'sanitation', 'parks', 'other'];
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-// ── Edit Worker Modal ──────────────────────────────────────────────────────────
-function EditWorkerModal({ worker, onClose, onSaved }) {
-  const { addToast } = useUiStore();
-  const [form, setForm] = useState({
-    name: worker.name || '',
-    phone: worker.phone ? worker.phone.replace('+91', '') : '',
-    ward_id: worker.ward_id || '',
-    department: worker.department || '',
-  });
-  const [wards, setWards] = useState([]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+import { adminApi } from '@/api/index';
+import { qk } from '@/api/queryKeys';
+import { getErrorMessage } from '@/api/errors';
+import { useAuthStore } from '@/store/authStore';
+import { useUiStore } from '@/store/uiStore';
+import { formatDate } from '@/lib/dateUtils';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { usePagedList } from '@/hooks/usePagedList';
+import { useWardOptions } from '@/hooks/useWardOptions';
 
-  // Load wards (same logic as CreateWorker)
-  useEffect(() => {
-    const user = useAuthStore.getState().user;
-    locationsApi.getTree().then(({ data }) => {
-      const allWards = [];
-      (data.districts || data).forEach((district) => {
-        if (user?.role === 'district_admin' && user?.district_id && district.id !== user.district_id) return;
-        (district.talukas || []).forEach((taluka) => {
-          if (user?.role === 'taluka_admin' && user?.taluka_id && taluka.id !== user.taluka_id) return;
-          (taluka.wards || []).forEach((ward) => {
-            if (user?.role === 'ward_admin' && user?.ward_id && ward.id !== user.ward_id) return;
-            allWards.push({
-              id: ward.id,
-              label: `${ward.name} (Ward-${ward.ward_number}) · ${taluka.name}, ${district.name}`,
-            });
-          });
-        });
-      });
-      setWards(allWards);
-    }).catch(() => {});
-  }, []);
+import AdminScopeHeader from '@/components/AdminScopeHeader';
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import DataTable from '@/components/ui/DataTable';
+import Button from '@/components/ui/Button';
+import Tabs from '@/components/ui/Tabs';
+import EmptyState from '@/components/ui/EmptyState';
+import Toolbar, { SearchInput, FilterSelect } from '@/components/ui/Toolbar';
+import Badge, { StatusBadge } from '@/components/ui/Badge';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.name.trim()) { 
-      addToast('Name is required', 'error');
-      setError('Name is required.'); 
-      return; 
-    }
-    
-    setSaving(true);
-    setError('');
-    try {
-      const payload = {
-        name: form.name.trim(),
-        ward_id: form.ward_id || null,
-        department: form.department || null,
-      };
+import WorkerFormModal from './WorkerFormModal';
+import WorkerReportModal from './WorkerReportModal';
+import WorkerMapTab from './WorkerMapTab';
+import LeaderboardTab from './LeaderboardTab';
 
-      if (form.phone) {
-        const cleaned = form.phone.replace(/\D/g, '');
-        if (cleaned.length !== 10) {
-          addToast('Enter a valid 10-digit phone number', 'error');
-          setError('Enter a valid 10-digit phone number');
-          setSaving(false);
-          return;
-        }
-        payload.phone = `+91${cleaned}`;
-      }
+/**
+ * Workers.
+ *
+ * ── The bug that mattered ────────────────────────────────────────────────────
+ *
+ * The tab labelled **"Invited Workers" listed deactivated workers.** It was
+ * built on `is_active=false`, which is a different population entirely — and
+ * because the "Resend invite" button only renders for `must_change_password &&
+ * is_active`, that tab could never show the one action it existed for. Someone
+ * whose invitation email bounced was invisible on the screen meant to find them,
+ * and the only recovery was to delete and recreate the account.
+ *
+ * `GET /admin/workers` now takes `pending_invite`, which asks the real question:
+ * still holding the temporary password, and still active. Deactivated accounts
+ * are reachable through the status filter, where they belong.
+ *
+ * Also fixed here:
+ *
+ *  - **Search fired a request per keystroke.** No debounce, and `setSearch` also
+ *    reset the page, so typing "patel" issued five paginated requests.
+ *  - **`catch {}` twice inside one loader**, so a failed worker list and a
+ *    failed location tree both rendered as an empty table.
+ *  - **`GET /locations/tree` re-ran on every page change**, because it was
+ *    nested inside the list loader. It is the whole hierarchy and it changes
+ *    about never; it is a cached query now, shared with both forms.
+ *  - **`load` omitted `showInactive` from its dependencies.** Harmless only
+ *    because the two tabs were separate mounts — the kind of latent bug that
+ *    surfaces the moment someone makes the tabs share a component.
+ */
 
-      await adminApi.updateWorker(worker.id, payload);
-      addToast('Worker updated successfully', 'success');
-      onSaved();
-      onClose();
-    } catch (err) {
-      const msg = getErrorMessage(err, 'Failed to update worker.');
-      setError(msg);
-      addToast(msg, 'error');
-    }
-    setSaving(false);
-  };
+const STATUS_FILTERS = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Deactivated' },
+];
 
+const TABS = [
+  { id: 'list', label: 'Workers' },
+  { id: 'invited', label: 'Awaiting first sign-in' },
+  { id: 'map', label: 'Live map' },
+  { id: 'leaderboard', label: 'Leaderboard' },
+];
+
+/** Initials avatar. Cheap, and it makes a dense table scannable by shape. */
+function WorkerAvatar({ name }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-5">
-          <h2 className="text-lg font-bold text-gray-900">Edit Worker</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Name</label>
-              <input
-                required
-                value={form.name}
-                onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Phone</label>
-              <div className="relative">
-                <input
-                  required
-                  type="tel"
-                  value={form.phone}
-                  onChange={(e) => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-                  placeholder="10 digits"
-                  maxLength="10"
-                  className="w-full border border-gray-200 rounded-lg pl-14 pr-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-                />
-                <span className="absolute left-3 top-2 text-sm font-bold text-gray-700">+91</span>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Ward Assignment</label>
-            <select
-              value={form.ward_id}
-              onChange={(e) => setForm(f => ({ ...f, ward_id: e.target.value }))}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
-            >
-              <option value="">— No ward assigned —</option>
-              {wards.map((w) => <option key={w.id} value={w.id}>{w.label}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Department</label>
-            <select
-              value={form.department}
-              onChange={(e) => setForm(f => ({ ...f, department: e.target.value }))}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
-            >
-              <option value="">— Select department —</option>
-              {DEPT_OPTIONS.map((d) => <option key={d} value={d} className="capitalize">{d}</option>)}
-            </select>
-          </div>
-
-          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-100">{error}</p>}
-
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-bold">
-              Cancel
-            </button>
-            <LoadingButton type="submit" isLoading={saving} variant="primary" className="flex-1" loadingText="Saving...">
-              Save Changes
-            </LoadingButton>
-          </div>
-        </form>
-      </div>
-    </div>
+    <span
+      aria-hidden="true"
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full
+                 bg-primary-soft text-xs font-semibold text-primary-strong"
+    >
+      {name?.trim()?.[0]?.toUpperCase() || '?'}
+    </span>
   );
 }
 
-
-// ── Worker Report Modal ────────────────────────────────────────────────────────
-function WorkerReportModal({ worker, onClose }) {
-  const [report, setReport] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [days, setDays] = useState(30);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data } = await adminApi.getWorkerReport(worker.id, days);
-      setReport(data);
-    } catch {
-      setReport(null);
-    }
-    setLoading(false);
-  }, [worker.id, days]);
-
-  useEffect(() => { load(); }, [load]);
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4 flex-shrink-0">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">{worker.name} — Report</h2>
-            <p className="text-xs text-gray-400">Performance overview</p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-          </button>
-        </div>
-
-        <div className="flex gap-2 mb-4 flex-shrink-0">
-          {[7, 14, 30, 90].map((d) => (
-            <button
-              key={d}
-              onClick={() => setDays(d)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${days === d ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            >
-              {d}d
-            </button>
-          ))}
-        </div>
-
-        <div className="overflow-y-auto flex-1">
-          {loading ? (
-            <div className="text-center py-12 text-gray-400 text-sm">Loading report…</div>
-          ) : !report ? (
-            <div className="text-center py-12 text-gray-400 text-sm">Failed to load report</div>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  ['Assigned', report.total_assigned, 'bg-blue-50 text-blue-700'],
-                  ['Resolved', report.resolved, 'bg-green-50 text-green-700'],
-                  ['In Progress', report.in_progress, 'bg-yellow-50 text-yellow-700'],
-                  ['Rejected', report.rejected_count, 'bg-red-50 text-red-700'],
-                ].map(([label, val, cls]) => (
-                  <div key={label} className={`rounded-xl p-3 ${cls}`}>
-                    <div className="text-2xl font-bold">{val ?? 0}</div>
-                    <div className="text-xs font-semibold opacity-75">{label}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-gray-50 rounded-xl p-3 text-center">
-                  <div className="text-lg font-bold text-gray-900">{report.resolution_rate ?? 0}%</div>
-                  <div className="text-xs text-gray-500">Resolution Rate</div>
-                </div>
-                <div className="bg-gray-50 rounded-xl p-3 text-center">
-                  <div className="text-lg font-bold text-gray-900">
-                    {report.avg_resolution_hours != null ? `${report.avg_resolution_hours.toFixed(1)}h` : '—'}
-                  </div>
-                  <div className="text-xs text-gray-500">Avg Resolution</div>
-                </div>
-                <div className="bg-gray-50 rounded-xl p-3 text-center">
-                  <div className="text-lg font-bold text-yellow-600 flex items-center justify-center gap-1">
-                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{width:14,height:14}}>
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                    </svg>
-                    {report.avg_citizen_rating != null ? report.avg_citizen_rating.toFixed(1) : '—'}
-                  </div>
-                  <div className="text-xs text-gray-500">Avg Rating ({report.five_star_count ?? 0} / 5 stars)</div>
-                </div>
-              </div>
-
-              {report.by_issue_type && Object.keys(report.by_issue_type).length > 0 && (
-                <div>
-                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">By Issue Type</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(report.by_issue_type).map(([type, count]) => (
-                      <span key={type} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-lg capitalize">
-                        {type.replace(/_/g, ' ')}: {count}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {report.daily_resolved && report.daily_resolved.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Daily Resolved (last {days}d)</h3>
-                  <div className="flex items-end gap-0.5 h-20">
-                    {report.daily_resolved.map((d, i) => {
-                      const max = Math.max(...report.daily_resolved.map((x) => x.count), 1);
-                      return (
-                        <div key={i} className="flex-1 flex flex-col items-center justify-end" title={`${d.date}: ${d.count}`}>
-                          <div
-                            className="w-full bg-green-400 rounded-t"
-                            style={{ height: `${(d.count / max) * 100}%`, minHeight: d.count > 0 ? 4 : 1 }}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                    <span>{report.daily_resolved[0]?.date}</span>
-                    <span>{report.daily_resolved[report.daily_resolved.length - 1]?.date}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <button onClick={onClose} className="mt-4 w-full py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-semibold flex-shrink-0">
-          Close
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Leaderboard ────────────────────────────────────────────────────────────────
-function Leaderboard() {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    adminApi.getWorkerLeaderboard()
-      .then(({ data: d }) => setData(d.items || d))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  const MEDAL_COLORS = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
-  const MedalIcon = ({ i }) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{width:18,height:18}} className={i < 3 ? MEDAL_COLORS[i] : 'text-gray-300'}>
-      <circle cx="12" cy="8" r="6" />
-      <path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11" />
-    </svg>
-  );
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100">
-        <h2 className="text-sm font-bold text-gray-900">Worker Leaderboard</h2>
-        <p className="text-xs text-gray-400 mt-0.5">Ranked by performance score (tasks resolved × avg rating)</p>
-      </div>
-      {loading ? (
-        <div className="text-center py-12 text-gray-400 text-sm">Loading…</div>
-      ) : data.length === 0 ? (
-        <div className="text-center py-12 text-gray-300 text-sm">No leaderboard data yet</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-12">Rank</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Worker</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Dept / Ward</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Resolved</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Total</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">In Progress</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Closed</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Resolution%</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Rating</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Score</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {data.map((w, i) => (
-                <tr key={w.worker_id || w.id || `leaderboard-${i}`} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-center font-bold text-gray-500">
-                    {i < 3 ? <MedalIcon i={i} /> : <span className="text-xs text-gray-400">#{i + 1}</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-xs shrink-0">
-                        {w.name?.charAt(0)?.toUpperCase() || '?'}
-                      </div>
-                      <div>
-                        <div className="font-medium text-gray-900">{w.name}</div>
-                        <div className="text-xs text-gray-400">{w.phone || ''}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="text-xs text-gray-700 font-medium">{w.department || '—'}</div>
-                    <div className="text-xs text-gray-400">{w.ward || '—'}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1">
-                      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full w-fit ${w.is_online ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${w.is_online ? 'bg-green-500' : 'bg-gray-400'}`} />
-                        {w.is_online ? 'Online' : 'Offline'}
-                      </span>
-                      {w.is_online && (
-                        <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-full w-fit ${w.is_available ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
-                          {w.is_available ? 'Available' : 'Busy'}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-green-700">{w.tasks_resolved ?? 0}</td>
-                  <td className="px-4 py-3 text-gray-600">{w.tasks_total ?? 0}</td>
-                  <td className="px-4 py-3 text-blue-600">{w.tasks_in_progress ?? 0}</td>
-                  <td className="px-4 py-3 text-gray-500">{w.tasks_closed ?? 0}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 bg-gray-100 rounded-full h-1.5">
-                        <div className="bg-green-500 h-1.5 rounded-full" style={{width: `${w.resolution_rate ?? 0}%`}} />
-                      </div>
-                      <span className="text-xs font-semibold text-gray-700">{w.resolution_rate ?? 0}%</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {w.avg_rating != null ? (
-                      <span className="flex items-center gap-1 text-yellow-500 font-semibold text-xs">
-                        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{width:13,height:13}}>
-                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                        </svg>
-                        {w.avg_rating.toFixed(1)}
-                      </span>
-                    ) : (
-                      <span className="text-gray-300 text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-block bg-indigo-50 text-indigo-700 font-bold text-xs px-2 py-1 rounded-lg">
-                      {w.score ?? 0}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Worker List ────────────────────────────────────────────────────────────────
-function WorkerList({ showInactive = false }) {
+/**
+ * The worker table.
+ *
+ * @param {{ mode: 'list' | 'invited' }} props
+ *   `invited` is not a filter on top of `list` — it asks the backend a different
+ *   question and shows a different action set.
+ */
+function WorkerList({ mode }) {
   const { user } = useAuthStore();
-  const { addToast } = useUiStore();
-  const [workers, setWorkers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
+  const addToast = useUiStore((s) => s.addToast);
+  const confirm = useConfirm();
+  const queryClient = useQueryClient();
+  const { wardNames, tree } = useWardOptions();
+
+  const [searchInput, setSearchInput] = useState('');
+  const [status, setStatus] = useState('active');
   const [onlineOnly, setOnlineOnly] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
-  const [editWorker, setEditWorker] = useState(null);
+  const [formWorker, setFormWorker] = useState(null); // a worker, or 'new'
   const [reportWorker, setReportWorker] = useState(null);
-  const [resending, setResending] = useState(null);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', ward_id: '', department: '' });
-  const [wards, setWards] = useState([]);
-  const [wardNames, setWardNames] = useState({});
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState('');
-  const [locationTree, setLocationTree] = useState([]);
 
-  const PAGE_SIZE = 20;
+  const invited = mode === 'invited';
+  const search = useDebouncedValue(searchInput, 350);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = { page, size: PAGE_SIZE };
-      if (search) params.search = search;
-      if (onlineOnly) params.is_online = true;
-      if (showInactive) params.is_active = false;
-      const { data } = await adminApi.getWorkers(params);
-      setWorkers(data.items || data);
-      setTotal(data.total || 0);
+  const paged = usePagedList({
+    initialPageSize: 20,
+    resetOn: [search, status, onlineOnly, mode],
+  });
 
-      // Fetch and build ward name mapping
-      try {
-        const tree = await locationsApi.getTree();
-        setLocationTree(tree.data || []);
-        const names = {};
-        if (tree.data && tree.data.length) {
-          tree.data.forEach((district) => {
-            (district.talukas || []).forEach((taluka) => {
-              (taluka.wards || []).forEach((ward) => {
-                names[ward.id] = ward.name;
-              });
-            });
-          });
-        }
-        setWardNames(names);
-      } catch {}
-    } catch {}
-    setLoading(false);
-  }, [page, search, onlineOnly]);
+  const listParams = useMemo(
+    () => ({
+      ...paged.params,
+      ...(search && { search }),
+      ...(onlineOnly && { is_online: true }),
+      ...(invited ? { pending_invite: true } : { is_active: status === 'active' }),
+    }),
+    [paged.params, search, onlineOnly, invited, status],
+  );
 
-  useEffect(() => { load(); }, [load]);
+  const workersQuery = useQuery({
+    queryKey: qk.workers.list(listParams),
+    queryFn: ({ signal }) => adminApi.getWorkers(listParams, { signal }).then((r) => r.data),
+  });
 
-  // Load wards for the create form (filtered by admin's role and location)
-  useEffect(() => {
-    if (!showCreate || wards.length > 0) return;
-    const user = useAuthStore.getState().user;
-    
-    locationsApi.getTree()
-      .then(({ data }) => {
-        const allWards = [];
-        
-        (data.districts || data).forEach((district) => {
-          // Filter by district if user is district/taluka/ward admin
-          if (user?.role === 'district_admin' && user?.district_id && district.id !== user.district_id) {
-            return;
-          }
-          
-          (district.talukas || []).forEach((taluka) => {
-            // Filter by taluka if user is taluka/ward admin
-            if (user?.role === 'taluka_admin' && user?.taluka_id && taluka.id !== user.taluka_id) {
-              return;
-            }
-            
-            (taluka.wards || []).forEach((ward) => {
-              // Filter by ward if user is ward admin
-              if (user?.role === 'ward_admin' && user?.ward_id && ward.id !== user.ward_id) {
-                return;
-              }
-              
-              allWards.push({
-                id: ward.id,
-                label: `${ward.name} (Ward-${ward.ward_number}) · ${taluka.name}, ${district.name}`,
-              });
-            });
-          });
-        });
-        
-        setWards(allWards);
-      })
-      .catch(() => {});
-  }, [showCreate]);
+  const rows = workersQuery.data?.items ?? workersQuery.data ?? [];
+  const total = workersQuery.data?.total ?? rows.length;
 
-  const handleDeactivate = async (id, active) => {
-    if (!confirm(`${active ? 'Deactivate' : 'Reactivate'} this worker?`)) return;
-    await (active ? adminApi.deactivateWorker(id) : adminApi.reactivateWorker(id)).catch(() => {});
-    load();
-  };
+  const setActive = useMutation({
+    mutationFn: ({ id, isActive }) =>
+      isActive ? adminApi.deactivateWorker(id) : adminApi.reactivateWorker(id),
+    onSuccess: (_r, { isActive }) => {
+      addToast(isActive ? 'Worker deactivated' : 'Worker reactivated', 'success');
+      queryClient.invalidateQueries({ queryKey: qk.workers.all });
+    },
+    onError: (e) => addToast(getErrorMessage(e, 'Could not update this worker'), 'error'),
+  });
 
   /*
-   * Re-send a worker's invitation email.
+   * Re-send a worker's invitation.
    *
-   * `POST /admin/workers/{id}/resend-invitation` has existed on the backend all
-   * along and nothing in the UI called it, so an invitation that bounced or
-   * expired left the account permanently unreachable — the only recovery was to
-   * delete the worker and recreate them.
+   * `POST /admin/workers/{id}/resend-invitation` existed on the backend the
+   * whole time with nothing calling it, so a bounced or expired invitation left
+   * the account permanently unreachable.
    */
-  const handleResendInvitation = async (worker) => {
-    if (!confirm(`Re-send the invitation email to ${worker.email || worker.name}?`)) return;
-    setResending(worker.id);
-    try {
-      const { data } = await adminApi.resendWorkerInvitation(worker.id);
+  const resend = useMutation({
+    mutationFn: (id) => adminApi.resendWorkerInvitation(id).then((r) => r.data),
+    onSuccess: (data, id) => {
+      const worker = rows.find((w) => w.id === id);
       addToast(
         data?.email_sent === false
           ? 'Invitation recorded, but the email could not be delivered. Check the mail configuration.'
-          : `Invitation re-sent to ${worker.email || worker.name}.`,
+          : `Invitation re-sent to ${worker?.email || worker?.name || 'the worker'}.`,
         data?.email_sent === false ? 'warning' : 'success',
+        6000,
       );
-      load();
-    } catch (err) {
-      addToast(getErrorMessage(err, 'Could not re-send the invitation.'), 'error');
-    } finally {
-      setResending(null);
-    }
-  };
+      queryClient.invalidateQueries({ queryKey: qk.workers.all });
+    },
+    onError: (e) => addToast(getErrorMessage(e, 'Could not re-send the invitation'), 'error'),
+  });
 
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    setCreateError('');
-    const cleaned = form.phone.replace(/\D/g, '');
-    if (cleaned.length !== 10) { setCreateError('Enter a valid 10-digit phone number.'); return; }
-    if (!form.email.trim() || !form.email.includes('@')) { setCreateError('A valid email is required to send the worker invitation.'); return; }
-    setCreating(true);
-    try {
-      await adminApi.createWorker({
-        name: form.name,
-        phone: `+91${cleaned}`,
-        email: form.email.trim(),
-        ward_id: form.ward_id || undefined,
-        department: form.department || undefined,
-        role: 'worker',
-      });
-      setShowCreate(false);
-      setForm({ name: '', phone: '', email: '', ward_id: '', department: '' });
-      load();
-    } catch (err) {
-      setCreateError(getErrorMessage(err, 'Failed to create worker.'));
-    }
-    setCreating(false);
-  };
+  const columns = useMemo(() => {
+    const base = [
+      {
+        key: 'name',
+        header: 'Worker',
+        render: (w) => (
+          <span className="flex items-center gap-2.5">
+            <WorkerAvatar name={w.name} />
+            <span className="min-w-0">
+              <button
+                type="button"
+                onClick={() => setReportWorker(w)}
+                className="block max-w-full truncate text-left font-medium text-ink hover:text-primary hover:underline"
+              >
+                {w.name || 'Unnamed'}
+              </button>
+              <span className="tabular block truncate text-xs text-ink-subtle">{w.phone}</span>
+            </span>
+          </span>
+        ),
+      },
+      {
+        key: 'ward_id',
+        header: 'Ward',
+        hideBelow: 'md',
+        render: (w) =>
+          w.ward_id ? (
+            <span className="text-xs text-ink-muted">{wardNames[w.ward_id] ?? 'Unknown ward'}</span>
+          ) : (
+            // Not cosmetic: auto-assignment matches on ward, so a blank here
+            // means this worker is only ever reachable by manual assignment.
+            <span className="text-xs text-warning-strong">Unassigned</span>
+          ),
+      },
+      {
+        key: 'department',
+        header: 'Dept.',
+        hideBelow: 'md',
+        width: '8rem',
+        render: (w) =>
+          w.department ? (
+            <span className="text-xs capitalize text-ink-muted">{w.department}</span>
+          ) : (
+            <span className="text-xs text-ink-subtle">—</span>
+          ),
+      },
+    ];
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+    if (invited) {
+      base.push(
+        {
+          key: 'email',
+          header: 'Invitation sent to',
+          render: (w) => (
+            <span className="truncate text-xs text-ink-muted" title={w.email}>
+              {w.email || <span className="text-warning-strong">No address on file</span>}
+            </span>
+          ),
+        },
+        {
+          key: 'created_at',
+          header: 'Invited',
+          align: 'right',
+          hideBelow: 'md',
+          width: '7rem',
+          render: (w) => (
+            <span className="tabular text-xs text-ink-muted">{formatDate(w.created_at)}</span>
+          ),
+        },
+        {
+          key: '_actions',
+          header: '',
+          align: 'right',
+          width: '10rem',
+          render: (w) => (
+            <Button
+              size="sm"
+              variant="secondary"
+              isLoading={resend.isPending && resend.variables === w.id}
+              loadingText="Sending…"
+              onClick={async () => {
+                const ok = await confirm({
+                  title: 'Re-send the invitation?',
+                  description: `A new sign-in link goes to ${w.email || w.name}. Any earlier link stops working immediately.`,
+                  confirmLabel: 'Re-send',
+                });
+                if (ok) resend.mutate(w.id);
+              }}
+            >
+              Resend invite
+            </Button>
+          ),
+        },
+      );
+      return base;
+    }
+
+    base.push(
+      {
+        key: 'is_online',
+        header: 'Presence',
+        width: '7rem',
+        render: (w) => <StatusBadge kind="presence" value={w.is_online ? 'online' : 'offline'} />,
+      },
+      {
+        key: 'is_active',
+        header: 'Account',
+        width: '9rem',
+        render: (w) => (
+          <span className="flex flex-wrap gap-1">
+            <StatusBadge kind="presence" value={w.is_active ? 'online' : 'offline'} />
+            {/* Surfaced on the main list too, so an outstanding invitation is
+                visible without switching tabs. */}
+            {w.must_change_password && w.is_active && <Badge tone="warning">Not signed in</Badge>}
+          </span>
+        ),
+      },
+      {
+        key: 'created_at',
+        header: 'Joined',
+        align: 'right',
+        hideBelow: 'lg',
+        width: '7rem',
+        render: (w) => (
+          <span className="tabular text-xs text-ink-muted">{formatDate(w.created_at)}</span>
+        ),
+      },
+      {
+        key: '_actions',
+        header: '',
+        align: 'right',
+        width: '13rem',
+        render: (w) => (
+          <div className="flex justify-end gap-1.5">
+            <Button size="sm" variant="ghost" onClick={() => setFormWorker(w)}>
+              Edit
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              tone={w.is_active ? 'danger' : undefined}
+              isLoading={setActive.isPending && setActive.variables?.id === w.id}
+              onClick={async () => {
+                const ok = await confirm({
+                  title: w.is_active
+                    ? `Deactivate ${w.name || 'this worker'}?`
+                    : `Reactivate ${w.name || 'this worker'}?`,
+                  description: w.is_active
+                    ? 'They stop receiving new assignments immediately. Tasks already assigned to them stay assigned — reassign those separately.'
+                    : 'They can sign in and receive assignments again.',
+                  tone: w.is_active ? 'danger' : 'primary',
+                  confirmLabel: w.is_active ? 'Deactivate' : 'Reactivate',
+                });
+                if (ok) setActive.mutate({ id: w.id, isActive: w.is_active });
+              }}
+            >
+              {w.is_active ? 'Deactivate' : 'Reactivate'}
+            </Button>
+          </div>
+        ),
+      },
+    );
+
+    return base;
+  }, [confirm, invited, resend, setActive, wardNames]);
+
+  const isFiltered = Boolean(search || onlineOnly || (!invited && status !== 'active'));
 
   return (
     <div className="space-y-4">
-      {/* Admin Scope Header */}
-      {user && <AdminScopeHeader user={user} locationTree={locationTree} />}
+      {user && <AdminScopeHeader user={user} locationTree={tree} />}
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3 items-center">
-        <input
-          type="text"
-          placeholder="Search workers…"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-56 outline-none focus:border-blue-400"
+      <Toolbar>
+        <SearchInput
+          value={searchInput}
+          onChange={setSearchInput}
+          placeholder="Search by name or phone…"
         />
-        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={onlineOnly}
-            onChange={(e) => { setOnlineOnly(e.target.checked); setPage(1); }}
-            className="rounded"
-          />
-          Online only
-        </label>
-        <div className="flex-1" />
-        <span className="text-sm text-gray-400">{total} workers</span>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          + Add Worker
-        </button>
-      </div>
 
-      {/* Create Modal */}
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Add Worker</h2>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Name</label>
-                  <input
-                    required
-                    value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="Full name"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Phone</label>
-                  <div className="relative">
-                    <input
-                      required
-                      type="tel"
-                      value={form.phone}
-                      onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-                      placeholder="10 digits"
-                      maxLength="10"
-                      className="w-full border border-gray-200 rounded-lg pl-14 pr-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-                    />
-                    <span className="absolute left-3 top-2 text-sm font-bold text-gray-700">+91</span>
-                  </div>
-                  {form.phone && <p className="text-xs text-blue-600 font-semibold mt-1">Complete number: +91{form.phone}</p>}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Email <span className="text-red-500">*</span></label>
-                <input
-                  required
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  placeholder="worker@example.com"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
-                />
-                <p className="text-xs text-gray-400 mt-1">Invitation email will be sent to this address.</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Ward (optional)</label>
-                <select
-                  value={form.ward_id}
-                  onChange={(e) => setForm((f) => ({ ...f, ward_id: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
-                >
-                  <option value="">— No ward assigned —</option>
-                  {wards.map((w) => <option key={w.id} value={w.id}>{w.label}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase">Department (optional)</label>
-                <select
-                  value={form.department}
-                  onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
-                >
-                  <option value="">— Select department —</option>
-                  {DEPT_OPTIONS.map((d) => <option key={d} value={d} className="capitalize">{d}</option>)}
-                </select>
-              </div>
-
-              {createError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{createError}</p>}
-
-              <div className="flex gap-3 pt-1">
-                <button type="button" onClick={() => { setShowCreate(false); setCreateError(''); }} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-semibold">
-                  Cancel
-                </button>
-                <button type="submit" disabled={creating} className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors">
-                  {creating ? 'Creating…' : 'Create Worker'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      {editWorker && (
-        <EditWorkerModal
-          worker={editWorker}
-          onClose={() => setEditWorker(null)}
-          onSaved={() => { setEditWorker(null); load(); }}
-        />
-      )}
-
-      {/* Report Modal */}
-      {reportWorker && (
-        <WorkerReportModal
-          worker={reportWorker}
-          onClose={() => setReportWorker(null)}
-        />
-      )}
-
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Worker</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Phone</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ward</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Dept.</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Online</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Joined</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {loading ? (
-              <tr><td colSpan={8} className="text-center py-12 text-gray-400">Loading…</td></tr>
-            ) : workers.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="text-center py-16">
-                  <div className="flex justify-center mb-2 text-gray-200">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} style={{width:40,height:40}}>
-                      <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-                      <circle cx="9" cy="7" r="4" />
-                      <path d="M23 21v-2a4 4 0 00-3-3.87" />
-                      <path d="M16 3.13a4 4 0 010 7.75" />
-                    </svg>
-                  </div>
-                  <div className="text-gray-400 text-sm">No workers found</div>
-                </td>
-              </tr>
-            ) : (
-              workers.map((w) => (
-                <tr key={w.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-sm">
-                        {w.name?.charAt(0)?.toUpperCase() || '?'}
-                      </div>
-                      <span className="font-medium text-gray-900">{w.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">{w.phone}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{w.ward_id ? wardNames[w.ward_id] || 'Unknown Ward' : '—'}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 capitalize">{w.department || '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${w.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {w.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`inline-block w-2 h-2 rounded-full ${w.is_online ? 'bg-green-500' : 'bg-gray-300'}`} />
-                      <span className="text-xs text-gray-400">{w.is_online ? 'Online' : 'Offline'}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-400">
-                    {formatDate(w.created_at)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1">
-                      <button
-                        onClick={() => setEditWorker(w)}
-                        className="px-2 py-1 text-xs font-semibold rounded-md border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setReportWorker(w)}
-                        className="px-2 py-1 text-xs font-semibold rounded-md border bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 transition-colors"
-                      >
-                        Report
-                      </button>
-                      {/* Only meaningful while the worker has not signed in
-                          yet — once they have, the invitation is spent. */}
-                      {w.must_change_password && w.is_active && (
-                        <button
-                          onClick={() => handleResendInvitation(w)}
-                          disabled={resending === w.id}
-                          title="Send the invitation email again"
-                          className="px-2 py-1 text-xs font-semibold rounded-md border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 transition-colors disabled:opacity-50"
-                        >
-                          {resending === w.id ? 'Sending…' : 'Resend invite'}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleDeactivate(w.id, w.is_active)}
-                        className={`px-2 py-1 text-xs font-semibold rounded-md border transition-colors ${w.is_active ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}
-                      >
-                        {w.is_active ? 'Deactivate' : 'Reactivate'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm">
-            <span className="text-gray-500">{total} total · Page {page} of {totalPages}</span>
-            <div className="flex gap-2">
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40">Prev</button>
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40">Next</button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Worker Map Tab ─────────────────────────────────────────────────────────────
-function FitBounds({ positions }) {
-  const map = useMap();
-  const prevLen = useRef(0);
-  useEffect(() => {
-    if (!map || !positions.length) return;
-    if (positions.length === prevLen.current) return;
-    prevLen.current = positions.length;
-    const bounds = new google.maps.LatLngBounds();
-    positions.forEach((p) => bounds.extend(p));
-    map.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
-  }, [map, positions]);
-  return null;
-}
-
-function WorkerMapTab() {
-  const [workers, setWorkers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [onlineOnly, setOnlineOnly] = useState(true);
-  const [selected, setSelected] = useState(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data } = await adminApi.getWorkerLocations({ online_only: onlineOnly });
-      setWorkers((data || []).filter((w) => w.latitude && w.longitude));
-    } catch {}
-    setLoading(false);
-  }, [onlineOnly]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const positions = workers.map((w) => ({ lat: w.latitude, lng: w.longitude }));
-
-  return (
-    <div className="space-y-3">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex items-center gap-3">
-        <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
-          <input type="checkbox" checked={onlineOnly} onChange={(e) => setOnlineOnly(e.target.checked)} className="rounded" />
-          Online only
-        </label>
-        <div className="flex-1" />
-        <span className="text-xs text-gray-400">{workers.length} workers</span>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors"
-        >
-          Refresh
-        </button>
-      </div>
-      <div className="rounded-xl overflow-hidden shadow-sm border border-gray-100" style={{ height: 'calc(100vh - 14rem)' }}>
-        <Map
-          defaultCenter={{ lat: 22.2587, lng: 71.1924 }}
-          defaultZoom={7}
-          mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_ID}
-          gestureHandling="greedy"
-          disableDefaultUI={false}
-          style={{ width: '100%', height: '100%' }}
-        >
-          {workers.map((w, i) => (
-            <AdvancedMarker
-              key={`wm-${i}`}
-              position={{ lat: w.latitude, lng: w.longitude }}
-              onClick={() => setSelected(w)}
-            >
-              <div
-                style={{
-                  width: 14,
-                  height: 14,
-                  borderRadius: '50%',
-                  backgroundColor: w.is_online ? '#22c55e' : '#9ca3af',
-                  border: `2px solid ${w.is_online ? '#16a34a' : '#6b7280'}`,
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
-                  cursor: 'pointer',
-                }}
+        {!invited && (
+          <>
+            <FilterSelect
+              value={status}
+              onChange={setStatus}
+              options={STATUS_FILTERS}
+              placeholder="Any status"
+              label="Account status"
+            />
+            <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-ink-muted">
+              <input
+                type="checkbox"
+                checked={onlineOnly}
+                onChange={(e) => setOnlineOnly(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[var(--color-primary)]"
               />
-            </AdvancedMarker>
-          ))}
-          {selected && (
-            <InfoWindow
-              position={{ lat: selected.latitude, lng: selected.longitude }}
-              onCloseClick={() => setSelected(null)}
-            >
-              <div className="text-xs">
-                <strong>{selected.name}</strong><br />
-                {selected.ward || '—'} · {selected.department || '—'}<br />
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                  <svg viewBox="0 0 24 24" fill={selected.is_online ? '#16a34a' : '#9ca3af'} style={{ width: 8, height: 8 }}>
-                    <circle cx="12" cy="12" r="10" />
-                  </svg>
-                  <span style={{ color: selected.is_online ? '#16a34a' : '#9ca3af', fontWeight: 600 }}>
-                    {selected.is_online ? 'Online' : 'Offline'}
-                  </span>
-                </span>
-                {selected.location_updated_at && (
-                  <><br />Updated: {new Date(selected.location_updated_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</>
-                )}
-              </div>
-            </InfoWindow>
-          )}
-          <FitBounds positions={positions} />
-        </Map>
-      </div>
+              Online only
+            </label>
+          </>
+        )}
+
+        <div className="flex-1" />
+
+        {isFiltered && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSearchInput('');
+              setStatus('active');
+              setOnlineOnly(false);
+            }}
+          >
+            Clear
+          </Button>
+        )}
+
+        <Button size="sm" onClick={() => setFormWorker('new')}>
+          Add worker
+        </Button>
+      </Toolbar>
+
+      <Card flush>
+        <DataTable
+          rows={rows}
+          columns={columns}
+          getRowId={(w) => w.id}
+          caption={invited ? 'Workers awaiting first sign-in' : 'Workers'}
+          density="sm"
+          loading={workersQuery.isPending}
+          error={workersQuery.error}
+          onRetry={workersQuery.refetch}
+          skeletonRows={Math.min(paged.pageSize, 8)}
+          pagination={paged.paginationProps(total)}
+          empty={
+            invited ? (
+              <EmptyState
+                size="sm"
+                icon="checkCircle"
+                title="Everyone has signed in"
+                description="Workers appear here between being invited and their first sign-in."
+              />
+            ) : (
+              <EmptyState
+                size="sm"
+                icon="users"
+                title={
+                  isFiltered
+                    ? 'No workers match these filters'
+                    : status === 'inactive'
+                      ? 'No deactivated workers'
+                      : 'No workers yet'
+                }
+                description={
+                  isFiltered
+                    ? 'Try a different search, or clear the filters.'
+                    : 'Add a worker and they will get an email invitation to sign in.'
+                }
+                action={
+                  isFiltered ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setSearchInput('');
+                        setStatus('active');
+                        setOnlineOnly(false);
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={() => setFormWorker('new')}>
+                      Add the first worker
+                    </Button>
+                  )
+                }
+              />
+            )
+          }
+        />
+      </Card>
+
+      {/* Keyed on the worker so switching straight from one Edit to another
+          rebuilds the form rather than keeping the first worker's values. */}
+      {formWorker && (
+        <WorkerFormModal
+          key={formWorker === 'new' ? 'new' : formWorker.id}
+          open
+          worker={formWorker === 'new' ? null : formWorker}
+          onClose={() => setFormWorker(null)}
+        />
+      )}
+
+      {reportWorker && (
+        <WorkerReportModal worker={reportWorker} onClose={() => setReportWorker(null)} />
+      )}
     </div>
   );
 }
 
-// ── Page ───────────────────────────────────────────────────────────────────────
 export default function WorkersPage() {
   const [tab, setTab] = useState('list');
 
-  const TABS = [
-    { id: 'list', label: 'All Workers' },
-    { id: 'pending', label: 'Invited Workers' },
-    { id: 'map', label: 'Live Map' },
-    { id: 'leaderboard', label: 'Leaderboard' },
-  ];
-
   return (
-    <div className="space-y-5">
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
-              tab === t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="Workers"
+        subtitle="Field staff in your jurisdiction — accounts, positions and performance"
+      />
 
-      {tab === 'list' && <WorkerList />}
-      {tab === 'pending' && <WorkerList showInactive />}
+      <Tabs tabs={TABS} value={tab} onChange={setTab} label="Worker views" />
+
+      {tab === 'list' && <WorkerList mode="list" />}
+      {tab === 'invited' && <WorkerList mode="invited" />}
       {tab === 'map' && <WorkerMapTab />}
-      {tab === 'leaderboard' && <Leaderboard />}
+      {tab === 'leaderboard' && <LeaderboardTab />}
     </div>
   );
 }

@@ -19,6 +19,8 @@ import {
 } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useUiStore } from '@/store/uiStore';
+import Spinner from '@/components/ui/Spinner';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 const COMPONENT_NAME = 'AnalyticsPage';
@@ -45,7 +47,7 @@ export default function AnalyticsPage() {
   useEffect(() => {
     locationsApi.getTree()
       .then(({ data }) => setLocationTree(data || []))
-      .catch(() => {});
+      .catch((e) => logger.warn('AnalyticsPage', 'Location tree failed to load', e));
   }, []);
 
   /**
@@ -215,7 +217,8 @@ export default function AnalyticsPage() {
       logger.info(COMPONENT_NAME, `PDF report exported successfully: ${filename}`);
     } catch (error) {
       logger.error(COMPONENT_NAME, 'Failed to export PDF report', error);
-      alert('Failed to export PDF. Please check the browser console for details.');
+      useUiStore.getState().addToast('Could not generate the PDF export.', 'error');
+      logger.error('Analytics', 'PDF export failed', err);
     } finally {
       setExporting(false);
     }
@@ -230,10 +233,10 @@ export default function AnalyticsPage() {
   // Error state
   if (error) {
     return (
-      <div className="bg-red-50 rounded-xl p-6 border border-red-200">
-        <h2 className="text-lg font-bold text-red-700 mb-2">Error Loading Analytics</h2>
-        <p className="text-red-600 mb-4">{error}</p>
-        <button onClick={fetchAnalyticsData} className="px-4 py-2 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700">
+      <div className="bg-danger-soft rounded-xl p-6 border border-danger/30">
+        <h2 className="text-lg font-bold text-danger mb-2">Error Loading Analytics</h2>
+        <p className="text-danger mb-4">{error}</p>
+        <button onClick={fetchAnalyticsData} className="px-4 py-2 rounded-lg bg-danger text-white font-semibold hover:bg-danger">
           Try Again
         </button>
       </div>
@@ -252,7 +255,7 @@ export default function AnalyticsPage() {
             <button
               key={d}
               onClick={() => setDays(d)}
-              className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${days === d ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+              className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${days === d ? 'bg-primary text-white' : 'bg-surface text-ink-muted border border-border hover:bg-surface-alt'}`}
             >
               {d}d
             </button>
@@ -261,15 +264,12 @@ export default function AnalyticsPage() {
         <button
           onClick={handleExportPDF}
           disabled={exporting || !data}
-          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2 ${exporting || !data ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}
+          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2 ${exporting || !data ? 'bg-border text-ink-subtle cursor-not-allowed' : 'bg-success text-white hover:bg-success-strong'}`}
         >
           {exporting ? (
             <>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="animate-spin" style={{ width: 16, height: 16 }}>
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 6v6l4 2" />
-              </svg>
-              Exporting...
+              <Spinner size="sm" label={null} />
+              Exporting…
             </>
           ) : (
             <>
@@ -284,12 +284,12 @@ export default function AnalyticsPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-64 text-gray-400">Loading analytics…</div>
+        <div className="flex items-center justify-center h-64 text-ink-subtle">Loading analytics…</div>
       ) : (
         <>
           {/* Daily Trend */}
-          <div className="bg-white rounded-xl shadow-sm p-5">
-            <h2 className="text-sm font-bold text-gray-700 mb-4">Daily Issue Volume — Last {days} days</h2>
+          <div className="bg-surface rounded-card p-5">
+            <h2 className="text-sm font-bold text-ink-muted mb-4">Daily Issue Volume — Last {days} days</h2>
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={daily}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
@@ -303,8 +303,8 @@ export default function AnalyticsPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* By Type */}
-            <div className="bg-white rounded-xl shadow-sm p-5">
-              <h2 className="text-sm font-bold text-gray-700 mb-4">By Issue Type</h2>
+            <div className="bg-surface rounded-card p-5">
+              <h2 className="text-sm font-bold text-ink-muted mb-4">By Issue Type</h2>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={byType} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
@@ -317,8 +317,8 @@ export default function AnalyticsPage() {
             </div>
 
             {/* By Status */}
-            <div className="bg-white rounded-xl shadow-sm p-5">
-              <h2 className="text-sm font-bold text-gray-700 mb-4">By Status</h2>
+            <div className="bg-surface rounded-card p-5">
+              <h2 className="text-sm font-bold text-ink-muted mb-4">By Status</h2>
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie data={byStatus} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
@@ -334,8 +334,8 @@ export default function AnalyticsPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* By Priority */}
-            <div className="bg-white rounded-xl shadow-sm p-5">
-              <h2 className="text-sm font-bold text-gray-700 mb-4">By Priority</h2>
+            <div className="bg-surface rounded-card p-5">
+              <h2 className="text-sm font-bold text-ink-muted mb-4">By Priority</h2>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={byPriority}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
@@ -353,27 +353,27 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Top Wards */}
-            <div className="bg-white rounded-xl shadow-sm p-5">
-              <h2 className="text-sm font-bold text-gray-700 mb-4">Top Wards by Issue Count</h2>
+            <div className="bg-surface rounded-card p-5">
+              <h2 className="text-sm font-bold text-ink-muted mb-4">Top Wards by Issue Count</h2>
               {data?.top_wards?.length > 0 ? (
                 <div className="space-y-3">
                   {data.top_wards.slice(0, 8).map((w, i) => (
                     <div key={i} className="flex items-center gap-3">
-                      <span className="text-xs text-gray-400 w-4 font-bold">{i + 1}</span>
+                      <span className="text-xs text-ink-subtle w-4 font-bold">{i + 1}</span>
                       <div className="flex-1">
                         <div className="flex justify-between text-xs mb-1">
-                          <span className="font-medium text-gray-700 capitalize">{w.ward}</span>
-                          <span className="text-gray-400">{w.count}</span>
+                          <span className="font-medium text-ink-muted capitalize">{w.ward}</span>
+                          <span className="text-ink-subtle">{w.count}</span>
                         </div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${(w.count / data.top_wards[0].count) * 100}%` }} />
+                        <div className="h-2 bg-surface-alt rounded-full overflow-hidden">
+                          <div className="h-full bg-primary rounded-full" style={{ width: `${(w.count / data.top_wards[0].count) * 100}%` }} />
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-center text-gray-300 text-sm mt-8">No ward data</div>
+                <div className="text-center text-ink-subtle text-sm mt-8">No ward data</div>
               )}
             </div>
           </div>

@@ -4,6 +4,7 @@ import { Map, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { adminApi } from '../../src/api/index';
 import { DashboardSkeleton } from '../../src/components/ui/SkeletonLoaders';
 import LoadingPage from '../../src/components/ui/LoadingPage';
+import { logger } from '../../src/lib/logger';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend,
@@ -64,14 +65,14 @@ const STAT_ICONS = {
 
 function StatCard({ label, value, sub, colorClass, icon }) {
   return (
-    <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex items-start gap-4">
+    <div className="bg-surface rounded-xl p-5 shadow-sm border border-divider flex items-start gap-4">
       <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${colorClass}`}>
         {icon}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-2xl font-black text-gray-900 leading-tight">{value ?? '—'}</div>
-        <div className="text-sm font-semibold text-gray-700 mt-0.5">{label}</div>
-        {sub && <div className="text-xs text-gray-400 mt-0.5">{sub}</div>}
+        <div className="text-2xl font-black text-ink leading-tight">{value ?? '—'}</div>
+        <div className="text-sm font-semibold text-ink-muted mt-0.5">{label}</div>
+        {sub && <div className="text-xs text-ink-subtle mt-0.5">{sub}</div>}
       </div>
     </div>
   );
@@ -80,17 +81,17 @@ function StatCard({ label, value, sub, colorClass, icon }) {
 function DashboardMap({ points }) {
   if (!points || points.length === 0) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-        <h2 className="text-sm font-bold text-gray-700 mb-3">Issue Heatmap</h2>
-        <div className="h-[280px] flex items-center justify-center text-gray-300 text-sm">No issue locations to display</div>
+      <div className="bg-surface rounded-card border border-divider p-5">
+        <h2 className="text-sm font-bold text-ink-muted mb-3">Issue Heatmap</h2>
+        <div className="h-[280px] flex items-center justify-center text-ink-subtle text-sm">No issue locations to display</div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-      <h2 className="text-sm font-bold text-gray-700 mb-3">Issue Heatmap</h2>
-      <div className="rounded-xl overflow-hidden border border-gray-100" style={{ height: 320 }}>
+    <div className="bg-surface rounded-card border border-divider p-5">
+      <h2 className="text-sm font-bold text-ink-muted mb-3">Issue Heatmap</h2>
+      <div className="rounded-xl overflow-hidden border border-divider" style={{ height: 320 }}>
         <Map
           defaultCenter={{ lat: 22.2587, lng: 71.1924 }}
           defaultZoom={7}
@@ -125,6 +126,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [heatmapPoints, setHeatmapPoints] = useState([]);
 
   const loadDashboard = useCallback(async (initial = false) => {
@@ -135,7 +137,14 @@ export default function DashboardPage() {
       ]);
       setStats(s.data);
       setAnalytics(a.data);
-    } catch {}
+      setLoadError(null);
+    } catch (err) {
+      // Was `catch {}`. On a 60-second poll that meant the dashboard silently
+      // froze on whatever figures it last managed to fetch — an operator could
+      // be reading hour-old counts with nothing on screen to say so.
+      logger.error('Dashboard', 'Failed to load dashboard', err);
+      setLoadError(toApiError(err));
+    }
     if (initial) setLoading(false);
   }, []);
 
@@ -144,7 +153,9 @@ export default function DashboardPage() {
 
     adminApi.getHeatmap()
       .then(({ data }) => setHeatmapPoints((data || []).filter((p) => p.lat && p.lng)))
-      .catch(() => {});
+      // The heatmap is a secondary panel — its failure must not take the
+      // dashboard down — but it should still be visible to whoever is on call.
+      .catch((e) => logger.warn('Dashboard', 'Heatmap points failed to load', e));
 
     // Refresh stats every 60 seconds
     const interval = setInterval(() => loadDashboard(false), 60_000);
@@ -154,6 +165,27 @@ export default function DashboardPage() {
   if (loading) {
     return <DashboardSkeleton />;
   }
+
+  /*
+   * A failed refresh used to be invisible.
+   *
+   * This screen polls every 60 seconds and swallowed every failure, so an
+   * operator could sit reading hour-old counts with nothing on screen saying
+   * the figures had stopped updating. Stale numbers presented as live ones are
+   * worse than no numbers.
+   *
+   * The last good data is still shown underneath — losing the whole dashboard
+   * over one failed poll would be an over-correction — but it is now labelled.
+   */
+  const staleBanner = loadError ? (
+    <div className="mb-4">
+      <ErrorPanel
+        error={loadError}
+        compact
+        onRetry={() => loadDashboard(false)}
+      />
+    </div>
+  ) : null;
 
   const dailyData = analytics?.daily_counts
     ? Object.entries(analytics.daily_counts).map(([date, count]) => ({ date, count }))
@@ -167,31 +199,32 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {staleBanner}
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard label="Open Issues" value={stats?.total_open} sub="Awaiting assignment"
-          colorClass="bg-red-50 text-red-500" icon={STAT_ICONS.open} />
+          colorClass="bg-danger-soft text-danger" icon={STAT_ICONS.open} />
         <StatCard label="In Progress" value={stats?.total_in_progress} sub="Workers assigned"
-          colorClass="bg-blue-50 text-blue-500" icon={STAT_ICONS.inProgress} />
+          colorClass="bg-primary-soft text-primary" icon={STAT_ICONS.inProgress} />
         <StatCard label="Resolved Today" value={stats?.total_resolved_today} sub="Closed today"
-          colorClass="bg-green-50 text-green-600" icon={STAT_ICONS.resolved} />
+          colorClass="bg-success-soft text-success" icon={STAT_ICONS.resolved} />
         <StatCard label="Total Issues" value={stats?.total_issues} sub="All time"
-          colorClass="bg-purple-50 text-purple-500" icon={STAT_ICONS.total} />
+          colorClass="bg-accent-soft text-accent" icon={STAT_ICONS.total} />
         <StatCard label="Workers Online" value={stats?.total_workers_online} sub="Currently active"
-          colorClass="bg-emerald-50 text-emerald-600" icon={STAT_ICONS.workers} />
+          colorClass="bg-success-soft text-success" icon={STAT_ICONS.workers} />
         <StatCard
           label="Avg Resolution"
           value={stats?.avg_resolution_hours != null ? `${stats.avg_resolution_hours.toFixed(1)}h` : '—'}
           sub="Average time to resolve"
-          colorClass="bg-yellow-50 text-yellow-600"
+          colorClass="bg-warning-soft text-warning"
           icon={STAT_ICONS.time}
         />
       </div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h2 className="text-sm font-bold text-gray-700 mb-4">Issues — Last 7 Days</h2>
+        <div className="bg-surface rounded-card border border-divider p-5">
+          <h2 className="text-sm font-bold text-ink-muted mb-4">Issues — Last 7 Days</h2>
           {dailyData.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={dailyData}>
@@ -203,12 +236,12 @@ export default function DashboardPage() {
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-[220px] flex items-center justify-center text-gray-300 text-sm">No trend data</div>
+            <div className="h-[220px] flex items-center justify-center text-ink-subtle text-sm">No trend data</div>
           )}
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h2 className="text-sm font-bold text-gray-700 mb-4">Issues by Type</h2>
+        <div className="bg-surface rounded-card border border-divider p-5">
+          <h2 className="text-sm font-bold text-ink-muted mb-4">Issues by Type</h2>
           {typeData.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={typeData}>
@@ -220,15 +253,15 @@ export default function DashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-[220px] flex items-center justify-center text-gray-300 text-sm">No data</div>
+            <div className="h-[220px] flex items-center justify-center text-ink-subtle text-sm">No data</div>
           )}
         </div>
       </div>
 
       {/* Status Pie + Top Wards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h2 className="text-sm font-bold text-gray-700 mb-4">Issues by Status</h2>
+        <div className="bg-surface rounded-card border border-divider p-5">
+          <h2 className="text-sm font-bold text-ink-muted mb-4">Issues by Status</h2>
           {statusData.length > 0 ? (
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
@@ -240,25 +273,25 @@ export default function DashboardPage() {
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-[280px] flex items-center justify-center text-gray-300 text-sm">No data</div>
+            <div className="h-[280px] flex items-center justify-center text-ink-subtle text-sm">No data</div>
           )}
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h2 className="text-sm font-bold text-gray-700 mb-4">Top Wards by Issue Count</h2>
+        <div className="bg-surface rounded-card border border-divider p-5">
+          <h2 className="text-sm font-bold text-ink-muted mb-4">Top Wards by Issue Count</h2>
           {analytics?.top_wards?.length > 0 ? (
             <div className="space-y-2.5">
               {analytics.top_wards.slice(0, 6).map((w, i) => (
                 <div key={i} className="flex items-center gap-3">
-                  <span className="text-xs text-gray-400 w-4 font-bold">{i + 1}</span>
+                  <span className="text-xs text-ink-subtle w-4 font-bold">{i + 1}</span>
                   <div className="flex-1">
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium text-gray-700">{w.ward}</span>
-                      <span className="text-gray-500 font-semibold">{w.count}</span>
+                      <span className="font-medium text-ink-muted">{w.ward}</span>
+                      <span className="text-ink-subtle font-semibold">{w.count}</span>
                     </div>
-                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-surface-alt rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-blue-500 rounded-full transition-all"
+                        className="h-full bg-primary rounded-full transition-all"
                         style={{ width: `${(w.count / analytics.top_wards[0].count) * 100}%` }}
                       />
                     </div>
@@ -267,7 +300,7 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : (
-            <div className="h-[200px] flex items-center justify-center text-gray-300 text-sm">No ward data</div>
+            <div className="h-[200px] flex items-center justify-center text-ink-subtle text-sm">No ward data</div>
           )}
         </div>
       </div>

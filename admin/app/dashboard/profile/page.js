@@ -15,10 +15,10 @@ const ROLE_LABELS = {
 };
 
 const ROLE_COLORS = {
-  admin: 'bg-purple-100 text-purple-700',
-  district_admin: 'bg-blue-100 text-blue-700',
-  taluka_admin: 'bg-green-100 text-green-700',
-  ward_admin: 'bg-yellow-100 text-yellow-700',
+  admin: 'bg-accent-soft text-accent',
+  district_admin: 'bg-primary-soft text-primary-strong',
+  taluka_admin: 'bg-success-soft text-success',
+  ward_admin: 'bg-warning-soft text-warning',
 };
 
 // ── Profile Info Section ───────────────────────────────────────────────────────
@@ -100,20 +100,20 @@ function ProfileInfo() {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      <h2 className="text-base font-bold text-gray-900 mb-5">Profile Information</h2>
+    <div className="bg-surface rounded-card border border-divider p-6">
+      <h2 className="text-base font-bold text-ink mb-5">Profile Information</h2>
 
       {/* Avatar + role */}
-      <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-100">
-        <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+      <div className="flex items-center gap-4 mb-6 pb-6 border-b border-divider">
+        <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
           <span className="text-white text-2xl font-black">
             {user?.name?.charAt(0)?.toUpperCase() || 'A'}
           </span>
         </div>
         <div>
-          <div className="text-lg font-bold text-gray-900">{user?.name || '—'}</div>
-          <div className="text-sm text-gray-500">{user?.phone}</div>
-          <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-semibold ${ROLE_COLORS[user?.role] || 'bg-gray-100 text-gray-600'}`}>
+          <div className="text-lg font-bold text-ink">{user?.name || '—'}</div>
+          <div className="text-sm text-ink-subtle">{user?.phone}</div>
+          <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-semibold ${ROLE_COLORS[user?.role] || 'bg-surface-alt text-ink-muted'}`}>
             {ROLE_LABELS[user?.role] || user?.role}
           </span>
         </div>
@@ -126,9 +126,9 @@ function ProfileInfo() {
           ['Scope', scope ?? '—'],
           ['Joined', user?.created_at ? formatDate(user.created_at, 'en-IN') : '—'],
         ].map(([label, value]) => (
-          <div key={label} className="flex items-center gap-4 py-2 border-b border-gray-50">
-            <span className="text-sm text-gray-500 w-24 flex-shrink-0">{label}</span>
-            <span className="text-sm font-medium text-gray-900">{value}</span>
+          <div key={label} className="flex items-center gap-4 py-2 border-b border-divider">
+            <span className="text-sm text-ink-subtle w-24 flex-shrink-0">{label}</span>
+            <span className="text-sm font-medium text-ink">{value}</span>
           </div>
         ))}
       </div>
@@ -136,19 +136,19 @@ function ProfileInfo() {
       {/* Editable name */}
       <form onSubmit={handleSave} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">
+          <label className="block text-xs font-semibold text-ink-muted mb-1 uppercase tracking-wide">
             Display Name
           </label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Your full name"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400"
+            className="w-full border border-border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-primary"
           />
         </div>
 
-        {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-        {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{success}</p>}
+        {error && <p className="text-sm text-danger bg-danger-soft px-3 py-2 rounded-lg">{error}</p>}
+        {success && <p className="text-sm text-success bg-success-soft px-3 py-2 rounded-lg">{success}</p>}
 
         <LoadingButton
           type="submit"
@@ -225,18 +225,18 @@ function ChangePhone() {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      <h2 className="text-base font-bold text-gray-900 mb-1">Change Phone Number</h2>
-      <p className="text-xs text-gray-400 mb-5">
-        Current number: <span className="font-semibold text-gray-700">{user?.phone}</span>
+    <div className="bg-surface rounded-card border border-divider p-6">
+      <h2 className="text-base font-bold text-ink mb-1">Change Phone Number</h2>
+      <p className="text-xs text-ink-subtle mb-5">
+        Current number: <span className="font-semibold text-ink-muted">{user?.phone}</span>
       </p>
 
       {step === 'input' ? (
         <form onSubmit={sendOtp} className="space-y-4 max-w-sm">
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">New Phone Number</label>
-            <div className="flex border border-gray-200 rounded-lg overflow-hidden focus-within:border-blue-400">
-              <span className="px-3 flex items-center text-xs text-gray-500 bg-gray-50 border-r border-gray-200 font-semibold">+91</span>
+            <label className="block text-xs font-semibold text-ink-muted mb-1 uppercase tracking-wide">New Phone Number</label>
+            <div className="flex border border-border rounded-lg overflow-hidden focus-within:border-primary">
+              <span className="px-3 flex items-center text-xs text-ink-subtle bg-surface-alt border-r border-border font-semibold">+91</span>
               <input
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
@@ -245,43 +245,43 @@ function ChangePhone() {
               />
             </div>
           </div>
-          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-          {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{success}</p>}
+          {error && <p className="text-sm text-danger bg-danger-soft px-3 py-2 rounded-lg">{error}</p>}
+          {success && <p className="text-sm text-success bg-success-soft px-3 py-2 rounded-lg">{success}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors"
+            className="px-5 py-2.5 bg-primary text-white text-sm font-bold rounded-xl hover:bg-primary-hover disabled:opacity-60 transition-colors"
           >
             {loading ? 'Sending OTP…' : 'Send OTP'}
           </button>
         </form>
       ) : (
         <form onSubmit={verifyOtp} className="space-y-4 max-w-sm">
-          <p className="text-sm text-gray-600">OTP sent to <strong>{phone}</strong></p>
+          <p className="text-sm text-ink-muted">OTP sent to <strong>{phone}</strong></p>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Enter OTP</label>
+            <label className="block text-xs font-semibold text-ink-muted mb-1 uppercase tracking-wide">Enter OTP</label>
             <input
               value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
               placeholder="6-digit OTP"
               maxLength={6}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-400 tracking-widest font-bold text-center text-lg"
+              className="w-full border border-border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-primary tracking-widest font-bold text-center text-lg"
               autoFocus
             />
           </div>
-          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          {error && <p className="text-sm text-danger bg-danger-soft px-3 py-2 rounded-lg">{error}</p>}
           <div className="flex gap-3">
             <button
               type="button"
               onClick={() => { setStep('input'); setOtp(''); setError(''); }}
-              className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-semibold"
+              className="px-4 py-2.5 border border-border rounded-xl text-sm text-ink-muted hover:bg-surface-alt font-semibold"
             >
               Back
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 transition-colors"
+              className="px-5 py-2.5 bg-primary text-white text-sm font-bold rounded-xl hover:bg-primary-hover disabled:opacity-60 transition-colors"
             >
               {loading ? 'Verifying…' : 'Verify & Save'}
             </button>

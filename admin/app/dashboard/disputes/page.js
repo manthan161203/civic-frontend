@@ -7,10 +7,10 @@ import { formatDate } from '../../../src/lib/dateUtils';
 import LoadingButton from '../../../src/components/ui/LoadingButton';
 
 const STATUS_COLORS = {
-  open: 'bg-red-100 text-red-700',
-  under_review: 'bg-yellow-100 text-yellow-700',
-  accepted: 'bg-green-100 text-green-700',
-  rejected: 'bg-gray-100 text-gray-600',
+  open: 'bg-danger-soft text-danger',
+  under_review: 'bg-warning-soft text-warning',
+  accepted: 'bg-success-soft text-success',
+  rejected: 'bg-surface-alt text-ink-muted',
 };
 
 const STATUS_LABELS = {
@@ -58,7 +58,7 @@ function DisputeDetailModal({ dispute, onClose, onResolved }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-surface rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -66,7 +66,7 @@ function DisputeDetailModal({ dispute, onClose, onResolved }) {
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-2xl font-bold mb-1">Dispute Details</h2>
-              <p className="text-blue-100">ID: {String(dispute.id).slice(0, 8)}</p>
+              <p className="text-white/75">ID: {String(dispute.id).slice(0, 8)}</p>
             </div>
             <button
               onClick={onClose}
@@ -81,31 +81,31 @@ function DisputeDetailModal({ dispute, onClose, onResolved }) {
         <div className="p-6 space-y-6">
           {/* Status Badge */}
           <div className="flex items-center gap-3">
-            <span className="text-sm font-semibold text-gray-600">Status:</span>
-            <span className={`px-3 py-1 rounded-full text-sm font-semibold capitalize ${STATUS_COLORS[dispute.status] || 'bg-gray-100'}`}>
+            <span className="text-sm font-semibold text-ink-muted">Status:</span>
+            <span className={`px-3 py-1 rounded-full text-sm font-semibold capitalize ${STATUS_COLORS[dispute.status] || 'bg-surface-alt'}`}>
               {STATUS_LABELS[dispute.status] || dispute.status}
             </span>
-            <span className="text-xs text-gray-400 ml-auto">Filed {formatDate(dispute.created_at, 'en-IN')}</span>
+            <span className="text-xs text-ink-subtle ml-auto">Filed {formatDate(dispute.created_at, 'en-IN')}</span>
           </div>
 
           {/* Issue Context */}
-          <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-            <p className="text-xs text-gray-500 mb-1 uppercase font-semibold">Related Issue</p>
-            <p className="text-sm text-blue-900 font-semibold">Issue ID: {String(dispute.issue_id).slice(0, 12)}...</p>
+          <div className="bg-primary-soft p-4 rounded-xl border border-primary/20">
+            <p className="text-xs text-ink-subtle mb-1 uppercase font-semibold">Related Issue</p>
+            <p className="text-sm text-primary-strong font-semibold">Issue ID: {String(dispute.issue_id).slice(0, 12)}...</p>
           </div>
 
           {/* Dispute Reason */}
           <div>
-            <p className="text-xs font-semibold text-gray-600 mb-2 uppercase">Dispute Reason</p>
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{dispute.reason}</p>
+            <p className="text-xs font-semibold text-ink-muted mb-2 uppercase">Dispute Reason</p>
+            <div className="bg-surface-alt p-4 rounded-lg border border-border">
+              <p className="text-sm text-ink-muted leading-relaxed whitespace-pre-wrap">{dispute.reason}</p>
             </div>
           </div>
 
           {/* Photos */}
           {dispute.photos && dispute.photos.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-gray-600 mb-3 uppercase">Supporting Photos ({dispute.photos.length})</p>
+              <p className="text-xs font-semibold text-ink-muted mb-3 uppercase">Supporting Photos ({dispute.photos.length})</p>
               <div className="grid grid-cols-2 gap-3">
                 {dispute.photos.map((photo, idx) => (
                   <a
@@ -113,7 +113,7 @@ function DisputeDetailModal({ dispute, onClose, onResolved }) {
                     href={photo}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block rounded-lg overflow-hidden border border-gray-200 hover:shadow-md transition"
+                    className="block rounded-lg overflow-hidden border border-border hover:shadow-md transition"
                   >
                     <img
                       src={photo}
@@ -129,20 +129,20 @@ function DisputeDetailModal({ dispute, onClose, onResolved }) {
           {/* Admin Notes */}
           {dispute.admin_notes && (
             <div>
-              <p className="text-xs font-semibold text-gray-600 mb-2 uppercase">Previous Admin Notes</p>
-              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                <p className="text-sm text-gray-700">{dispute.admin_notes}</p>
+              <p className="text-xs font-semibold text-ink-muted mb-2 uppercase">Previous Admin Notes</p>
+              <div className="bg-surface-alt p-3 rounded-lg border border-border">
+                <p className="text-sm text-ink-muted">{dispute.admin_notes}</p>
               </div>
             </div>
           )}
 
           {/* Decision Form (only if not resolved) */}
           {dispute.status !== 'accepted' && dispute.status !== 'rejected' && (
-            <form onSubmit={handleSubmit} className="space-y-4 bg-blue-50 p-4 rounded-xl border border-blue-200">
+            <form onSubmit={handleSubmit} className="space-y-4 bg-primary-soft p-4 rounded-xl border border-primary/20">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-3 uppercase">Resolution Decision</label>
+                <label className="block text-xs font-semibold text-ink-muted mb-3 uppercase">Resolution Decision</label>
                 <div className="space-y-2">
-                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-blue-100 transition">
+                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-primary-soft transition">
                     <input
                       type="radio"
                       name="outcome"
@@ -152,12 +152,12 @@ function DisputeDetailModal({ dispute, onClose, onResolved }) {
                       className="w-4 h-4"
                     />
                     <div>
-                      <p className="text-sm font-semibold text-green-700">Accept Dispute</p>
-                      <p className="text-xs text-green-600">Issue will remain open for reassignment</p>
+                      <p className="text-sm font-semibold text-success">Accept Dispute</p>
+                      <p className="text-xs text-success">Issue will remain open for reassignment</p>
                     </div>
                   </label>
 
-                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-blue-100 transition">
+                  <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-primary-soft transition">
                     <input
                       type="radio"
                       name="outcome"
@@ -167,33 +167,33 @@ function DisputeDetailModal({ dispute, onClose, onResolved }) {
                       className="w-4 h-4"
                     />
                     <div>
-                      <p className="text-sm font-semibold text-gray-700">Reject Dispute</p>
-                      <p className="text-xs text-gray-600">Issue resolution will be confirmed as valid</p>
+                      <p className="text-sm font-semibold text-ink-muted">Reject Dispute</p>
+                      <p className="text-xs text-ink-muted">Issue resolution will be confirmed as valid</p>
                     </div>
                   </label>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-2 uppercase">Admin Notes (Optional)</label>
+                <label className="block text-xs font-semibold text-ink-muted mb-2 uppercase">Admin Notes (Optional)</label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Explain your decision to the citizen..."
                   maxLength={2000}
                   rows={4}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 resize-none"
+                  className="w-full border border-border-strong rounded-lg px-3 py-2 text-sm outline-none focus:border-primary resize-none"
                 />
-                <p className="text-xs text-gray-400 mt-1">{notes.length}/2000</p>
+                <p className="text-xs text-ink-subtle mt-1">{notes.length}/2000</p>
               </div>
 
-              {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+              {error && <p className="text-sm text-danger bg-danger-soft px-3 py-2 rounded-lg">{error}</p>}
 
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+                  className="flex-1 px-4 py-2.5 border border-border-strong rounded-lg text-sm font-semibold text-ink-muted hover:bg-surface-alt transition"
                 >
                   Cancel
                 </button>
@@ -286,15 +286,15 @@ export default function DisputesPage() {
       )}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap gap-2 bg-white rounded-xl shadow-sm p-4">
+      <div className="flex flex-wrap gap-2 bg-surface rounded-card p-4">
         {['open', 'under_review', 'accepted', 'rejected'].map((status) => (
           <button
             key={status}
             onClick={() => setFilterStatus(status === filterStatus ? '' : status)}
             className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${
               filterStatus === status
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-primary text-white'
+                : 'bg-surface-alt text-ink-muted hover:bg-border'
             }`}
           >
             {STATUS_LABELS[status]}
@@ -304,8 +304,8 @@ export default function DisputesPage() {
           onClick={() => setFilterStatus('')}
           className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ml-auto ${
             filterStatus === ''
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              ? 'bg-primary text-white'
+              : 'bg-surface-alt text-ink-muted hover:bg-border'
           }`}
         >
           All
@@ -316,28 +316,28 @@ export default function DisputesPage() {
       {loading ? (
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 animate-pulse">
-              <div className="h-5 w-48 bg-gray-200 rounded mb-3" />
+            <div key={i} className="bg-surface rounded-card border border-divider p-4 animate-pulse">
+              <div className="h-5 w-48 bg-border rounded mb-3" />
               <div className="space-y-2">
-                <div className="h-4 w-full bg-gray-100 rounded" />
-                <div className="h-4 w-3/4 bg-gray-100 rounded" />
+                <div className="h-4 w-full bg-surface-alt rounded" />
+                <div className="h-4 w-3/4 bg-surface-alt rounded" />
               </div>
             </div>
           ))}
         </div>
       ) : disputes.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+        <div className="bg-surface rounded-card border border-divider p-12 text-center">
           <svg
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             strokeWidth={1.5}
-            className="w-12 h-12 text-gray-300 mx-auto mb-3"
+            className="w-12 h-12 text-ink-subtle mx-auto mb-3"
           >
             <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2a8 8 0 100-16 8 8 0 000 16zm-1-5h2v2h-2v-2zm0-8h2v6h-2V7z" />
           </svg>
-          <p className="text-gray-500 font-medium">No disputes found</p>
-          <p className="text-sm text-gray-400 mt-1">All disputes have been resolved or there are no pending disputes</p>
+          <p className="text-ink-subtle font-medium">No disputes found</p>
+          <p className="text-sm text-ink-subtle mt-1">All disputes have been resolved or there are no pending disputes</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -345,7 +345,7 @@ export default function DisputesPage() {
             <button
               key={dispute.id}
               onClick={() => handleSelectDispute(dispute)}
-              className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md hover:border-gray-200 transition text-left w-full"
+              className="bg-surface rounded-card border border-divider p-4 hover:shadow-md hover:border-border transition text-left w-full"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -353,16 +353,16 @@ export default function DisputesPage() {
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${STATUS_COLORS[dispute.status]}`}>
                       {STATUS_LABELS[dispute.status]}
                     </span>
-                    <span className="text-xs text-gray-500">ID: {String(dispute.id).slice(0, 8)}</span>
+                    <span className="text-xs text-ink-subtle">ID: {String(dispute.id).slice(0, 8)}</span>
                   </div>
-                  <p className="text-sm font-semibold text-gray-900 line-clamp-2">
+                  <p className="text-sm font-semibold text-ink line-clamp-2">
                     {dispute.reason.length > 100 ? dispute.reason.substring(0, 100) + '...' : dispute.reason}
                   </p>
-                  <p className="text-xs text-gray-400 mt-2">
+                  <p className="text-xs text-ink-subtle mt-2">
                     Issue: {String(dispute.issue_id).slice(0, 12)}... • {formatDate(dispute.created_at, 'en-IN')}
                   </p>
                   {dispute.photos && dispute.photos.length > 0 && (
-                    <p className="text-xs text-blue-600 font-medium mt-2 flex items-center gap-1">
+                    <p className="text-xs text-primary font-medium mt-2 flex items-center gap-1">
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" /></svg> {dispute.photos.length} photo{dispute.photos.length > 1 ? 's' : ''}
                     </p>
                   )}
@@ -373,7 +373,7 @@ export default function DisputesPage() {
                     fill="none"
                     stroke="currentColor"
                     strokeWidth={2}
-                    className="w-5 h-5 text-gray-400"
+                    className="w-5 h-5 text-ink-subtle"
                   >
                     <path d="M9 5l7 7-7 7" />
                   </svg>
@@ -390,17 +390,17 @@ export default function DisputesPage() {
           <button
             onClick={() => loadDisputes(pagination.page - 1)}
             disabled={pagination.page === 1}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+            className="px-3 py-1.5 border border-border rounded-lg text-sm hover:bg-surface-alt disabled:opacity-50"
           >
             ← Prev
           </button>
-          <span className="text-sm text-gray-600">
+          <span className="text-sm text-ink-muted">
             Page {pagination.page} of {totalPages}
           </span>
           <button
             onClick={() => loadDisputes(pagination.page + 1)}
             disabled={pagination.page === totalPages}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+            className="px-3 py-1.5 border border-border rounded-lg text-sm hover:bg-surface-alt disabled:opacity-50"
           >
             Next →
           </button>

@@ -1,442 +1,421 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { adminApi } from '../../../src/api/index';
-import { getErrorMessage } from '../../../src/lib/apiError';
 
-export default function BlockedTasksPage() {
-  const [blockedTasks, setBlockedTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [selectedTasks, setSelectedTasks] = useState(new Set());
-  const [pageSize, setPageSize] = useState(50);
-  const [offset, setOffset] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [sortBy, setSortBy] = useState('blocked_duration');
-  
-  // Modals
-  const [unblockModal, setUnblockModal] = useState(null);
-  const [respondModal, setRespondModal] = useState(null);
-  const [bulkUnblockModal, setBulkUnblockModal] = useState(false);
-  
-  // Form states
-  const [unblockNotes, setUnblockNotes] = useState('');
-  const [respondMessage, setRespondMessage] = useState('');
-  const [respondResources, setRespondResources] = useState('');
-  const [respondCanProceed, setRespondCanProceed] = useState(false);
-  const [bulkNotes, setBulkNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+import { useMemo, useState } from 'react';
+import { FormProvider } from 'react-hook-form';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-  // Load blocked tasks
-  const loadBlockedTasks = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const { data } = await adminApi.getBlockedTasks({
-        limit: pageSize,
-        offset,
-        sort: sortBy,
-      });
-      setBlockedTasks(data.items || []);
-      setTotal(data.total || 0);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load blocked tasks'));
-    } finally {
-      setLoading(false);
-    }
-  }, [pageSize, offset, sortBy]);
+import { adminApi } from '@/api/index';
+import { qk } from '@/api/queryKeys';
+import { getErrorMessage } from '@/api/errors';
+import { useUiStore } from '@/store/uiStore';
+import { useApiForm } from '@/hooks/useApiForm';
+import { usePagedList } from '@/hooks/usePagedList';
 
-  useEffect(() => {
-    loadBlockedTasks();
-  }, [loadBlockedTasks]);
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import DataTable from '@/components/ui/DataTable';
+import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
+import EmptyState from '@/components/ui/EmptyState';
+import Toolbar, { FilterSelect } from '@/components/ui/Toolbar';
+import Badge from '@/components/ui/Badge';
+import { TextField, TextAreaField, ChoiceField, FormError } from '@/components/ui/form';
 
-  const handleUnblock = async () => {
-    if (!unblockModal || !unblockNotes.trim()) {
-      setError('Please provide a reason for unblocking');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await adminApi.unblockTask(unblockModal.id, unblockNotes.trim());
-      setUnblockModal(null);
-      setUnblockNotes('');
-      await loadBlockedTasks();
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to unblock task'));
-    } finally {
-      setSubmitting(false);
-    }
-  };
+/**
+ * Tasks a worker has flagged as blocked.
+ *
+ * **The reason this screen was on the list: page 6 did not exist.** The pager
+ * rendered `Math.min(5, pages)` numbered buttons starting at 1, so with 400
+ * blocked tasks at 50 per page the last three pages were unreachable — and
+ * because the default sort is longest-blocked-first, the pages you could not
+ * reach were the *newest* blocks. Next/Prev worked, so the bug looked like a
+ * cosmetic gap in the numbers rather than lost records. `Pagination` slides its
+ * window instead, and the last page is always one click away.
+ *
+ * ── Why there are no sort arrows on the headers ──────────────────────────────
+ *
+ * This is the one endpoint in the console that sorts server-side, but its `sort`
+ * parameter is a three-value enum — `blocked_duration | blocked_at | status` —
+ * with no direction. A clickable header implies ascending/descending, which the
+ * API cannot do, so the control stays a select that says exactly what it offers.
+ */
 
-  const handleRespond = async () => {
-    if (!respondModal || !respondMessage.trim()) {
-      setError('Please provide a message');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await adminApi.respondToBlock(
-        respondModal.id,
-        respondMessage.trim(),
-        respondResources.trim(),
-        respondCanProceed
-      );
-      setRespondModal(null);
-      setRespondMessage('');
-      setRespondResources('');
-      setRespondCanProceed(false);
-      await loadBlockedTasks();
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to send response'));
-    } finally {
-      setSubmitting(false);
-    }
-  };
+const SORTS = [
+  { value: 'blocked_duration', label: 'Longest blocked first' },
+  { value: 'blocked_at', label: 'Recently blocked' },
+  { value: 'status', label: 'By status' },
+];
 
-  const handleBulkUnblock = async () => {
-    if (selectedTasks.size === 0) {
-      setError('Please select at least one task');
-      return;
-    }
-    if (!bulkNotes.trim()) {
-      setError('Please provide a reason for bulk unblocking');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await adminApi.bulkUnblockTasks(Array.from(selectedTasks), bulkNotes.trim());
-      setBulkUnblockModal(false);
-      setBulkNotes('');
-      setSelectedTasks(new Set());
-      await loadBlockedTasks();
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to bulk unblock tasks'));
-    } finally {
-      setSubmitting(false);
-    }
-  };
+/**
+ * Hours blocked, coloured by how bad it has got.
+ *
+ * A block is someone standing next to a hole in the road waiting for a decision,
+ * so the number is the point of the screen and grey text undersells it.
+ */
+function BlockedFor({ hours }) {
+  if (hours === null || hours === undefined) return <span className="text-ink-subtle">—</span>;
 
-  const toggleTaskSelection = (taskId) => {
-    const newSelected = new Set(selectedTasks);
-    if (newSelected.has(taskId)) {
-      newSelected.delete(taskId);
-    } else {
-      newSelected.add(taskId);
-    }
-    setSelectedTasks(newSelected);
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedTasks.size === blockedTasks.length) {
-      setSelectedTasks(new Set());
-    } else {
-      setSelectedTasks(new Set(blockedTasks.map(t => t.id)));
-    }
-  };
-
-  if (loading && blockedTasks.length === 0) {
-    return (
-      <div className="flex justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent"></div>
-      </div>
-    );
-  }
-
-  const pages = Math.ceil(total / pageSize);
-  const currentPage = Math.floor(offset / pageSize) + 1;
+  const tone = hours >= 72 ? 'danger' : hours >= 24 ? 'warning' : 'neutral';
+  const label = hours < 1 ? '<1h' : hours < 48 ? `${hours.toFixed(0)}h` : `${(hours / 24).toFixed(1)}d`;
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-gray-900">Blocked Tasks</h1>
-            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">{total} total</span>
-          </div>
-          <p className="text-sm text-gray-500 mt-0.5">Manage tasks blocked by workers waiting for resources or resolution</p>
-        </div>
-        {selectedTasks.size > 0 && (
-          <button
-            onClick={() => setBulkUnblockModal(true)}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors"
+    <Badge tone={tone} dot>
+      <span className="tabular">{label}</span>
+    </Badge>
+  );
+}
+
+/**
+ * Unblock one task, or every selected task — one form, because the note the
+ * admin writes and the validation on it are identical either way. `ids` is what
+ * distinguishes them, and it is always an array so there is no null-vs-single
+ * branch inside the submit handler.
+ */
+function UnblockModal({ open, task, ids, onClose, onDone }) {
+  const addToast = useUiStore((s) => s.addToast);
+  const queryClient = useQueryClient();
+  const bulk = !task;
+
+  const form = useApiForm({
+    defaultValues: { admin_notes: '' },
+    onSubmit: (values) =>
+      bulk
+        ? adminApi.bulkUnblockTasks(ids, values.admin_notes.trim()).then((r) => r.data)
+        : adminApi.unblockTask(task.id, values.admin_notes.trim()).then((r) => r.data),
+    onSuccess: () => {
+      addToast(bulk ? `${ids.length} tasks unblocked` : 'Task unblocked', 'success');
+      queryClient.invalidateQueries({ queryKey: qk.issues.all });
+      form.reset();
+      onDone?.();
+      onClose();
+    },
+  });
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={bulk ? `Unblock ${ids.length} tasks` : 'Unblock task'}
+      description={
+        bulk
+          ? 'The same note is recorded against every task, and each assigned worker is notified.'
+          : task.issue_type
+      }
+      size="md"
+      dismissible={!form.formState.isSubmitting}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={form.formState.isSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="unblock-form"
+            isLoading={form.formState.isSubmitting}
+            loadingText="Unblocking…"
           >
-            Unblock {selectedTasks.size} selected
-          </button>
-        )}
-      </div>
+            {bulk ? `Unblock ${ids.length}` : 'Unblock'}
+          </Button>
+        </>
+      }
+    >
+      <FormProvider {...form}>
+        <form id="unblock-form" onSubmit={form.submit} className="space-y-4" noValidate>
+          <FormError message={form.serverError} />
 
-      {/* Error */}
-      {error && (
-        <div className="bg-red-50 text-red-700 text-sm px-4 py-3 rounded-lg border border-red-100">{error}</div>
-      )}
+          {!bulk && (
+            <dl className="rounded-control bg-surface-alt px-3 py-2">
+              {[
+                ['Reason given', task.blocked_reason || 'None recorded'],
+                ['Worker', task.assigned_worker_name || 'Unassigned'],
+                [
+                  'Blocked for',
+                  task.blocked_duration_hours != null
+                    ? `${task.blocked_duration_hours.toFixed(1)} hours`
+                    : 'Unknown',
+                ],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-baseline justify-between gap-4 py-1">
+                  <dt className="text-xs text-ink-muted">{label}</dt>
+                  <dd className="min-w-0 truncate text-right text-sm text-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
 
-      {/* Controls */}
-      <div className="flex gap-2 flex-wrap">
-        <select
-          value={sortBy}
-          onChange={e => { setSortBy(e.target.value); setOffset(0); }}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
-        >
-          <option value="blocked_duration">Longest blocked first</option>
-          <option value="blocked_at">Recently blocked</option>
-          <option value="status">By status</option>
-        </select>
+          <TextAreaField
+            name="admin_notes"
+            label="Why is this unblocked?"
+            rows={3}
+            hint="The worker sees this. “Permits approved” beats “ok”."
+            rules={{ required: 'Say what changed — the worker sees this note' }}
+          />
+        </form>
+      </FormProvider>
+    </Modal>
+  );
+}
 
-        <select
-          value={pageSize}
-          onChange={e => { setPageSize(parseInt(e.target.value)); setOffset(0); }}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 bg-white"
-        >
-          <option value={20}>20 per page</option>
-          <option value={50}>50 per page</option>
-          <option value={100}>100 per page</option>
-        </select>
-      </div>
+function RespondModal({ task, open, onClose }) {
+  const addToast = useUiStore((s) => s.addToast);
+  const queryClient = useQueryClient();
 
-      {/* Tasks Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="px-4 py-3 text-left w-10">
-                <input
-                  type="checkbox"
-                  checked={selectedTasks.size === blockedTasks.length && blockedTasks.length > 0}
-                  onChange={toggleSelectAll}
-                  className="w-4 h-4 cursor-pointer accent-blue-600"
-                />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Issue</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Blocked Reason</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Duration</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Worker</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {blockedTasks.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="text-center py-12 text-sm text-gray-400">
-                  No blocked tasks in your jurisdiction
-                </td>
-              </tr>
-            ) : (
-              blockedTasks.map(task => (
-                <tr key={task.id} className={`hover:bg-gray-50 transition-colors ${selectedTasks.has(task.id) ? 'bg-green-50' : ''}`}>
-                  <td className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedTasks.has(task.id)}
-                      onChange={() => toggleTaskSelection(task.id)}
-                      className="w-4 h-4 cursor-pointer accent-blue-600"
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{task.issue_type}</div>
-                    <div className="text-xs text-gray-400 font-mono">{(task.id + '').substring(0, 8)}</div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{task.blocked_reason || 'No reason provided'}</td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                      {task.blocked_duration_hours ? `${task.blocked_duration_hours.toFixed(1)}h` : '—'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{task.assigned_worker_name || <span className="text-gray-400">Unassigned</span>}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => { setRespondModal(task); setRespondMessage(''); setRespondResources(''); setRespondCanProceed(false); }}
-                        className="px-2.5 py-1 text-xs font-semibold bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-                      >
-                        Respond
-                      </button>
-                      <button
-                        onClick={() => { setUnblockModal(task); setUnblockNotes(''); }}
-                        className="px-2.5 py-1 text-xs font-semibold bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors"
-                      >
-                        Unblock
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+  const form = useApiForm({
+    defaultValues: { message: '', resources_provided: '', can_proceed: 'no' },
+    onSubmit: (values) =>
+      adminApi
+        .respondToBlock(
+          task.id,
+          values.message.trim(),
+          values.resources_provided.trim(),
+          // ChoiceField is a radio group, so this is the string 'yes' or 'no'.
+          values.can_proceed === 'yes',
+        )
+        .then((r) => r.data),
+    onSuccess: () => {
+      addToast('Response sent to the worker', 'success');
+      queryClient.invalidateQueries({ queryKey: qk.issues.all });
+      form.reset();
+      onClose();
+    },
+  });
 
-      {/* Pagination */}
-      {total > pageSize && (
-        <div className="flex justify-between items-center text-sm text-gray-500">
-          <span>Showing {Math.min(offset + 1, total)}–{Math.min(offset + pageSize, total)} of {total}</span>
-          <div className="flex gap-1">
-            <button
-              disabled={offset === 0}
-              onClick={() => setOffset(Math.max(0, offset - pageSize))}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Respond to block"
+      description={task?.issue_type}
+      size="md"
+      dismissible={!form.formState.isSubmitting}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={form.formState.isSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="respond-form"
+            isLoading={form.formState.isSubmitting}
+            loadingText="Sending…"
+          >
+            Send response
+          </Button>
+        </>
+      }
+    >
+      <FormProvider {...form}>
+        <form id="respond-form" onSubmit={form.submit} className="space-y-4" noValidate>
+          <FormError message={form.serverError} />
+
+          {task?.blocked_reason && (
+            <blockquote className="rounded-control border-l-2 border-warning bg-surface-alt px-3 py-2 text-sm text-ink">
+              <span className="mb-0.5 block text-[11px] uppercase tracking-wide text-ink-muted">
+                {task.assigned_worker_name || 'The worker'} said
+              </span>
+              {task.blocked_reason}
+            </blockquote>
+          )}
+
+          <TextAreaField
+            name="message"
+            label="Message to the worker"
+            rows={3}
+            rules={{ required: 'Write something for the worker to act on' }}
+          />
+
+          <TextField
+            name="resources_provided"
+            label="Resources provided"
+            hint="Optional — e.g. “excavator, pump, fuel”."
+          />
+
+          <ChoiceField
+            name="can_proceed"
+            label="Can they start again?"
+            hint="Choosing yes clears the block as well as sending the message."
+            options={[
+              { value: 'no', label: 'Not yet — still blocked' },
+              { value: 'yes', label: 'Yes — they can proceed' },
+            ]}
+          />
+        </form>
+      </FormProvider>
+    </Modal>
+  );
+}
+
+export default function BlockedTasksPage() {
+  const [sort, setSort] = useState('blocked_duration');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [unblockTask, setUnblockTask] = useState(null);
+  const [respondTask, setRespondTask] = useState(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+
+  const paged = usePagedList({
+    // This endpoint is the console's one `limit`/`offset` exception.
+    mode: 'offset',
+    initialPageSize: 50,
+    resetOn: [sort],
+    onReset: () => setSelectedIds([]),
+  });
+
+  const params = useMemo(() => ({ ...paged.params, sort }), [paged.params, sort]);
+
+  const tasksQuery = useQuery({
+    queryKey: qk.issues.blocked(params),
+    queryFn: ({ signal }) => adminApi.getBlockedTasks(params, { signal }).then((r) => r.data),
+  });
+
+  const rows = tasksQuery.data?.items ?? [];
+  const total = tasksQuery.data?.total ?? 0;
+
+  const columns = useMemo(
+    () => [
+      {
+        key: 'issue_type',
+        header: 'Issue',
+        render: (t) => (
+          <>
+            <a
+              href={`/dashboard/issues?issue_id=${t.id}`}
+              className="block truncate font-medium text-ink hover:text-primary hover:underline"
             >
-              ← Prev
-            </button>
-            {Array.from({ length: Math.min(5, pages) }, (_, i) => {
-              const pageNum = i + 1;
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => setOffset((pageNum - 1) * pageSize)}
-                  className={`px-3 py-1.5 border rounded-lg text-xs font-semibold transition-colors ${currentPage === pageNum ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
-            <button
-              disabled={offset + pageSize >= total}
-              onClick={() => setOffset(offset + pageSize)}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Next →
-            </button>
+              {t.issue_type || 'Untyped'}
+            </a>
+            <span className="tabular block text-xs text-ink-subtle">
+              #{String(t.id ?? '').slice(0, 8)}
+            </span>
+          </>
+        ),
+      },
+      {
+        key: 'blocked_reason',
+        header: 'Reason given',
+        render: (t) =>
+          t.blocked_reason ? (
+            <span className="line-clamp-2 max-w-sm text-ink-muted" title={t.blocked_reason}>
+              {t.blocked_reason}
+            </span>
+          ) : (
+            // Worth flagging rather than dashing: a block with no reason is
+            // one an admin cannot act on without chasing the worker.
+            <span className="text-warning-strong">No reason given</span>
+          ),
+      },
+      {
+        key: 'blocked_duration_hours',
+        header: 'Blocked for',
+        width: '8rem',
+        render: (t) => <BlockedFor hours={t.blocked_duration_hours} />,
+      },
+      {
+        key: 'assigned_worker_name',
+        header: 'Worker',
+        hideBelow: 'md',
+        render: (t) =>
+          t.assigned_worker_name ? (
+            <span className="text-ink-muted">{t.assigned_worker_name}</span>
+          ) : (
+            <span className="text-ink-subtle">Unassigned</span>
+          ),
+      },
+      {
+        key: '_actions',
+        header: '',
+        align: 'right',
+        width: '12rem',
+        render: (t) => (
+          <div className="flex justify-end gap-1.5">
+            <Button size="sm" variant="ghost" onClick={() => setRespondTask(t)}>
+              Respond
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setUnblockTask(t)}>
+              Unblock
+            </Button>
           </div>
-        </div>
+        ),
+      },
+    ],
+    [],
+  );
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Blocked tasks"
+        count={tasksQuery.isPending ? undefined : total}
+        subtitle="Work a field worker has stopped on, waiting for a decision or a resource"
+      />
+
+      <Toolbar>
+        <FilterSelect
+          value={sort}
+          onChange={setSort}
+          options={SORTS}
+          // Not a filter — there is no "all" here, the list is always ordered
+          // somehow — so the placeholder never applies.
+          placeholder="Longest blocked first"
+          label="Order"
+        />
+      </Toolbar>
+
+      <Card flush>
+        <DataTable
+          rows={rows}
+          columns={columns}
+          getRowId={(t) => t.id}
+          caption="Blocked tasks"
+          density="sm"
+          loading={tasksQuery.isPending}
+          error={tasksQuery.error}
+          onRetry={tasksQuery.refetch}
+          skeletonRows={8}
+          selectable
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          rail={{ kind: 'issueStatus', value: (t) => t.status }}
+          bulkActions={
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-ink-muted">
+                {selectedIds.length} selected on this page
+              </span>
+              <Button size="sm" onClick={() => setBulkOpen(true)}>
+                Unblock selected
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>
+                Clear
+              </Button>
+            </div>
+          }
+          pagination={paged.paginationProps(total)}
+          empty={
+            <EmptyState
+              size="sm"
+              icon="checkCircle"
+              title="Nothing is blocked"
+              description="Workers flag a task as blocked when they cannot continue. An empty list is the good outcome."
+            />
+          }
+        />
+      </Card>
+
+      {/* Mounted only while open, so each modal starts from a clean form rather
+          than whatever the last task left in it. */}
+      {unblockTask && (
+        <UnblockModal open task={unblockTask} onClose={() => setUnblockTask(null)} />
       )}
 
-      {/* Unblock Modal */}
-      {unblockModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={() => setUnblockModal(null)}>
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-6 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">Unblock Task</h2>
-              <button onClick={() => setUnblockModal(null)} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-                <div><span className="text-xs font-semibold text-gray-500 uppercase">Issue</span><p className="text-gray-900 font-medium">{unblockModal.issue_type}</p></div>
-                <div><span className="text-xs font-semibold text-gray-500 uppercase">Blocked Reason</span><p className="text-gray-700">{unblockModal.blocked_reason || 'N/A'}</p></div>
-                <div><span className="text-xs font-semibold text-gray-500 uppercase">Duration</span><p className="text-red-600 font-semibold">{unblockModal.blocked_duration_hours?.toFixed(1)}h</p></div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Reason for unblocking *</label>
-                <textarea
-                  value={unblockNotes}
-                  onChange={e => setUnblockNotes(e.target.value)}
-                  placeholder="e.g., 'Permits approved', 'Equipment now available'"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 resize-none h-20"
-                />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => setUnblockModal(null)} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
-                <button
-                  onClick={handleUnblock}
-                  disabled={submitting || !unblockNotes.trim()}
-                  className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {submitting ? 'Unblocking…' : 'Unblock Task'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {bulkOpen && (
+        <UnblockModal
+          open
+          ids={selectedIds}
+          onDone={() => setSelectedIds([])}
+          onClose={() => setBulkOpen(false)}
+        />
       )}
 
-      {/* Respond Modal */}
-      {respondModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={() => setRespondModal(null)}>
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-6 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">Respond to Block</h2>
-              <button onClick={() => setRespondModal(null)} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
-                <div><span className="text-xs font-semibold text-gray-500 uppercase">Issue</span><p className="text-gray-900 font-medium">{respondModal.issue_type}</p></div>
-                <div><span className="text-xs font-semibold text-gray-500 uppercase">Worker</span><p className="text-gray-700">{respondModal.assigned_worker_name || 'Unassigned'}</p></div>
-                <div><span className="text-xs font-semibold text-gray-500 uppercase">Blocked Reason</span><p className="text-gray-700">{respondModal.blocked_reason || 'N/A'}</p></div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Message to Worker *</label>
-                <textarea
-                  value={respondMessage}
-                  onChange={e => setRespondMessage(e.target.value)}
-                  placeholder="e.g., 'Equipment dispatched tomorrow morning'"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 resize-none h-20"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Resources Provided (optional)</label>
-                <input
-                  type="text"
-                  value={respondResources}
-                  onChange={e => setRespondResources(e.target.value)}
-                  placeholder="e.g., 'excavator, pump, fuel'"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
-                />
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={respondCanProceed}
-                  onChange={e => setRespondCanProceed(e.target.checked)}
-                  className="w-4 h-4 accent-blue-600"
-                />
-                <span className="text-sm text-gray-700">Worker can proceed now</span>
-              </label>
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => setRespondModal(null)} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
-                <button
-                  onClick={handleRespond}
-                  disabled={submitting || !respondMessage.trim()}
-                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {submitting ? 'Sending…' : 'Send Response'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Unblock Modal */}
-      {bulkUnblockModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={() => { setBulkUnblockModal(false); setBulkNotes(''); }}>
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-6 border-b border-gray-100">
-              <h2 className="text-base font-bold text-gray-900">Bulk Unblock Tasks</h2>
-              <button onClick={() => { setBulkUnblockModal(false); setBulkNotes(''); }} className="text-gray-400 hover:text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="bg-green-50 border border-green-100 rounded-lg px-4 py-3 text-sm text-green-800">
-                Unblocking <strong>{selectedTasks.size}</strong> task{selectedTasks.size !== 1 ? 's' : ''}
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Reason *</label>
-                <textarea
-                  value={bulkNotes}
-                  onChange={e => setBulkNotes(e.target.value)}
-                  placeholder="e.g., 'Emergency: All equipment allocated'"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 resize-none h-20"
-                />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => { setBulkUnblockModal(false); setBulkNotes(''); }} className="flex-1 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Cancel</button>
-                <button
-                  onClick={handleBulkUnblock}
-                  disabled={submitting || !bulkNotes.trim()}
-                  className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {submitting ? 'Unblocking…' : `Unblock ${selectedTasks.size}`}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {respondTask && <RespondModal open task={respondTask} onClose={() => setRespondTask(null)} />}
     </div>
   );
 }

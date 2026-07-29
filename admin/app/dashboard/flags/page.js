@@ -1,107 +1,168 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { adminApi } from '../../../src/api/index';
-import { getErrorMessage } from '../../../src/lib/apiError';
-import { useUiStore } from '../../../src/store/uiStore';
-import { formatDate } from '../../../src/lib/dateUtils';
 
-const REASON_COLORS = {
-  spam: 'bg-yellow-100 text-yellow-700',
-  inappropriate: 'bg-red-100 text-red-700',
-  duplicate: 'bg-blue-100 text-blue-700',
-  false_report: 'bg-orange-100 text-orange-700',
-  other: 'bg-gray-100 text-gray-600',
-};
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import { adminApi } from '@/api/index';
+import { qk } from '@/api/queryKeys';
+import { getErrorMessage } from '@/api/errors';
+import { useUiStore } from '@/store/uiStore';
+import { formatDate } from '@/lib/dateUtils';
+import { elapsed } from '@/lib/relativeTime';
+
+import PageHeader from '@/components/ui/PageHeader';
+import Card from '@/components/ui/Card';
+import DataTable from '@/components/ui/DataTable';
+import Button from '@/components/ui/Button';
+import EmptyState from '@/components/ui/EmptyState';
+import Tabs from '@/components/ui/Tabs';
+import { StatusBadge } from '@/components/ui/Badge';
+
+/**
+ * Moderation queue for flagged content.
+ *
+ * Previously a card list whose load error was logged to the console and
+ * replaced with an empty array — so an outage looked exactly like a cleared
+ * queue, which is the most misleading thing a moderation screen can do.
+ */
+const TABS = [
+  { id: 'pending', label: 'Pending' },
+  { id: 'reviewed', label: 'Reviewed' },
+  { id: 'dismissed', label: 'Dismissed' },
+];
 
 export default function FlagsPage() {
-  const { addToast } = useUiStore();
-  const [flags, setFlags] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('pending');
+  const addToast = useUiStore((s) => s.addToast);
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState('pending');
 
-  useEffect(() => {
-    setLoading(true);
-    adminApi.getFlags({ status: filter })
-      .then(({ data }) => setFlags(data.items || data))
-      .catch((err) => {
-        console.error('Failed to load flags:', err);
-        setFlags([]);
-      })
-      .finally(() => setLoading(false));
-  }, [filter]);
+  const flagsQuery = useQuery({
+    queryKey: qk.moderation.flags({ status }),
+    queryFn: () => adminApi.getFlags({ status }).then((r) => r.data),
+  });
 
-  const resolve = async (id, status) => {
-    try {
-      await adminApi.resolveFlag(id, status);
-      setFlags((prev) => prev.filter((f) => f.id !== id));
-      addToast(`Flag marked as ${status}!`, 'success');
-    } catch (err) {
-      const errorMsg = getErrorMessage(err, 'Failed to resolve flag');
-      addToast(errorMsg, 'error');
-      console.error('Failed to resolve flag:', err);
-    }
-  };
+  const rows = flagsQuery.data?.items ?? flagsQuery.data ?? [];
+
+  const resolve = useMutation({
+    mutationFn: ({ id, nextStatus }) => adminApi.resolveFlag(id, nextStatus),
+    onSuccess: (_r, { nextStatus }) => {
+      addToast(`Flag marked as ${nextStatus}`, 'success');
+      queryClient.invalidateQueries({ queryKey: qk.moderation.all });
+    },
+    onError: (e) => addToast(getErrorMessage(e, 'Could not update this flag'), 'error'),
+  });
+
+  const columns = useMemo(
+    () => [
+      {
+        key: 'reason',
+        header: 'Reason',
+        render: (flag) => <StatusBadge kind="flagStatus" value={flag.reason} fallback="Other" />,
+      },
+      {
+        key: 'details',
+        header: 'Details',
+        width: '28rem',
+        render: (flag) => (
+          <span className="block truncate text-ink">
+            {flag.details || <span className="text-ink-subtle">No detail given</span>}
+          </span>
+        ),
+      },
+      {
+        key: 'issue_id',
+        header: 'Issue',
+        hideBelow: 'md',
+        render: (flag) => (
+          <a
+            href={`/dashboard/issues?issue_id=${flag.issue_id}`}
+            className="font-mono text-xs text-primary hover:underline"
+          >
+            {String(flag.issue_id ?? '').slice(0, 8) || '—'}
+          </a>
+        ),
+      },
+      {
+        key: 'created_at',
+        header: 'Age',
+        align: 'right',
+        hideBelow: 'md',
+        render: (flag) => (
+          <span
+            className="tabular text-xs text-ink-muted"
+            title={formatDate(flag.created_at, 'en-IN')}
+          >
+            {elapsed(flag.created_at)}
+          </span>
+        ),
+      },
+      {
+        key: '_actions',
+        header: '',
+        align: 'right',
+        width: '13rem',
+        render: (flag) =>
+          status === 'pending' ? (
+            <div className="flex items-center justify-end gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                isLoading={resolve.isPending && resolve.variables?.id === flag.id}
+                onClick={() => resolve.mutate({ id: flag.id, nextStatus: 'reviewed' })}
+              >
+                Uphold
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => resolve.mutate({ id: flag.id, nextStatus: 'dismissed' })}
+              >
+                Dismiss
+              </Button>
+            </div>
+          ) : (
+            <span className="text-xs text-ink-subtle">Closed</span>
+          ),
+      },
+    ],
+    [status, resolve],
+  );
 
   return (
     <div className="space-y-4">
-      {/* Filter */}
-      <div className="bg-white rounded-xl shadow-sm p-4 flex gap-3 items-center">
-        {['pending', 'reviewed', 'dismissed'].map((s) => (
-          <button
-            key={s}
-            onClick={() => setFilter(s)}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg capitalize transition-colors ${filter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+      <PageHeader
+        title="Moderation"
+        count={flagsQuery.isPending ? undefined : rows.length}
+        subtitle="Content reported by citizens for review"
+        actions={<Tabs tabs={TABS} value={status} onChange={setStatus} label="Flag status" />}
+      />
 
-      {/* List */}
-      <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-50">
-        {loading ? (
-          <div className="text-center py-12 text-gray-400">Loading…</div>
-        ) : flags.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">No {filter} flags</div>
-        ) : (
-          flags.map((flag) => (
-            <div key={flag.id} className="p-4 flex items-start gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${REASON_COLORS[flag.reason] || REASON_COLORS.other}`}>
-                    {flag.reason?.replace('_', ' ')}
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    {flag.issue_id ? 'Issue' : 'Comment'}
-                  </span>
-                </div>
-                {flag.details && (
-                  <p className="text-sm text-gray-700 mb-1">{flag.details}</p>
-                )}
-                <div className="text-xs text-gray-400">
-                  {formatDate(flag.created_at, 'en-IN')}
-                </div>
-              </div>
-              {filter === 'pending' && (
-                <div className="flex gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => resolve(flag.id, 'reviewed')}
-                    className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700"
-                  >
-                    Reviewed
-                  </button>
-                  <button
-                    onClick={() => resolve(flag.id, 'dismissed')}
-                    className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-300"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
+      <Card flush>
+        <DataTable
+          rows={rows}
+          columns={columns}
+          getRowId={(flag) => flag.id}
+          caption="Flagged content"
+          density="sm"
+          loading={flagsQuery.isPending}
+          error={flagsQuery.error}
+          onRetry={flagsQuery.refetch}
+          skeletonRows={6}
+          sortMode="none"
+          empty={
+            <EmptyState
+              size="sm"
+              icon="checkCircle"
+              title={status === 'pending' ? 'Nothing awaiting review' : `No ${status} flags`}
+              description={
+                status === 'pending'
+                  ? 'Reports from citizens will appear here for a decision.'
+                  : 'Flags you have acted on appear here.'
+              }
+            />
+          }
+        />
+      </Card>
     </div>
   );
 }

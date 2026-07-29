@@ -93,54 +93,43 @@ export default function LoginPage() {
     setLoading(false);
   };
 
-  const bgClass = 'bg-gradient-to-br from-blue-50 via-white to-indigo-50';
-  const cardBg = 'bg-white';
-  const textColor = 'text-gray-900';
-  const labelColor = 'text-gray-700';
-  const inputBg = 'bg-white text-gray-900 border-gray-200';
-  const errorColor = 'text-red-500';
+  const bgClass = 'bg-canvas';
+  const cardBg = 'bg-surface';
+  const textColor = 'text-ink';
+  const labelColor = 'text-ink-muted';
+  const inputBg = 'bg-surface text-ink border-border';
+  const errorColor = 'text-danger';
 
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center ${bgClass} relative overflow-hidden transition-all duration-300`}>
-      {/* Animated background elements */}
+      {/*
+        This screen used to open with three drifting blur circles in blue,
+        indigo and purple over a tri-stop gradient — a look the console behind
+        it shares nothing with. Signing in should feel like the front door of
+        the tool you are about to use, not a different product.
+
+        What replaces it is one flat canvas and a single hairline rule under
+        the card. The `float` keyframes went with the circles; `slideIn` stays,
+        because a card that arrives is worth the 600ms and it respects the
+        global reduced-motion block in globals.css.
+      */}
       <style>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(20px); }
-        }
         @keyframes slideIn {
-          from {
-            opacity: 0;
-            transform: translateY(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
-        .float-element {
-          animation: float 6s ease-in-out infinite;
-        }
-        .slide-in {
-          animation: slideIn 0.6s ease-out forwards;
-        }
+        .slide-in { animation: slideIn 0.4s ease-out forwards; }
       `}</style>
 
-      {/* Floating background circles */}
-      <div className="absolute top-10 left-10 w-64 h-64 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 float-element"></div>
-      <div className="absolute bottom-20 right-10 w-72 h-72 bg-indigo-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 float-element" style={{ animationDelay: '2s' }}></div>
-      <div className="absolute top-1/2 left-1/3 w-56 h-56 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 float-element" style={{ animationDelay: '4s' }}></div>
-
-
       {/* Main login card */}
-      <div className={`${cardBg} rounded-3xl shadow-2xl p-8 sm:p-10 w-full max-w-md mx-4 backdrop-blur-xl border border-white/10 slide-in relative z-10`}>
+      <div className={`${cardBg} rounded-card border border-border shadow-sm p-8 sm:p-10 w-full max-w-md mx-4 slide-in relative z-10`}>
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-10">
           <div className="mb-4">
             <CivicLogo size="lg" showText={true} darkMode={false} />
           </div>
-          <p className={`text-sm font-medium text-gray-600`}>
+          <p className={`text-sm font-medium text-ink-muted`}>
             {step === 'phone' ? 'Admin Portal Sign In' : `Verification Code sent to ${maskPhone(phone)}`}
           </p>
         </div>
@@ -151,8 +140,8 @@ export default function LoginPage() {
               <label className={`block text-sm font-semibold ${labelColor} mb-2`}>
                 Mobile Number
               </label>
-              <div className={`flex border-2 rounded-xl overflow-hidden focus-within:border-blue-500 focus-within:shadow-lg transition-all ${inputBg}`}>
-                <div className={`px-4 flex items-center bg-gray-50 border-r-2 border-gray-200`}>
+              <div className={`flex border-2 rounded-xl overflow-hidden focus-within:border-primary focus-within:shadow-lg transition-all ${inputBg}`}>
+                <div className={`px-4 flex items-center bg-surface-alt border-r-2 border-border`}>
                   <span className={`text-sm font-semibold ${labelColor}`}>+91</span>
                 </div>
                 <input
@@ -169,7 +158,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className={`p-3 rounded-lg bg-red-50 border border-red-200`}>
+              <div className={`p-3 rounded-lg bg-danger-soft border border-danger/30`}>
                 <p className={`text-sm ${errorColor}`}>{error}</p>
               </div>
             )}
@@ -184,7 +173,7 @@ export default function LoginPage() {
               Get OTP
             </LoadingButton>
 
-            <p className={`text-xs text-gray-500 text-center`}>
+            <p className={`text-xs text-ink-subtle text-center`}>
               Admin-only login. Your credentials are secure.
             </p>
           </form>
@@ -199,14 +188,14 @@ export default function LoginPage() {
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 placeholder="• • • • • •"
-                className={`w-full border-2 rounded-xl px-4 py-4 text-center text-3xl font-bold tracking-widest outline-none focus:border-blue-500 focus:shadow-lg transition-all ${inputBg}`}
+                className={`w-full border-2 rounded-xl px-4 py-4 text-center text-3xl font-bold tracking-widest outline-none focus:border-primary focus:shadow-lg transition-all ${inputBg}`}
                 autoFocus
                 maxLength={6}
               />
             </div>
 
             {error && (
-              <div className={`p-3 rounded-lg bg-red-50 border border-red-200`}>
+              <div className={`p-3 rounded-lg bg-danger-soft border border-danger/30`}>
                 <p className={`text-sm ${errorColor}`}>{error}</p>
               </div>
             )}
@@ -221,14 +210,14 @@ export default function LoginPage() {
               Verify & Sign In
             </LoadingButton>
 
-            <div className={`text-center text-sm text-gray-600`}>
+            <div className={`text-center text-sm text-ink-muted`}>
               {countdown > 0 ? (
                 <p>Resend OTP in <span className="font-semibold">{countdown}s</span></p>
               ) : (
                 <button
                   type="button"
                   onClick={sendOtp}
-                  className="text-blue-500 font-semibold hover:underline"
+                  className="text-primary font-semibold hover:underline"
                 >
                   Resend OTP
                 </button>
@@ -238,7 +227,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => { setStep('phone'); setPhone(''); setOtp(''); setError(''); }}
-              className={`w-full text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors`}
+              className={`w-full text-sm font-medium text-ink-muted hover:text-ink transition-colors`}
             >
               ← Change number
             </button>
@@ -247,7 +236,7 @@ export default function LoginPage() {
       </div>
 
       {/* Footer info */}
-      <div className={`mt-8 text-center text-sm text-gray-600`}>
+      <div className={`mt-8 text-center text-sm text-ink-muted`}>
         <p>Secure access for administrators only</p>
       </div>
     </div>

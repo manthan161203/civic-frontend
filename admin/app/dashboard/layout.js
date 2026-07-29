@@ -4,6 +4,7 @@ import Sidebar from '../../src/components/layout/Sidebar.js';
 import Header from '../../src/components/layout/Header.js';
 import GoogleMapProvider from '../../src/components/ui/GoogleMapProvider.js';
 import { adminApi } from '../../src/api/index';
+import { logger } from '../../src/lib/logger';
 
 function SOSBanner() {
   const [sosIssues, setSosIssues] = useState([]);
@@ -14,7 +15,12 @@ function SOSBanner() {
       try {
         const { data } = await adminApi.getActiveSOS();
         setSosIssues(data || []);
-      } catch {}
+      } catch (err) {
+        // Was `catch {}`. This poll drives the SOS banner — the one thing on
+        // screen that must not fail quietly, because its absence reads as
+        // "no emergencies" rather than "the check is broken".
+        logger.error('SOSBanner', 'Active SOS poll failed', err);
+      }
     };
     fetchSOS();
     const interval = setInterval(fetchSOS, 15000);
@@ -24,7 +30,7 @@ function SOSBanner() {
   if (!sosIssues.length || !visible) return null;
 
   return (
-    <div className="relative bg-red-600 text-white px-4 py-2.5 flex items-center gap-3 animate-pulse shadow-lg z-50">
+    <div className="relative bg-danger text-white px-4 py-2.5 flex items-center gap-3 animate-pulse shadow-lg z-50">
       <span className="flex items-center gap-2 font-bold text-sm">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} style={{ width: 18, height: 18 }}>
           <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
@@ -37,7 +43,7 @@ function SOSBanner() {
           <a
             key={s.id}
             href={`/dashboard/issues?search=${s.id_short}`}
-            className="bg-red-700/60 rounded-full px-3 py-1 whitespace-nowrap hover:bg-red-800 transition-colors"
+            className="bg-danger-strong/60 rounded-full px-3 py-1 whitespace-nowrap hover:bg-danger-strong transition-colors"
           >
             {s.issue_type} — {s.ward || 'Unknown ward'} ({s.minutes_ago}m ago)
           </a>
@@ -45,7 +51,7 @@ function SOSBanner() {
       </div>
       <button
         onClick={() => setVisible(false)}
-        className="text-red-200 hover:text-white p-1 rounded transition-colors flex-shrink-0"
+        className="text-white/70 hover:text-white p-1 rounded transition-colors flex-shrink-0"
         title="Dismiss"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ width: 16, height: 16 }}>

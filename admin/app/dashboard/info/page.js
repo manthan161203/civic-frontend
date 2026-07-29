@@ -71,15 +71,15 @@ const SECTIONS = [
   {
     title: 'What is Civic?',
     icon: <IcoBuilding />,
-    color: 'border-blue-200 bg-blue-50',
-    iconBg: 'bg-blue-100 text-blue-600',
+    color: 'border-primary/20 bg-primary-soft',
+    iconBg: 'bg-primary-soft text-primary',
     content: `Civic is a government issue reporting and resolution platform. Citizens report civic problems — potholes, broken streetlights, water supply failures — via the mobile app. Those issues are routed to the right department, assigned to field workers, and tracked to resolution. The admin panel (this interface) gives administrators visibility and control over the entire pipeline.`,
   },
   {
     title: 'User Roles',
     icon: <IcoUsers />,
-    color: 'border-purple-200 bg-purple-50',
-    iconBg: 'bg-purple-100 text-purple-600',
+    color: 'border-accent/30 bg-accent-soft',
+    iconBg: 'bg-accent-soft text-accent',
     items: [
       { label: 'Super Admin', desc: 'Full system access. Can create district/taluka/ward admins, view all issues, and change any user\'s role.' },
       { label: 'District Admin', desc: 'Manages all issues and workers within their district. Can create taluka and ward admins.' },
@@ -92,29 +92,29 @@ const SECTIONS = [
   {
     title: 'Issue Lifecycle',
     icon: <IcoRefresh />,
-    color: 'border-green-200 bg-green-50',
-    iconBg: 'bg-green-100 text-green-600',
+    color: 'border-success/30 bg-success-soft',
+    iconBg: 'bg-success-soft text-success',
     flow: [
-      { status: 'open', color: 'bg-red-100 text-red-700', desc: 'Citizen submits an issue. Awaiting admin review.' },
-      { status: 'assigned', color: 'bg-cyan-100 text-cyan-700', desc: 'Admin assigns a worker. Worker notified via app.' },
-      { status: 'in_progress', color: 'bg-blue-100 text-blue-700', desc: 'Worker accepts the task and starts working.' },
-      { status: 'resolved', color: 'bg-green-100 text-green-700', desc: 'Worker uploads after-photo and marks complete.' },
-      { status: 'closed', color: 'bg-gray-100 text-gray-600', desc: 'Admin or system closes the issue. No further action.' },
-      { status: 'escalated', color: 'bg-purple-100 text-purple-700', desc: 'Flagged for higher-level attention (e.g. critical or overdue).' },
+      { status: 'open', color: 'bg-danger-soft text-danger', desc: 'Citizen submits an issue. Awaiting admin review.' },
+      { status: 'assigned', color: 'bg-info-soft text-info', desc: 'Admin assigns a worker. Worker notified via app.' },
+      { status: 'in_progress', color: 'bg-primary-soft text-primary-strong', desc: 'Worker accepts the task and starts working.' },
+      { status: 'resolved', color: 'bg-success-soft text-success', desc: 'Worker uploads after-photo and marks complete.' },
+      { status: 'closed', color: 'bg-surface-alt text-ink-muted', desc: 'Admin or system closes the issue. No further action.' },
+      { status: 'escalated', color: 'bg-accent-soft text-accent', desc: 'Flagged for higher-level attention (e.g. critical or overdue).' },
     ],
   },
   {
     title: 'Location Hierarchy',
     icon: <IcoPin />,
-    color: 'border-yellow-200 bg-yellow-50',
-    iconBg: 'bg-yellow-100 text-yellow-700',
+    color: 'border-warning/30 bg-warning-soft',
+    iconBg: 'bg-warning-soft text-warning',
     content: `The system uses a 3-level geographic hierarchy: District → Taluka → Ward. Issues are tagged to the ward where they occur. Admins are scoped to their level — a district admin sees all issues in their district; a ward admin sees only their ward. Use the Locations page to add or remove districts, talukas, and wards.`,
   },
   {
     title: 'Admin Panel Pages',
     icon: <IcoList />,
-    color: 'border-gray-200 bg-gray-50',
-    iconBg: 'bg-gray-100 text-gray-600',
+    color: 'border-border bg-surface-alt',
+    iconBg: 'bg-surface-alt text-ink-muted',
     items: [
       { label: 'Dashboard', desc: 'Live stats: open issues, in-progress, resolved today, total workers online. Trend charts for the last 7 days.' },
       { label: 'Issues', desc: 'Browse, filter, search all issues. Assign or reassign workers. Escalate or bulk-close. Export to CSV.' },
@@ -133,8 +133,8 @@ const SECTIONS = [
   {
     title: 'Storage Backends',
     icon: <IcoDatabase />,
-    color: 'border-orange-200 bg-orange-50',
-    iconBg: 'bg-orange-100 text-orange-600',
+    color: 'border-warning/30 bg-warning-soft',
+    iconBg: 'bg-warning-soft text-warning',
     content: `Issue photos are stored in one of three backends, controlled by the STORAGE_BACKEND environment variable on the server:`,
     items: [
       { label: 'local', desc: 'Files saved to the server\'s uploads/ folder. Good for local development.' },
@@ -145,8 +145,8 @@ const SECTIONS = [
   {
     title: 'System Improvements (Latest Release)',
     icon: <IcoCode />,
-    color: 'border-teal-200 bg-teal-50',
-    iconBg: 'bg-teal-100 text-teal-600',
+    color: 'border-info/30 bg-info-soft',
+    iconBg: 'bg-info-soft text-info',
     items: [
       { label: 'Query Optimization', desc: '99% reduction in N+1 database queries. Geographic tree loads in 1 query instead of 100+. Badge checks reduced from 10+ to 1 query.' },
       { label: 'Error Logging', desc: '22+ silent catch blocks fixed with proper error logging. Workers and admins now receive feedback when operations fail instead of silent failures.' },
@@ -159,8 +159,8 @@ const SECTIONS = [
   {
     title: 'Key API Endpoints',
     icon: <IcoCode />,
-    color: 'border-indigo-200 bg-indigo-50',
-    iconBg: 'bg-indigo-100 text-indigo-600',
+    color: 'border-accent/30 bg-accent-soft',
+    iconBg: 'bg-accent-soft text-accent',
     code: [
       ['GET /admin/dashboard', 'Live dashboard stats'],
       ['GET /admin/analytics', 'Analytics data (pass ?days=30)'],
@@ -192,12 +192,12 @@ export default function InfoPage() {
       {/* Hero */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-6 text-white">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0 text-white">
+          <div className="w-14 h-14 rounded-xl bg-surface/20 flex items-center justify-center flex-shrink-0 text-white">
             <IcoBuilding size={28} />
           </div>
           <div>
             <h1 className="text-xl font-black mb-1">Civic Admin — System Guide</h1>
-            <p className="text-blue-100 text-sm leading-relaxed">
+            <p className="text-white/75 text-sm leading-relaxed">
               Everything you need to know about managing the Civic issue resolution platform. This page explains roles, workflows, and how to use each section of the admin panel.
             </p>
           </div>
@@ -211,11 +211,11 @@ export default function InfoPage() {
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${section.iconBg}`}>
               {section.icon}
             </div>
-            <h2 className="text-base font-bold text-gray-900">{section.title}</h2>
+            <h2 className="text-base font-bold text-ink">{section.title}</h2>
           </div>
 
           {section.content && (
-            <p className="text-sm text-gray-700 leading-relaxed mb-3">{section.content}</p>
+            <p className="text-sm text-ink-muted leading-relaxed mb-3">{section.content}</p>
           )}
 
           {section.flow && (
@@ -223,12 +223,12 @@ export default function InfoPage() {
               {section.flow.map((step, i) => (
                 <div key={step.status} className="flex items-start gap-3">
                   <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
-                    <span className="text-xs text-gray-400 font-bold w-3">{i + 1}</span>
+                    <span className="text-xs text-ink-subtle font-bold w-3">{i + 1}</span>
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold capitalize w-24 justify-center ${step.color}`}>
                       {step.status.replace('_', ' ')}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600">{step.desc}</p>
+                  <p className="text-sm text-ink-muted">{step.desc}</p>
                 </div>
               ))}
             </div>
@@ -237,9 +237,9 @@ export default function InfoPage() {
           {section.items && (
             <div className="space-y-2">
               {section.items.map((item) => (
-                <div key={item.label} className="flex gap-3 bg-white/60 rounded-lg px-3 py-2.5">
-                  <span className="text-sm font-bold text-gray-800 w-36 flex-shrink-0">{item.label}</span>
-                  <span className="text-sm text-gray-600 leading-relaxed">{item.desc}</span>
+                <div key={item.label} className="flex gap-3 bg-surface/60 rounded-lg px-3 py-2.5">
+                  <span className="text-sm font-bold text-ink w-36 flex-shrink-0">{item.label}</span>
+                  <span className="text-sm text-ink-muted leading-relaxed">{item.desc}</span>
                 </div>
               ))}
             </div>
@@ -248,9 +248,9 @@ export default function InfoPage() {
           {section.code && (
             <div className="space-y-1.5">
               {section.code.map(([endpoint, desc]) => (
-                <div key={endpoint} className="flex items-center gap-3 bg-white/60 rounded-lg px-3 py-2">
-                  <code className="text-xs font-mono text-indigo-700 font-semibold flex-shrink-0 w-64">{endpoint}</code>
-                  <span className="text-xs text-gray-500">{desc}</span>
+                <div key={endpoint} className="flex items-center gap-3 bg-surface/60 rounded-lg px-3 py-2">
+                  <code className="text-xs font-mono text-accent font-semibold flex-shrink-0 w-64">{endpoint}</code>
+                  <span className="text-xs text-ink-subtle">{desc}</span>
                 </div>
               ))}
             </div>
@@ -259,7 +259,7 @@ export default function InfoPage() {
       ))}
 
       {/* Footer */}
-      <div className="text-center text-xs text-gray-400 pb-2">
+      <div className="text-center text-xs text-ink-subtle pb-2">
         Civic Admin Panel · Built with Next.js · Backend: FastAPI + PostgreSQL
       </div>
     </div>

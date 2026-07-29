@@ -6,6 +6,9 @@ import { getErrorMessage } from '../../../src/lib/apiError';
 import { useUiStore } from '../../../src/store/uiStore';
 import { useAuthStore } from '../../../src/store/authStore';
 import LoadingButton from '../../../src/components/ui/LoadingButton';
+import { logger } from '../../../src/lib/logger';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
+import Spinner from '@/components/ui/Spinner';
 
 // ── Ward Map Picker (Google Maps) ────────────────────────────────────────────
 // Defined outside LocationsPage so React never unmounts it during re-renders.
@@ -76,6 +79,7 @@ function WardMapPicker({ lat, lon, onSetLat, onSetLon, onManualSet, fallbackCent
 export default function LocationsPage() {
   const { user } = useAuthStore();
   const { addToast } = useUiStore();
+  const confirm = useConfirm();
   const [tree, setTree] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState({});
@@ -104,7 +108,8 @@ export default function LocationsPage() {
       setTree(data.districts || data);
     } catch (err) {
       console.error('Failed to reload location tree:', err);
-      alert('Failed to reload locations. Please refresh the page.');
+      addToast('Could not reload locations. Try refreshing the page.', 'error');
+      logger.error('Locations', 'Reload failed', err);
     }
   };
 
@@ -186,7 +191,11 @@ export default function LocationsPage() {
       } else {
         setGeoStatus('failed');
       }
-    } catch {
+    } catch (e) {
+      // The banner already tells the user; this is so a systematic geocoding
+      // outage is visible to whoever runs the service rather than looking like
+      // a run of unlucky addresses.
+      logger.warn('Locations', 'Reverse geocode failed', e);
       setGeoStatus('failed');
     } finally {
       geocodingRef.current = false;
@@ -305,7 +314,18 @@ export default function LocationsPage() {
   };
 
   const handleDelete = async (type, id) => {
-    if (!confirm(`Delete this ${type}? This will also delete all child records.`)) return;
+    // The most destructive action in the console: deleting a district takes
+    // its talukas and wards with it, and every user scoped to them loses their
+    // jurisdiction. Typing the name is the point.
+    const ok = await confirm({
+      title: `Delete this ${type}?`,
+      description:
+        'Every taluka, ward and record beneath it is deleted too. This cannot be undone.',
+      tone: 'danger',
+      confirmLabel: `Delete ${type}`,
+      requireTyping: 'DELETE',
+    });
+    if (!ok) return;
     try {
       if (type === 'district') await locationsApi.deleteDistrict(id);
       else if (type === 'taluka') await locationsApi.deleteTaluka(id);
@@ -322,18 +342,18 @@ export default function LocationsPage() {
   const GeoStatusBanner = () => {
     const locType = adding?.type || editing?.type || 'location';
     if (geoStatus === 'fetching') return (
-      <div className="text-xs text-blue-600 flex items-center gap-1.5">
-        <span className="inline-block w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+      <div className="text-xs text-primary flex items-center gap-1.5">
+        <Spinner size="sm" label={null} />
         Fetching location…
       </div>
     );
     if (geoStatus === 'success') return (
       <div className="flex items-center justify-between">
-        <span className="text-xs text-green-600 font-medium">Location fetched — adjust on map if needed</span>
+        <span className="text-xs text-success font-medium">Location fetched — adjust on map if needed</span>
         <button
           type="button"
           onClick={() => { setWardLat(null); setWardLon(null); geocodeLocation(); }}
-          className="text-xs text-gray-400 underline hover:text-gray-600"
+          className="text-xs text-ink-subtle underline hover:text-ink-muted"
         >
           Re-fetch
         </button>
@@ -341,17 +361,17 @@ export default function LocationsPage() {
     );
     if (geoStatus === 'failed') return (
       <div className="flex items-center justify-between">
-        <span className="text-xs text-amber-600">Location not found — click the map to place the pin</span>
+        <span className="text-xs text-warning">Location not found — click the map to place the pin</span>
         <button
           type="button"
           onClick={geocodeLocation}
-          className="text-xs text-blue-500 underline hover:text-blue-700"
+          className="text-xs text-primary underline hover:text-primary-strong"
         >
           Try again
         </button>
       </div>
     );
-    return <div className="text-xs text-gray-400">Enter {locType} name above to auto-fetch location</div>;
+    return <div className="text-xs text-ink-subtle">Enter {locType} name above to auto-fetch location</div>;
   };
 
   // ── Ward location section (inlined in both modals) ─────────────────────────
@@ -361,27 +381,27 @@ export default function LocationsPage() {
   const wardLocationSection = (
     <div className="space-y-2 pt-1">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold text-gray-600">Location on Map</label>
+        <label className="text-xs font-semibold text-ink-muted">Location on Map</label>
         {wardLat != null && wardLon != null && (
-          <span className="text-xs text-gray-400 font-mono">
+          <span className="text-xs text-ink-subtle font-mono">
             {wardLat.toFixed(5)}, {wardLon.toFixed(5)}
           </span>
         )}
       </div>
       {GeoStatusBanner()}
       <WardMapPicker lat={wardLat} lon={wardLon} onSetLat={setWardLat} onSetLon={setWardLon} onManualSet={() => setGeoStatus('success')} fallbackCenter={parentMapCenter} />
-      <p className="text-xs text-gray-400">Click map to place pin · Drag pin to adjust</p>
+      <p className="text-xs text-ink-subtle">Click map to place pin · Drag pin to adjust</p>
     </div>
   );
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <p className="text-sm text-gray-500">Manage District → Taluka → Ward hierarchy</p>
+        <p className="text-sm text-ink-subtle">Manage District → Taluka → Ward hierarchy</p>
         {user?.role === 'admin' && (
           <button
             onClick={() => openAdd('district', null, null)}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary-hover"
           >
             + Add District
           </button>
@@ -391,21 +411,21 @@ export default function LocationsPage() {
       {/* ── Add Modal ── */}
       {adding && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-gray-900 mb-1">
+          <div className="bg-surface rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-bold text-ink mb-1">
               Add {adding.type.charAt(0).toUpperCase() + adding.type.slice(1)}
             </h2>
             {adding.parentName && (
-              <p className="text-sm text-gray-500 mb-4">Under: <strong>{adding.parentName}</strong></p>
+              <p className="text-sm text-ink-subtle mb-4">Under: <strong>{adding.parentName}</strong></p>
             )}
             <form onSubmit={handleAdd} className="space-y-3">
               {adding.type === 'district' && (
                 <div>
-                  <label className="text-xs font-semibold text-gray-600 block mb-1">State</label>
+                  <label className="text-xs font-semibold text-ink-muted block mb-1">State</label>
                   <input
                     disabled
                     value="Gujarat"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600 cursor-not-allowed"
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-surface-alt text-ink-muted cursor-not-allowed"
                   />
                 </div>
               )}
@@ -418,10 +438,10 @@ export default function LocationsPage() {
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                   onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                   placeholder={`${adding.type} name`}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
                 />
                 {showSuggestions && suggestions.length > 0 && (
-                  <ul className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                  <ul className="absolute z-10 left-0 right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
                     {suggestions.map((s) => (
                       <li
                         key={s.id}
@@ -430,10 +450,10 @@ export default function LocationsPage() {
                           if (s.centroid_lat != null) { setWardLat(s.centroid_lat); setWardLon(s.centroid_lon); setGeoStatus('success'); }
                           setShowSuggestions(false);
                         }}
-                        className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer"
+                        className="px-3 py-2 text-sm hover:bg-primary-soft cursor-pointer"
                       >
-                        <span className="font-medium text-gray-800">{s.name}</span>
-                        {s.path && <span className="text-gray-400 text-xs ml-2">{s.path}</span>}
+                        <span className="font-medium text-ink">{s.name}</span>
+                        {s.path && <span className="text-ink-subtle text-xs ml-2">{s.path}</span>}
                       </li>
                     ))}
                   </ul>
@@ -447,7 +467,7 @@ export default function LocationsPage() {
                   value={newWardNumber}
                   onChange={(e) => setNewWardNumber(e.target.value)}
                   placeholder="Ward number"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
                 />
               )}
               {wardLocationSection}
@@ -455,7 +475,7 @@ export default function LocationsPage() {
                 <button
                   type="button"
                   onClick={() => { setAdding(null); resetWardCoords(); }}
-                  className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                  className="flex-1 py-2 border border-border rounded-lg text-sm text-ink-muted hover:bg-surface-alt"
                 >
                   Cancel
                 </button>
@@ -477,8 +497,8 @@ export default function LocationsPage() {
       {/* ── Edit Modal ── */}
       {editing && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-gray-900 mb-1">
+          <div className="bg-surface rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-bold text-ink mb-1">
               Edit {editing.type.charAt(0).toUpperCase() + editing.type.slice(1)}
             </h2>
             <form onSubmit={handleEdit} className="space-y-3">
@@ -491,10 +511,10 @@ export default function LocationsPage() {
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                   onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                   placeholder={`${editing.type} name`}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
                 />
                 {showSuggestions && suggestions.length > 0 && (
-                  <ul className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                  <ul className="absolute z-10 left-0 right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
                     {suggestions.map((s) => (
                       <li
                         key={s.id}
@@ -503,10 +523,10 @@ export default function LocationsPage() {
                           if (s.centroid_lat != null) { setWardLat(s.centroid_lat); setWardLon(s.centroid_lon); setGeoStatus('success'); }
                           setShowSuggestions(false);
                         }}
-                        className="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer"
+                        className="px-3 py-2 text-sm hover:bg-primary-soft cursor-pointer"
                       >
-                        <span className="font-medium text-gray-800">{s.name}</span>
-                        {s.path && <span className="text-gray-400 text-xs ml-2">{s.path}</span>}
+                        <span className="font-medium text-ink">{s.name}</span>
+                        {s.path && <span className="text-ink-subtle text-xs ml-2">{s.path}</span>}
                       </li>
                     ))}
                   </ul>
@@ -520,7 +540,7 @@ export default function LocationsPage() {
                   value={newWardNumber}
                   onChange={(e) => setNewWardNumber(e.target.value)}
                   placeholder="Ward number"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
                 />
               )}
               {wardLocationSection}
@@ -528,7 +548,7 @@ export default function LocationsPage() {
                 <button
                   type="button"
                   onClick={() => { setEditing(null); resetWardCoords(); }}
-                  className="flex-1 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                  className="flex-1 py-2 border border-border rounded-lg text-sm text-ink-muted hover:bg-surface-alt"
                 >
                   Cancel
                 </button>
@@ -549,13 +569,13 @@ export default function LocationsPage() {
 
       {/* ── Tree ── */}
       {loading ? (
-        <div className="text-center py-12 text-gray-400">Loading…</div>
+        <div className="text-center py-12 text-ink-subtle">Loading…</div>
       ) : tree.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm text-center py-16 text-gray-400">
+        <div className="bg-surface rounded-card text-center py-16 text-ink-subtle">
           No locations yet. Add a district to start.
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-50">
+        <div className="bg-surface rounded-card divide-y divide-divider">
           {tree
             .filter((district) =>
               user?.role === 'admin' ? true : district.id === user?.district_id
@@ -563,25 +583,25 @@ export default function LocationsPage() {
             .map((district) => (
             <div key={district.id}>
               {/* District */}
-              <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 group">
-                <button onClick={() => toggle(`d-${district.id}`)} className="text-gray-400 hover:text-gray-600">
+              <div className="flex items-center gap-3 px-4 py-3 hover:bg-surface-alt group">
+                <button onClick={() => toggle(`d-${district.id}`)} className="text-ink-subtle hover:text-ink-muted">
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 transition-transform" style={{ transform: expanded[`d-${district.id}`] ? 'rotate(90deg)' : 'rotate(0deg)' }} viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
                 </button>
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${district.centroid_lat != null ? 'bg-green-400' : 'bg-gray-300'}`} />
-                <span className="font-semibold text-gray-900 flex-1">{district.name}</span>
-                <span className="text-xs text-gray-400">{district.talukas?.length || 0} talukas</span>
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${district.centroid_lat != null ? 'bg-success' : 'bg-border-strong'}`} />
+                <span className="font-semibold text-ink flex-1">{district.name}</span>
+                <span className="text-xs text-ink-subtle">{district.talukas?.length || 0} talukas</span>
                 {district.centroid_lat != null && (
-                  <span className="text-xs text-green-600 font-mono opacity-0 group-hover:opacity-100">
+                  <span className="text-xs text-success font-mono opacity-0 group-hover:opacity-100">
                     {district.centroid_lat.toFixed(4)}, {district.centroid_lon.toFixed(4)}
                   </span>
                 )}
                 {(user?.role === 'admin' || user?.role === 'district_admin') && (
-                  <button onClick={() => openAdd('taluka', district.id, district.name, null, district.centroid_lat, district.centroid_lon)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors">+ Taluka</button>
+                  <button onClick={() => openAdd('taluka', district.id, district.name, null, district.centroid_lat, district.centroid_lon)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-primary-soft text-primary-strong border-primary/20 hover:bg-primary-soft transition-colors">+ Taluka</button>
                 )}
                 {user?.role === 'admin' && (
                   <>
-                    <button onClick={() => openEdit('district', district.id, district.name, null, district.centroid_lat, district.centroid_lon)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 transition-colors">Edit</button>
-                    <button onClick={() => handleDelete('district', district.id)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 transition-colors">Delete</button>
+                    <button onClick={() => openEdit('district', district.id, district.name, null, district.centroid_lat, district.centroid_lon)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-warning-soft text-warning border-warning/30 hover:bg-warning-soft transition-colors">Edit</button>
+                    <button onClick={() => handleDelete('district', district.id)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-danger-soft text-danger border-danger/30 hover:bg-danger-soft transition-colors">Delete</button>
                   </>
                 )}
               </div>
@@ -594,48 +614,48 @@ export default function LocationsPage() {
                 })
                 .map((taluka) => (
                 <div key={taluka.id}>
-                  <div className="flex items-center gap-3 px-8 py-2.5 hover:bg-gray-50 group">
-                    <button onClick={() => toggle(`t-${taluka.id}`)} className="text-gray-400 hover:text-gray-600">
+                  <div className="flex items-center gap-3 px-8 py-2.5 hover:bg-surface-alt group">
+                    <button onClick={() => toggle(`t-${taluka.id}`)} className="text-ink-subtle hover:text-ink-muted">
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 transition-transform" style={{ transform: expanded[`t-${taluka.id}`] ? 'rotate(90deg)' : 'rotate(0deg)' }} viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
                     </button>
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${taluka.centroid_lat != null ? 'bg-green-400' : 'bg-gray-300'}`} />
-                    <span className="text-gray-800 flex-1">{taluka.name}</span>
-                    <span className="text-xs text-gray-400">{taluka.wards?.length || 0} wards</span>
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${taluka.centroid_lat != null ? 'bg-success' : 'bg-border-strong'}`} />
+                    <span className="text-ink flex-1">{taluka.name}</span>
+                    <span className="text-xs text-ink-subtle">{taluka.wards?.length || 0} wards</span>
                     {taluka.centroid_lat != null && (
-                      <span className="text-xs text-green-600 font-mono opacity-0 group-hover:opacity-100">
+                      <span className="text-xs text-success font-mono opacity-0 group-hover:opacity-100">
                         {taluka.centroid_lat.toFixed(4)}, {taluka.centroid_lon.toFixed(4)}
                       </span>
                     )}
                     {(user?.role === 'admin' || user?.role === 'district_admin' || user?.role === 'taluka_admin') && (
-                      <button onClick={() => openAdd('ward', taluka.id, taluka.name, district.name, taluka.centroid_lat, taluka.centroid_lon)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition-colors">+ Ward</button>
+                      <button onClick={() => openAdd('ward', taluka.id, taluka.name, district.name, taluka.centroid_lat, taluka.centroid_lon)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-primary-soft text-primary-strong border-primary/20 hover:bg-primary-soft transition-colors">+ Ward</button>
                     )}
                     {(user?.role === 'admin' || user?.role === 'district_admin') && (
                       <>
-                        <button onClick={() => openEdit('taluka', taluka.id, taluka.name, null, taluka.centroid_lat, taluka.centroid_lon, null, district.name)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 transition-colors">Edit</button>
-                        <button onClick={() => handleDelete('taluka', taluka.id)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 transition-colors">Delete</button>
+                        <button onClick={() => openEdit('taluka', taluka.id, taluka.name, null, taluka.centroid_lat, taluka.centroid_lon, null, district.name)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-warning-soft text-warning border-warning/30 hover:bg-warning-soft transition-colors">Edit</button>
+                        <button onClick={() => handleDelete('taluka', taluka.id)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-danger-soft text-danger border-danger/30 hover:bg-danger-soft transition-colors">Delete</button>
                       </>
                     )}
                   </div>
 
                   {/* Wards */}
                   {expanded[`t-${taluka.id}`] && taluka.wards?.map((ward) => (
-                    <div key={ward.id} className="flex items-center gap-3 px-16 py-2 hover:bg-gray-50 group">
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-0.5 ${ward.centroid_lat != null ? 'bg-green-400' : 'bg-gray-300'}`} />
-                      <span className="text-sm text-gray-700 flex-1">{ward.name}</span>
+                    <div key={ward.id} className="flex items-center gap-3 px-16 py-2 hover:bg-surface-alt group">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-0.5 ${ward.centroid_lat != null ? 'bg-success' : 'bg-border-strong'}`} />
+                      <span className="text-sm text-ink-muted flex-1">{ward.name}</span>
                       {ward.centroid_lat != null ? (
-                        <span className="text-xs text-green-600 font-mono opacity-0 group-hover:opacity-100">
+                        <span className="text-xs text-success font-mono opacity-0 group-hover:opacity-100">
                           {ward.centroid_lat.toFixed(4)}, {ward.centroid_lon.toFixed(4)}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-300 opacity-0 group-hover:opacity-100">no coords</span>
+                        <span className="text-xs text-ink-subtle opacity-0 group-hover:opacity-100">no coords</span>
                       )}
                       <button
                         onClick={() => openEdit('ward', ward.id, ward.name, ward.ward_number, ward.centroid_lat, ward.centroid_lon, taluka.name, district.name)}
-                        className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 transition-colors"
+                        className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-warning-soft text-warning border-warning/30 hover:bg-warning-soft transition-colors"
                       >
                         Edit
                       </button>
-                      <button onClick={() => handleDelete('ward', ward.id)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-red-50 text-red-600 border-red-200 hover:bg-red-100 transition-colors">Delete</button>
+                      <button onClick={() => handleDelete('ward', ward.id)} className="opacity-0 group-hover:opacity-100 px-2 py-0.5 text-xs font-semibold rounded-md border bg-danger-soft text-danger border-danger/30 hover:bg-danger-soft transition-colors">Delete</button>
                     </div>
                   ))}
                 </div>

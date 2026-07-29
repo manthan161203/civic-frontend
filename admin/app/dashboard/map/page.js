@@ -2,6 +2,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Map, useMap, AdvancedMarker, InfoWindow } from '@vis.gl/react-google-maps';
 import { adminApi } from '../../../src/api/index';
+import { logger } from '../../../src/lib/logger';
+import { getErrorMessage } from '../../../src/api/errors';
+import { useUiStore } from '../../../src/store/uiStore';
+import Spinner from '@/components/ui/Spinner';
+import SvgIcon from '@/components/ui/SvgIcon';
 
 const TYPE_COLORS = {
   roads: '#ef4444',
@@ -292,6 +297,7 @@ function FitBoundsOnce({ positions, viewKey }) {
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function MapPage() {
+  const addToast = useUiStore((state) => state.addToast);
   const [view, setView] = useState('issues');
   const [typeFilter, setTypeFilter] = useState('');
   const [sosOnly, setSosOnly] = useState(false);
@@ -323,9 +329,15 @@ export default function MapPage() {
       }
       setIssuePoints(points);
       setLastRefreshed(new Date());
-    } catch {}
+    } catch (err) {
+      // Was `catch {}` — a failed heatmap fetch left the previous points on the
+      // map with a stale "last refreshed" time and no indication anything
+      // had gone wrong.
+      logger.error('Map', 'Heatmap fetch failed', err);
+      addToast(getErrorMessage(err, 'Could not refresh the heatmap'), 'error');
+    }
     setLoading(false);
-  }, [typeFilter, sosOnly]);
+  }, [typeFilter, sosOnly, addToast]);
 
   const fetchWorkers = useCallback(async () => {
     setLoading(true);
@@ -333,9 +345,12 @@ export default function MapPage() {
       const { data } = await adminApi.getWorkerLocations({ online_only: onlineOnly });
       setWorkerPoints((data || []).filter((w) => w.latitude && w.longitude));
       setLastRefreshed(new Date());
-    } catch {}
+    } catch (err) {
+      logger.error('Map', 'Worker locations fetch failed', err);
+      addToast(getErrorMessage(err, 'Could not refresh worker locations'), 'error');
+    }
     setLoading(false);
-  }, [onlineOnly]);
+  }, [onlineOnly, addToast]);
 
   useEffect(() => {
     if (view === 'issues') fetchIssues();
@@ -356,9 +371,19 @@ export default function MapPage() {
       setTmSnapshots(data || []);
       setTmIndex(0);
       setLastRefreshed(new Date());
-    } catch {}
+    } catch (e) {
+      /*
+       * Was `catch {}`, and this one was genuinely misleading: the previous
+       * date range's snapshots stayed on the map with the *new* dates showing
+       * in the controls above them. The map looked like it had answered the
+       * question it was asked.
+       */
+      logger.error('Map', 'Time-machine snapshots failed to load', e);
+      setTmSnapshots([]);
+      addToast(getErrorMessage(e, 'Could not load history for that date range.'), 'error');
+    }
     setLoading(false);
-  }, [tmStartDate, tmEndDate, typeFilter]);
+  }, [tmStartDate, tmEndDate, typeFilter, addToast]);
 
   useEffect(() => {
     if (view === 'timemachine') fetchTimeMachine();
@@ -420,24 +445,24 @@ export default function MapPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 4rem)', gap: '0.75rem' }}>
       {/* Controls */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex flex-wrap gap-3 items-center flex-shrink-0">
+      <div className="bg-surface rounded-card border border-divider p-3 flex flex-wrap gap-3 items-center flex-shrink-0">
         {/* Tab switcher */}
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+        <div className="flex gap-1 bg-surface-alt p-1 rounded-lg">
           <button
             onClick={() => setView('issues')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${view === 'issues' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${view === 'issues' ? 'bg-surface text-ink shadow-sm' : 'text-ink-subtle hover:text-ink-muted'}`}
           >
             Issue Heatmap
           </button>
           <button
             onClick={() => setView('workers')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${view === 'workers' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${view === 'workers' ? 'bg-surface text-ink shadow-sm' : 'text-ink-subtle hover:text-ink-muted'}`}
           >
             Worker Locations
           </button>
           <button
             onClick={() => setView('timemachine')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-2 ${view === 'timemachine' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-2 ${view === 'timemachine' ? 'bg-surface text-ink shadow-sm' : 'text-ink-subtle hover:text-ink-muted'}`}
           >
             <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 14, height: 14 }}>
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
@@ -452,15 +477,15 @@ export default function MapPage() {
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:border-blue-400 bg-white"
+              className="border border-border rounded-lg px-3 py-1.5 text-xs outline-none focus:border-primary bg-surface"
             >
               <option value="">All issue types</option>
               {Object.entries(TYPE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>{v}</option>
               ))}
             </select>
-            <label className="flex items-center gap-2 text-xs text-red-600 cursor-pointer select-none font-semibold">
-              <input type="checkbox" checked={sosOnly} onChange={(e) => setSosOnly(e.target.checked)} className="rounded accent-red-600" />
+            <label className="flex items-center gap-2 text-xs text-danger cursor-pointer select-none font-semibold">
+              <input type="checkbox" checked={sosOnly} onChange={(e) => setSosOnly(e.target.checked)} className="rounded accent-[var(--color-danger)]" />
               <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 14, height: 14 }}>
                 <path d="M12 2L1 21h22L12 2zm1 16h-2v-2h2v2zm0-4h-2v-4h2v4z" />
               </svg>
@@ -472,13 +497,13 @@ export default function MapPage() {
         {/* Worker filters */}
         {view === 'workers' && (
           <>
-            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-xs text-ink-muted cursor-pointer select-none">
               <input type="checkbox" checked={onlineOnly} onChange={(e) => setOnlineOnly(e.target.checked)} className="rounded" />
               Online only
             </label>
-            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none">
-              <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} className="rounded accent-green-600" />
-              <span className={autoRefresh ? 'text-green-600 font-semibold flex items-center gap-2' : ''}>
+            <label className="flex items-center gap-2 text-xs text-ink-muted cursor-pointer select-none">
+              <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} className="rounded accent-[var(--color-success)]" />
+              <span className={autoRefresh ? 'text-success font-semibold flex items-center gap-2' : ''}>
                 {autoRefresh && (
                   <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 8, height: 8 }}>
                     <circle cx="12" cy="12" r="10" />
@@ -494,18 +519,18 @@ export default function MapPage() {
         {view === 'timemachine' && (
           <>
             <input type="date" value={tmStartDate} onChange={(e) => setTmStartDate(e.target.value)}
-              className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400 bg-white" />
-            <span className="text-xs text-gray-400">to</span>
+              className="border border-border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-primary bg-surface" />
+            <span className="text-xs text-ink-subtle">to</span>
             <input type="date" value={tmEndDate} onChange={(e) => setTmEndDate(e.target.value)}
-              className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-400 bg-white" />
+              className="border border-border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-primary bg-surface" />
             <button onClick={fetchTimeMachine}
-              className="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition-colors">
+              className="px-3 py-1.5 bg-accent text-white text-xs font-semibold rounded-lg hover:bg-accent transition-colors">
               Load
             </button>
             {tmSnapshots.length > 1 && (
               <>
                 <button onClick={() => setTmPlaying(!tmPlaying)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${tmPlaying ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-green-600 text-white hover:bg-green-700'}`}>
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${tmPlaying ? 'bg-danger text-white hover:bg-danger' : 'bg-success text-white hover:bg-success'}`}>
                   <span className="inline-flex items-center gap-1.5">
                     {tmPlaying
                       ? <><svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause</>
@@ -514,8 +539,8 @@ export default function MapPage() {
                 </button>
                 <input type="range" min={0} max={tmSnapshots.length - 1} value={tmIndex}
                   onChange={(e) => { setTmPlaying(false); setTmIndex(Number(e.target.value)); }}
-                  className="w-32 accent-purple-600" />
-                <span className="text-xs font-mono text-purple-700 bg-purple-50 px-2 py-1 rounded">
+                  className="w-32 accent-[var(--color-accent)]" />
+                <span className="text-xs font-mono text-accent bg-accent-soft px-2 py-1 rounded">
                   {tmSnapshots[tmIndex]?.date || '—'} ({tmSnapshots[tmIndex]?.active_count ?? 0})
                 </span>
               </>
@@ -526,22 +551,22 @@ export default function MapPage() {
         <div className="flex-1" />
 
         {/* Stats badge */}
-        <div className="text-xs text-gray-500 flex items-center gap-2">
+        <div className="text-xs text-ink-subtle flex items-center gap-2">
           {view === 'issues' ? (
-            <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-semibold">
+            <span className="bg-primary-soft text-primary-strong px-2.5 py-1 rounded-full font-semibold">
               {issuePoints.length} issues
             </span>
           ) : view === 'workers' ? (
             <>
-              <span className="bg-green-50 text-green-700 px-2.5 py-1 rounded-full font-semibold">
+              <span className="bg-success-soft text-success px-2.5 py-1 rounded-full font-semibold">
                 {onlineCount} online
               </span>
-              <span className="bg-gray-100 text-gray-500 px-2.5 py-1 rounded-full font-semibold">
+              <span className="bg-surface-alt text-ink-subtle px-2.5 py-1 rounded-full font-semibold">
                 {workerPoints.length - onlineCount} offline
               </span>
             </>
           ) : tmSnapshots.length > 0 ? (
-            <span className="bg-purple-50 text-purple-700 px-2.5 py-1 rounded-full font-semibold">
+            <span className="bg-accent-soft text-accent px-2.5 py-1 rounded-full font-semibold">
               {tmSnapshots.length} snapshots
             </span>
           ) : null}
@@ -549,7 +574,7 @@ export default function MapPage() {
 
         {/* Last refreshed */}
         {lastRefreshed && (
-          <span className="text-xs text-gray-400 hidden sm:block">
+          <span className="text-xs text-ink-subtle hidden sm:block">
             Updated {lastRefreshed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
         )}
@@ -558,18 +583,19 @@ export default function MapPage() {
         <button
           onClick={handleRefresh}
           disabled={loading}
-          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-60 flex items-center gap-1.5 transition-colors"
+          className="px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary-hover disabled:opacity-60 flex items-center gap-1.5 transition-colors"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} style={{ width: 12, height: 12 }} className={loading ? 'animate-spin' : ''}>
-            <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
-            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-          </svg>
+          {loading ? (
+            <Spinner size="sm" label={null} className="!w-3 !h-3" />
+          ) : (
+            <SvgIcon name="chevronDown" size={12} className="rotate-90" />
+          )}
           Refresh
         </button>
       </div>
 
       {/* Map */}
-      <div style={{ flex: 1, position: 'relative', minHeight: 0 }} className="rounded-xl overflow-hidden shadow-sm border border-gray-100">
+      <div style={{ flex: 1, position: 'relative', minHeight: 0 }} className="rounded-xl overflow-hidden shadow-sm border border-divider">
         <Map
           defaultCenter={{ lat: 22.2587, lng: 71.1924 }}
           defaultZoom={7}
@@ -590,7 +616,7 @@ export default function MapPage() {
           onClick={() => setLocateTrigger((n) => n + 1)}
           title="Go to my location"
           style={{ position: 'absolute', bottom: 120, right: 12, zIndex: 10 }}
-          className="w-10 h-10 bg-white rounded-full shadow-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+          className="w-10 h-10 bg-surface rounded-full shadow-lg border border-border flex items-center justify-center hover:bg-surface-alt transition-colors"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="#1a56db" strokeWidth={2.5} style={{ width: 18, height: 18 }}>
             <circle cx="12" cy="12" r="3" fill="#1a56db" />
@@ -600,40 +626,40 @@ export default function MapPage() {
 
         {/* Legend */}
         <div style={{ position: 'absolute', bottom: 16, left: 16, zIndex: 10 }}
-          className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-3 text-xs"
+          className="bg-surface/95 backdrop-blur-sm rounded-xl shadow-lg p-3 text-xs"
         >
           {view === 'issues' ? (
             <>
-              <div className="font-bold text-gray-700 mb-2 uppercase tracking-wide" style={{ fontSize: 10 }}>Issue Types</div>
+              <div className="font-bold text-ink-muted mb-2 uppercase tracking-wide" style={{ fontSize: 10 }}>Issue Types</div>
               <div className="space-y-1">
                 {Object.entries(TYPE_LABELS).map(([k, v]) => (
                   <div key={k} className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TYPE_COLORS[k] }} />
-                    <span className="text-gray-600">{v}</span>
+                    <span className="text-ink-muted">{v}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
-                <div className="font-semibold text-gray-500 mb-1" style={{ fontSize: 10 }}>SIZE = SEVERITY</div>
+              <div className="mt-2 pt-2 border-t border-divider space-y-1">
+                <div className="font-semibold text-ink-subtle mb-1" style={{ fontSize: 10 }}>SIZE = SEVERITY</div>
                 {[['20px', 'High'], ['15px', 'Medium'], ['11px', 'Low']].map(([sz, l]) => (
                   <div key={l} className="flex items-center gap-2">
-                    <span className="rounded-full bg-gray-400 flex-shrink-0" style={{ width: sz, height: sz }} />
-                    <span className="text-gray-500">{l}</span>
+                    <span className="rounded-full bg-ink-subtle flex-shrink-0" style={{ width: sz, height: sz }} />
+                    <span className="text-ink-subtle">{l}</span>
                   </div>
                 ))}
               </div>
             </>
           ) : (
             <>
-              <div className="font-bold text-gray-700 mb-2 uppercase tracking-wide" style={{ fontSize: 10 }}>Workers</div>
+              <div className="font-bold text-ink-muted mb-2 uppercase tracking-wide" style={{ fontSize: 10 }}>Workers</div>
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-green-600 flex-shrink-0 border-2 border-green-200" />
-                  <span className="text-gray-600">Online</span>
+                  <span className="w-5 h-5 rounded-full bg-success flex-shrink-0 border-2 border-success/30" />
+                  <span className="text-ink-muted">Online</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-gray-400 flex-shrink-0 border-2 border-gray-200" />
-                  <span className="text-gray-600">Offline</span>
+                  <span className="w-5 h-5 rounded-full bg-ink-subtle flex-shrink-0 border-2 border-border" />
+                  <span className="text-ink-muted">Offline</span>
                 </div>
               </div>
             </>
@@ -642,12 +668,9 @@ export default function MapPage() {
 
         {/* Loading overlay */}
         {loading && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 20 }} className="bg-white/30 flex items-center justify-center">
-            <div className="bg-white rounded-xl shadow-lg px-4 py-3 text-sm text-gray-700 font-medium flex items-center gap-2">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} style={{ width: 16, height: 16 }} className="animate-spin text-blue-500">
-                <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
-                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-              </svg>
+          <div style={{ position: 'absolute', inset: 0, zIndex: 20 }} className="bg-surface/30 flex items-center justify-center">
+            <div className="bg-surface rounded-xl shadow-lg px-4 py-3 text-sm text-ink-muted font-medium flex items-center gap-2">
+              <Spinner size="sm" label={null} className="text-primary" />
               Loading map data…
             </div>
           </div>
@@ -656,7 +679,7 @@ export default function MapPage() {
         {/* No data notice */}
         {!loading && positions.length === 0 && (
           <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 20 }}>
-            <div className="bg-white rounded-xl shadow-lg px-4 py-2.5 text-sm text-gray-500 font-medium">
+            <div className="bg-surface rounded-xl shadow-lg px-4 py-2.5 text-sm text-ink-subtle font-medium">
               No {view === 'issues' ? 'active issues' : view === 'workers' ? 'workers' : 'data for selected range'} to display
             </div>
           </div>
