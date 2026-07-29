@@ -22,7 +22,8 @@ This guide walks you through integrating all utilities into your React Native ap
 - `src/components/FormInput.jsx` - React Native form input
 
 ### API Integration
-- `src/api/client-integration.example.js` - API setup guide
+- `src/api/client.js` - transport: base URL, auth, refresh, retry
+- `src/api/errors.js` - every failure normalized to one `ApiError`
 
 ---
 

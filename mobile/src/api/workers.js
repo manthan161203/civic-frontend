@@ -1,3 +1,15 @@
+/**
+ * Worker endpoints.
+ *
+ * @typedef {import('@civic/api-types').IssueResponse} IssueResponse
+ * @typedef {import('@civic/api-types').WorkerStats} WorkerStats
+ * @typedef {import('@civic/api-types').ShiftUpsert} ShiftUpsert
+ * @typedef {import('@civic/api-types').ComplaintCreate} ComplaintCreate
+ * @typedef {import('@civic/api-types').ComplaintResponse} ComplaintResponse
+ * @typedef {import('@civic/api-types').TaskAcceptReject} TaskAcceptReject
+ * @typedef {import('@civic/api-types').ChatRequest} ChatRequest
+ * @typedef {import('@civic/api-types').ChatResponse} ChatResponse
+ */
 import api from './client';
 
 export const workersApi = {
@@ -8,8 +20,10 @@ export const workersApi = {
   setAvailability: (is_available) =>
     api.put('/workers/availability', { is_available }),
   // Tasks
+  /** @returns {Promise<{ data: IssueResponse[] }>} */
   getTasks: () => api.get('/workers/tasks'),
   getTaskHistory: (params) => api.get('/workers/tasks/history', { params }),
+  /** @returns {Promise<{ data: WorkerStats }>} */
   getStats: () => api.get('/workers/stats'),
   acceptTask: (issue_id) => api.post(`/workers/tasks/${issue_id}/accept`),
   rejectTask: (issue_id, reason) =>
@@ -18,8 +32,20 @@ export const workersApi = {
     api.post(`/workers/tasks/${issue_id}/resolve`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  /**
+   * Report a task as blocked.
+   *
+   * `reason` goes in the QUERY STRING, not the body — the backend declares it
+   * as `Query(..., min_length=3)`. Sent as JSON (which is what this did) the
+   * request 422'd every single time, so the worker "blocked" flow has never
+   * once succeeded. Its sibling `/reject` does take a body, which is probably
+   * why the difference went unnoticed.
+   *
+   * @param {string} issue_id
+   * @param {string} reason at least 3 characters
+   */
   blockTask: (issue_id, reason) =>
-    api.post(`/workers/tasks/${issue_id}/block`, { reason }),
+    api.post(`/workers/tasks/${issue_id}/block`, null, { params: { reason } }),
   // Leaderboard
   leaderboard: () => api.get('/workers/leaderboard'),
   getLeaderboard: (params) => api.get('/workers/leaderboard', { params }),

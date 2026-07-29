@@ -1,8 +1,9 @@
 import axios from 'axios';
+import { GOOGLE_MAPS_API_KEY } from '../config/env';
 
 export const reverseGeocode = async (latitude, longitude) => {
   try {
-    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+    const apiKey = GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
       throw new Error('Google Maps API key not configured');
     }
@@ -55,7 +56,7 @@ export const reverseGeocode = async (latitude, longitude) => {
 
 export const forwardGeocode = async (address) => {
   try {
-    const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+    const apiKey = GOOGLE_MAPS_API_KEY;
     if (!apiKey) throw new Error('Google Maps API key not configured');
 
     const response = await axios.get(

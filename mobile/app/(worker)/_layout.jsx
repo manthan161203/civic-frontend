@@ -149,7 +149,10 @@ export default function WorkerLayout() {
       <Tabs.Screen name="history" options={{ href: null }} />
       <Tabs.Screen name="shifts" options={{ href: null }} />
       <Tabs.Screen name="leaderboard" options={{ href: null }} />
-      <Tabs.Screen name="task-detail" options={{ href: null }} />
+      {/* `task-detail` was removed: it was hidden from the tabs, nothing
+          navigated to it, and it called two workersApi methods that do not
+          exist (getTaskDetail / updateTaskStatus). The live screen is
+          app/task/[id].jsx, which every path already used. */}
     </Tabs>
     </>
   );

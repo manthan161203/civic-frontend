@@ -12,6 +12,7 @@ import { BASE_URL } from '../../src/api/client';
 import { useAuthStore } from '../../src/store/authStore';
 import { formatDate, formatDateTime } from '../../src/utils/dateUtils';
 import { logger } from '../../src/utils/logger';
+import { AIClassificationWidget, AIResolutionWidget } from '../../src/components/AIInsightWidgets';
 
 const STATUS_COLORS = {
   open: { bg: '#fef3c7', text: '#92400e' },
@@ -696,6 +697,16 @@ export default function IssueDetailScreen() {
             <Text style={styles.locationText}>{issue.address}</Text>
           </View>
         )}
+        {/*
+          The AI classification and resolution-verification results.
+          `IssueResponse` has carried the `ai_*` fields all along and this
+          screen already fetched them — they were simply never rendered. Both
+          widgets return null when the fields are empty, so an issue with no
+          AI analysis (or a server with no GEMINI_API_KEY) shows nothing.
+        */}
+        <AIClassificationWidget issue={issue} />
+        <AIResolutionWidget issue={issue} />
+
         <Text style={styles.date}>
           Reported {formatDate(issue.created_at, 'en-IN')}
         </Text>

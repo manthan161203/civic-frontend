@@ -1,3 +1,8 @@
+/**
+ * Notification endpoints.
+ *
+ * @typedef {import('@civic/api-types').NotificationResponse} NotificationResponse
+ */
 import api from './client';
 
 export const notificationsApi = {

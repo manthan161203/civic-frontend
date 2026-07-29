@@ -7,7 +7,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useUiStore } from '../../src/store/uiStore';
-import { getErrorMessage } from '../../src/lib/errorHandler';
+import { getErrorMessage } from '../../src/api/errors';
 import { workersApi } from '../../src/api/workers';
 import { Colors, PriorityColors, StatusColors, Typography, Radius, Spacing, Shadow } from '../../src/theme';
 

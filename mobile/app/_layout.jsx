@@ -5,33 +5,39 @@ import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppState, ActivityIndicator, Alert } from 'react-native';
 import { useAuthStore, registerPushToken } from '../src/store/authStore';
+import { onSessionEnded } from '../src/api/client';
+import { startNetworkMonitoring, stopNetworkMonitoring } from '../src/api/networkStatus';
+import { startAutoFlush, stopAutoFlush } from '../src/api/offlineQueue';
+import { assertConfig } from '../src/config/env';
+// Sourced from the shared API types package, which derives it from the
+// backend's own role declarations — so this cannot drift from what the server
+// actually enforces.
+import { ADMIN_ROLES } from '@civic/api-types';
 import Toast from '../src/components/Toast';
 
 SplashScreen.preventAutoHideAsync();
 
-// Validate essential environment variables
-const validateEnvironment = () => {
-  const requiredEnvVars = ['EXPO_PUBLIC_API_URL'];
-  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-  
-  if (missingVars.length > 0) {
-    console.error('Missing required environment variables:', missingVars.join(', '));
-    if (!__DEV__) {
-      // In production, this would prevent app from running
-      setTimeout(() => {
-        Alert.alert(
-          'Configuration Error',
-          'Required API configuration is missing. Please contact support.',
-          [{ text: 'Exit' }]
-        );
-      }, 500);
-    }
-  }
-};
+/*
+ * Validate configuration once, at module load.
+ *
+ * This replaces a check that only looked for a missing `EXPO_PUBLIC_API_URL`.
+ * `assertConfig()` also catches the failures that actually reach production —
+ * a release build pointing at localhost, or at plain HTTP — and distinguishes
+ * warnings from errors instead of alerting on both.
+ */
+const CONFIG_PROBLEMS = assertConfig();
 
-validateEnvironment();
+if (!__DEV__ && CONFIG_PROBLEMS.some((p) => p.level === 'error')) {
+  setTimeout(() => {
+    Alert.alert(
+      'Configuration Error',
+      'This build is misconfigured and cannot reach the server. Please contact support.',
+      [{ text: 'OK' }],
+    );
+  }, 500);
+}
 
-const ADMIN_ROLES = ['ward_admin', 'taluka_admin', 'district_admin', 'admin'];
+
 
 export default function RootLayout() {
   const { isLoading, isAuthenticated, mustChangePassword, initSession } = useAuthStore();
@@ -44,6 +50,41 @@ export default function RootLayout() {
   useEffect(() => {
     initSession();
   }, []);
+
+  /*
+   * Watch connectivity for the lifetime of the app.
+   *
+   * Started here rather than inside the banner so the state survives
+   * navigation — the banner mounts and unmounts with each tab layout, and
+   * connectivity is not a per-screen concern.
+   */
+  useEffect(() => {
+    startNetworkMonitoring();
+    // Replay anything queued while offline as soon as the connection returns.
+    // Edge-triggered on the offline → online transition, not polled.
+    startAutoFlush();
+    return () => {
+      stopAutoFlush();
+      stopNetworkMonitoring();
+    };
+  }, []);
+
+  /*
+   * The transport decides when a session is unrecoverable; routing is this
+   * component's job.
+   *
+   * The client used to reach into the auth store from inside its axios
+   * interceptor via a dynamic `import()`, which hid the dependency and made
+   * the transport untestable in isolation. It now just announces the event.
+   */
+  useEffect(
+    () =>
+      onSessionEnded(() => {
+        useAuthStore.getState().clearSession();
+        router.replace('/(auth)/login');
+      }),
+    [router],
+  );
 
   // Set up push notification listeners once the app is mounted
   useEffect(() => {

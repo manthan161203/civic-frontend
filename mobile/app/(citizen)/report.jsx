@@ -13,6 +13,10 @@ import { useUiStore } from '../../src/store/uiStore';
 import { reverseGeocode } from '../../src/utils/geocode';
 import MapView, { Marker } from '../../src/components/PlatformMap';
 import { compressImage } from '../../src/utils/imageUtils';
+import { enqueue, ACTIONS } from '../../src/api/offlineQueue';
+import { toApiError, getErrorMessage } from '../../src/api/errors';
+import { useNetworkStatus } from '../../src/hooks/useNetworkStatus';
+import { useVoiceToText, VOICE_LANGUAGES } from '../../src/utils/voiceToText';
 
 const BUILT_IN_TYPES = [
   'roads', 'water', 'electricity', 'sanitation', 'parks', 'garbage', 'other',
@@ -31,12 +35,28 @@ const TYPE_LABELS = {
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
 export default function ReportScreen() {
+  const { isOffline } = useNetworkStatus();
   const router = useRouter();
   const { addToast } = useUiStore();
   const [description, setDescription] = useState('');
   const [issueType, setIssueType] = useState('roads');
   const [priority, setPriority] = useState('medium');
   const [photos, setPhotos] = useState([]);
+  const [voiceLang, setVoiceLang] = useState('en-IN');
+
+  /*
+   * Dictation writes straight into the description as results arrive, so the
+   * user watches the text appear and can correct it by hand at any point —
+   * `onResult` sets the field rather than the field being bound to the hook's
+   * transcript, which would fight manual edits.
+   */
+  const { isListening, startListening, stopListening } = useVoiceToText({
+    language: voiceLang,
+    onResult: (text) => {
+      if (text) setDescription(text);
+    },
+    onError: () => addToast('Could not hear that — please try again or type it.', 'error'),
+  });
   const [location, setLocation] = useState(null);
   const [address, setAddress] = useState('');
   const [wards, setWards] = useState([]);
@@ -241,18 +261,61 @@ export default function ReportScreen() {
     setSubmitting(true);
     const fullAddress = [addrLine1, addrLine2, landmark, locality, addrCity]
       .filter(Boolean).join(', ') || address;
+    // Send approved custom types directly as their slug; send "other" with a
+    // label for new suggestions.
+    const issuePayload = {
+      description: description.trim(),
+      issue_type: issueType,
+      ...(issueType === 'other' && customLabel ? { custom_issue_type_label: customLabel.trim() } : {}),
+      priority,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      address: fullAddress,
+      ward_id: selectedWard,
+    };
+
+    const resetForm = () => {
+      setDescription(''); setPhotos([]); setIssueType('pothole'); setPriority('medium');
+      setAddress(''); setAddrLine1(''); setAddrLine2(''); setLandmark('');
+      setLocality(''); setAddrCity(''); setLocation(null);
+      setSelectedWard(null); setCurrentWardId(null);
+      setFilteredWards(wards); setShowMapPin(false);
+      getLocation();
+    };
+
+    /*
+     * Reporting a problem is exactly the moment a citizen is least likely to
+     * have signal — a flooded underpass, a basement car park, a back lane. The
+     * report used to be lost outright.
+     *
+     * Queued reports replay through POST /sync when the connection returns.
+     * Photos cannot travel in that JSON batch, so they are held on the device
+     * and uploaded once the server answers with the new issue's id.
+     */
+    if (isOffline) {
+      try {
+        await enqueue(ACTIONS.CREATE_ISSUE, {
+          payload: issuePayload,
+          local: { photos: photos.map((p) => ({ uri: p.uri, name: 'photo.jpg', type: 'image/jpeg' })) },
+        });
+        addToast('Saved — will be sent when you reconnect', 'success');
+        Alert.alert(
+          'Saved offline',
+          photos.length
+            ? `Your report and ${photos.length} photo${photos.length === 1 ? '' : 's'} will be sent automatically when you reconnect.`
+            : 'Your report will be sent automatically when you reconnect.',
+          [{ text: 'Report Another', onPress: resetForm }, { text: 'Done', onPress: () => router.push('/(citizen)/') }],
+        );
+      } catch (err) {
+        addToast(getErrorMessage(err, 'Could not save the report on this device.'), 'error');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     try {
-      // Send approved custom types directly as their slug; send "other" with label for new suggestions
-      const { data } = await issuesApi.create({
-        description: description.trim(),
-        issue_type: issueType,  // Send custom slug directly OR built-in type OR "other"
-        ...(issueType === 'other' && customLabel ? { custom_issue_type_label: customLabel.trim() } : {}),
-        priority,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        address: fullAddress,
-        ward_id: selectedWard,
-      });
+      const { data } = await issuesApi.create(issuePayload);
 
       // Upload photos
       for (const photo of photos) {
@@ -278,8 +341,28 @@ export default function ReportScreen() {
         }},
       ]);
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Failed to submit. Please try again.';
-      addToast(msg, 'error');
+      const apiError = toApiError(err);
+
+      // The connection dropped mid-submit. Queue rather than discard — the
+      // user has typed a description and taken photos; losing that because a
+      // train entered a tunnel is the failure this whole path exists to avoid.
+      if (apiError.kind === 'network' || apiError.kind === 'timeout') {
+        try {
+          await enqueue(ACTIONS.CREATE_ISSUE, {
+            payload: issuePayload,
+            local: { photos: photos.map((p) => ({ uri: p.uri, name: 'photo.jpg', type: 'image/jpeg' })) },
+          });
+          addToast('Connection lost — saved, will send when you reconnect', 'success');
+          Alert.alert('Saved offline', 'Your report will be sent automatically when you reconnect.', [
+            { text: 'OK', onPress: resetForm },
+          ]);
+          return;
+        } catch {
+          // fall through to the generic error below
+        }
+      }
+
+      addToast(apiError.message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -397,10 +480,53 @@ export default function ReportScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Description *</Text>
+        <View style={styles.descriptionHeader}>
+          <Text style={styles.sectionTitle}>Description *</Text>
+
+          {/*
+            On-device speech recognition. Chosen over the server transcription
+            route because it needs no API key and — the reason that matters
+            here — it works with no connection, which is exactly when people
+            are reporting a flooded underpass or a dark stairwell.
+          */}
+          <TouchableOpacity
+            onPress={isListening ? stopListening : startListening}
+            style={[styles.micButton, isListening && styles.micButtonActive]}
+            accessibilityLabel={isListening ? 'Stop dictation' : 'Dictate description'}
+            accessibilityRole="button"
+          >
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"
+                 stroke={isListening ? '#fff' : '#1a56db'} strokeWidth={2}>
+              <Path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+              <Path d="M19 10v2a7 7 0 01-14 0v-2" />
+              <Line x1="12" y1="19" x2="12" y2="23" />
+            </Svg>
+            <Text style={[styles.micText, isListening && styles.micTextActive]}>
+              {isListening ? 'Listening…' : 'Speak'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Language picker only while dictating — it is meaningless otherwise. */}
+        {isListening && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.langRow}>
+            {Object.entries(VOICE_LANGUAGES).map(([label, code]) => (
+              <TouchableOpacity
+                key={code}
+                onPress={() => setVoiceLang(code)}
+                style={[styles.langChip, voiceLang === code && styles.langChipActive]}
+              >
+                <Text style={[styles.langText, voiceLang === code && styles.langTextActive]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
         <TextInput
           style={styles.textarea}
-          placeholder="Describe the issue in detail..."
+          placeholder="Describe the issue in detail, or tap Speak…"
           multiline
           numberOfLines={4}
           value={description}
@@ -680,6 +806,23 @@ export default function ReportScreen() {
 }
 
 const styles = StyleSheet.create({
+  descriptionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  micButton: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+    borderWidth: 1, borderColor: '#c7d2fe', backgroundColor: '#eef2ff',
+  },
+  micButtonActive: { backgroundColor: '#1a56db', borderColor: '#1a56db' },
+  micText: { fontSize: 12, fontWeight: '700', color: '#1a56db' },
+  micTextActive: { color: '#fff' },
+  langRow: { marginBottom: 8 },
+  langChip: {
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, marginRight: 6,
+    borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff',
+  },
+  langChipActive: { backgroundColor: '#1a56db', borderColor: '#1a56db' },
+  langText: { fontSize: 11, fontWeight: '600', color: '#4b5563' },
+  langTextActive: { color: '#fff' },
   container: { flex: 1, backgroundColor: '#f9fafb' },
   section: { backgroundColor: '#fff', marginTop: 12, paddingHorizontal: 16, paddingVertical: 16 },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: '#374151', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },

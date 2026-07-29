@@ -1,3 +1,8 @@
+/**
+ * Location hierarchy, announcements and ward subscriptions.
+ *
+ * @typedef {import('@civic/api-types').SubscribeRequest} SubscribeRequest
+ */
 import api from './client';
 
 export const locationsApi = {

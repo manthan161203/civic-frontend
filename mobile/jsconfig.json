@@ -3,8 +3,21 @@
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "src/*"
+      ],
+      "@civic/api-types": [
+        "../packages/api-types/src/index.d.ts"
+      ],
+      "@civic/api-types/*": [
+        "../packages/api-types/src/*"
+      ]
     }
   },
-  "exclude": ["node_modules", "build", ".expo", "dist"]
+  "exclude": [
+    "node_modules",
+    "build",
+    ".expo",
+    "dist"
+  ]
 }

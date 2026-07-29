@@ -5,6 +5,8 @@ import {
   RefreshControl,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { runOrQueue, ACTIONS } from '../../src/api/offlineQueue';
+import { getErrorMessage } from '../../src/api/errors';
 import { useLocalSearchParams, useNavigation, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { workersApi } from '../../src/api/workers';
@@ -66,11 +68,33 @@ export default function TaskDetailScreen() {
   const accept = async () => {
     setActionLoading(true);
     try {
-      await workersApi.acceptTask(id);
+      /*
+       * Accepting a task is the one action a worker most often takes with no
+       * signal — they are standing at the site. `runOrQueue` sends it now if it
+       * can, and otherwise stores it for replay through POST /sync.
+       *
+       * The queued action is `start_task`, not `accept_task`, and the
+       * difference matters. `accept_task` 400s unless the issue is in exactly
+       * `assigned` state; `start_task` moves `assigned` or `open` to
+       * `in_progress` and is otherwise a no-op. A queued action can drain hours
+       * later, by which time an admin may have reassigned or escalated the
+       * task — under `accept_task` the worker's accept would be rejected and
+       * silently lost, whereas `start_task` converges on the state the worker
+       * intended. Online, where the state is current, the strict route is
+       * still the right one.
+       */
+      const { queued } = await runOrQueue(() => workersApi.acceptTask(id), ACTIONS.START_TASK, {
+        issueId: id,
+      });
       setIssue((prev) => ({ ...prev, status: 'in_progress' }));
-      Alert.alert('Accepted', 'Task is now in progress.');
+      Alert.alert(
+        queued ? 'Saved offline' : 'Accepted',
+        queued
+          ? "You're offline. This will be sent automatically when you reconnect."
+          : 'Task is now in progress.',
+      );
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Failed');
+      Alert.alert('Error', getErrorMessage(err, 'Could not accept this task.'));
     }
     setActionLoading(false);
   };
@@ -115,14 +139,27 @@ export default function TaskDetailScreen() {
   };
 
   const addNote = async () => {
-    if (!noteInput.trim()) return;
+    const body = noteInput.trim();
+    if (!body) return;
     setNotesLoading(true);
     try {
-      await issuesApi.addComment(id, noteInput.trim(), null, true); // is_internal=true
+      const { queued } = await runOrQueue(
+        () => issuesApi.addComment(id, body, null, true), // is_internal=true
+        ACTIONS.ADD_NOTE,
+        // The backend's _sync_add_note reads `payload["notes"]` (plural) and
+        // 400s on anything else. Note the replay is NOT equivalent to the
+        // online path: it appends to Issue.resolution_notes rather than
+        // creating an internal comment.
+        { issueId: id, payload: { notes: body } },
+      );
       setNoteInput('');
-      await loadNotes();
+      if (queued) {
+        Alert.alert('Saved offline', 'This note will be posted when you reconnect.');
+      } else {
+        await loadNotes();
+      }
     } catch (err) {
-      Alert.alert('Error', 'Could not add note');
+      Alert.alert('Error', getErrorMessage(err, 'Could not add note.'));
     }
     setNotesLoading(false);
   };
