@@ -1,0 +1,38 @@
+{
+  "name": "@civic/api-types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared request/response types for the Civic API, generated from the backend's OpenAPI document. Consumed by admin/ and mobile/.",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./schema": {
+      "types": "./src/schema.d.ts"
+    },
+    "./access": {
+      "types": "./src/endpoint-access.d.ts",
+      "default": "./src/endpoint-access.js"
+    }
+  },
+  "files": [
+    "src",
+    "openapi.json"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "generate:offline": "node scripts/generate.mjs --from ./openapi.json",
+    "generate:access": "python3 scripts/derive-endpoint-access.py ../../../civic-backend",
+    "check": "node scripts/generate.mjs --check",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3"
+  }
+}
