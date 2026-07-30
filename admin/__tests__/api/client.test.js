@@ -31,10 +31,46 @@ const axiosError = (status, data, headers = {}) => ({
 describe('toApiError', () => {
   describe('transport failures', () => {
     it('maps a missing response to a network error', () => {
-      const e = toApiError({ message: 'Network Error' });
+      // `isAxiosError` matters. A real transport failure carries it; this
+      // fixture used to omit it and still expect 'network', which is what let
+      // the bug below ship.
+      const e = toApiError({ isAxiosError: true, message: 'Network Error' });
       expect(e.kind).toBe('network');
       expect(e.retryable).toBe(true);
       expect(e.status).toBeNull();
+    });
+
+    it('does NOT call a thrown TypeError a network problem', () => {
+      /*
+       * The regression this guards.
+       *
+       * `toApiError` branched on a bare `!error.response`, so anything thrown
+       * inside a caller's try block — a TypeError in a success path, most
+       * often — was reported to the user as "Could not reach the server. Check
+       * your connection."
+       *
+       * That cost a long debugging session: a login had already returned 200
+       * and been accepted server-side, the failure was in the code after the
+       * await, and the error message pointed at CORS, ports and DNS. Anything
+       * that is not an axios error is a bug in our own code, and must not be
+       * dressed up as a connectivity problem.
+       */
+      const e = toApiError(new TypeError('x is not a function'));
+      expect(e.kind).toBe('client');
+      expect(e.kind).not.toBe('network');
+      // Retrying runs the same broken code and fails identically.
+      expect(e.retryable).toBe(false);
+      expect(e.message).not.toMatch(/connection/i);
+    });
+
+    it('still treats an axios error with a response as an HTTP error', () => {
+      const e = toApiError({
+        isAxiosError: true,
+        response: { status: 400, data: { detail: 'Invalid or expired OTP' }, headers: {} },
+      });
+      expect(e.status).toBe(400);
+      expect(e.message).toBe('Invalid or expired OTP');
+      expect(e.kind).not.toBe('network');
     });
 
     it('maps ECONNABORTED to a timeout', () => {

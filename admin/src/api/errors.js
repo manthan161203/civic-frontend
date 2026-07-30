@@ -12,8 +12,13 @@
  */
 
 /**
+ * `client` is the odd one out: it means our own code threw, not that a request
+ * failed. It exists so that a bug in a success path cannot be presented to the
+ * user as a connection problem — see the note in `toApiError`.
+ *
  * @typedef {'network'|'timeout'|'canceled'|'unauthenticated'|'forbidden'
- *          |'validation'|'notFound'|'conflict'|'rateLimited'|'server'|'unknown'} ErrorKind
+ *          |'validation'|'notFound'|'conflict'|'rateLimited'|'server'
+ *          |'client'|'unknown'} ErrorKind
  */
 
 /** Per-field messages parsed out of a FastAPI 422, keyed by field name. */
@@ -164,14 +169,50 @@ export function toApiError(error) {
     });
   }
 
-  // No response at all: DNS failure, connection refused, offline, CORS.
-  if (!error?.response) {
+  /*
+   * A transport failure — DNS, connection refused, offline, CORS — is an axios
+   * error with no `response`. The `isAxiosError` check is what makes that
+   * distinct from the branch below, and it matters more than it looks.
+   */
+  if (error?.isAxiosError && !error.response) {
     return new ApiError({
       kind: 'network',
       message: navigator?.onLine === false
         ? 'You appear to be offline. Check your connection and try again.'
         : 'Could not reach the server. Check your connection and try again.',
       retryable: true,
+      cause: error,
+    });
+  }
+
+  /*
+   * Not an axios error and not a response — so this is **our own code throwing
+   * inside somebody's try block**, not a network problem at all.
+   *
+   * This branch used to be folded into the one above on a bare
+   * `if (!error?.response)`, which meant any `TypeError` in a success path was
+   * reported to the user as "Could not reach the server. Check your
+   * connection." That is actively misleading: it sent a real debugging session
+   * chasing CORS, ports, DNS and firewall rules for a request that had already
+   * returned 200 — the failure was in the code *after* the await.
+   *
+   * So it gets its own kind, honest copy, and a console record with the real
+   * stack, because the whole reason the original was hard to find is that the
+   * underlying error was swallowed and replaced.
+   */
+  if (!error?.response) {
+    if (typeof console !== 'undefined') {
+      console.error(
+        '[api] Non-transport error surfaced through toApiError — this is a bug in ' +
+          'client code, not a connection problem:',
+        error,
+      );
+    }
+    return new ApiError({
+      kind: 'client',
+      message: 'Something went wrong in the app. Please reload and try again.',
+      // Retrying cannot help: the same code will throw the same way.
+      retryable: false,
       cause: error,
     });
   }
