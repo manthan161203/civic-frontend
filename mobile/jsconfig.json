@@ -7,7 +7,7 @@
         "src/*"
       ],
       "@civic/api-types": [
-        "../packages/api-types/src/index.d.ts"
+        "../packages/api-types/src/index.js"
       ],
       "@civic/api-types/*": [
         "../packages/api-types/src/*"
